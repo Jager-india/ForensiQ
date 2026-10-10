@@ -17,6 +17,7 @@ from .audits import (
     map_profiles_to_audit,
     set_active_audit,
 )
+from .manuals import get_manual_by_key, get_user_manuals
 from .modules import get_discovered_modules
 from .profiles import (
     add_keywords_to_profile,
@@ -676,3 +677,41 @@ def get_next_audit_name_api_view(request: HttpRequest) -> JsonResponse:
             "next_name": generate_next_audit_name(year=year),
         }
     )
+
+
+@require_GET
+def manuals_view(request: HttpRequest) -> HttpResponse:
+    """
+    ForensiQ User Manuals & Documentation Hub view.
+    Displays interactive manuals for core platform and forensic analytical modules.
+    """
+    all_manuals = get_user_manuals()
+    selected_key = request.GET.get("app", "core").strip().lower()
+
+    active_manual = get_manual_by_key(selected_key) or (all_manuals[0] if all_manuals else None)
+    if active_manual:
+        selected_key = active_manual["key"]
+
+    context = {
+        "manuals": all_manuals,
+        "manuals_json": json.dumps(all_manuals),
+        "active_key": selected_key,
+        "active_manual": active_manual,
+    }
+    return render(request, "core/manuals.html", context)
+
+
+@require_GET
+def privacy_policy_view(request: HttpRequest) -> HttpResponse:
+    """
+    ForensiQ Forensic Investigation Privacy Policy & Evidentiary Governance view.
+    """
+    return render(request, "core/privacy.html")
+
+
+@require_GET
+def terms_of_use_view(request: HttpRequest) -> HttpResponse:
+    """
+    ForensiQ Forensic Workstation Terms of Use & Evidentiary Integrity view.
+    """
+    return render(request, "core/terms.html")

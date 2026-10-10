@@ -1909,3 +1909,98 @@ class CorePromptsEngineTests(TestCase):
         self.assertIn("apps", str(p).lower())
         self.assertIn("q_trail", str(p).lower())
         self.assertIn("prompts", str(p).lower())
+
+
+class FooterAndManualsTests(TestCase):
+    """
+    Test suite for footer content, manuals hub, privacy policy, terms of use, and portal exemption.
+    """
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_manuals_registry_functions(self):
+        from core.manuals import get_manual_by_key, get_user_manuals, load_manual_content
+
+        manuals = get_user_manuals()
+        self.assertGreaterEqual(len(manuals), 10)
+
+        keys = [m["key"] for m in manuals]
+        self.assertIn("core", keys)
+        self.assertIn("q_bank", keys)
+        self.assertIn("q_trail", keys)
+        self.assertIn("q_mail", keys)
+
+        # Test single manual retrieval
+        core_manual = get_manual_by_key("core")
+        self.assertIsNotNone(core_manual)
+        self.assertEqual(core_manual["key"], "core")
+        self.assertIn("User & Operations Guide", core_manual["content"])
+
+        # Test nonexistent manual
+        nonexistent = get_manual_by_key("does_not_exist")
+        self.assertIsNone(nonexistent)
+
+        # Test load_manual_content fallback
+        fallback_text = load_manual_content("nonexistent/guide.md")
+        self.assertIn("not found", fallback_text)
+
+    def test_manuals_view_unauthenticated(self):
+        url = reverse("manuals")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "core/manuals.html")
+        self.assertContains(response, "User Manuals")
+        self.assertIn("manuals", response.context)
+        self.assertEqual(response.context["active_key"], "core")
+
+    def test_manuals_view_with_app_param(self):
+        url = reverse("manuals") + "?app=q_mail"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_key"], "q_mail")
+        self.assertEqual(response.context["active_manual"]["name"], "Q-Mail")
+
+    def test_manuals_view_with_unknown_app_param_fallback(self):
+        url = reverse("manuals") + "?app=unknown_module"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_key"], "core")
+
+    def test_privacy_policy_view_unauthenticated(self):
+        url = reverse("privacy_policy")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "core/privacy.html")
+        self.assertContains(response, "ForensiQ Privacy Policy")
+        self.assertContains(response, "Chain of Custody")
+        self.assertContains(response, "Scope &amp; Investigative Jurisdiction")
+
+    def test_terms_of_use_view_unauthenticated(self):
+        url = reverse("terms_of_use")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "core/terms.html")
+        self.assertContains(response, "ForensiQ Terms of Use")
+        self.assertContains(response, "Authorized Enterprise Mandate")
+        self.assertContains(response, "Non-Spoliation")
+
+    def test_login_page_footer_links(self):
+        url = reverse("portal_login")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("manuals"))
+        self.assertContains(response, reverse("privacy_policy"))
+        self.assertContains(response, reverse("terms_of_use"))
+
+    def test_base_layout_footer_links_when_authenticated(self):
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        url = reverse("landing")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("manuals"))
+        self.assertContains(response, reverse("privacy_policy"))
+        self.assertContains(response, reverse("terms_of_use"))

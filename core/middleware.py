@@ -16,6 +16,9 @@ class PortalAuthMiddleware:
         "/media/",
         "/admin/",
         "/favicon.ico",
+        "/manuals/",
+        "/privacy/",
+        "/terms/",
     )
 
     def __init__(self, get_response):

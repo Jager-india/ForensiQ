@@ -43,4 +43,7 @@ urlpatterns = [
     path("audits/active/", views.set_active_audit_view, name="set_active_audit"),
     path("api/audits/", views.audit_list_api_view, name="api_audits"),
     path("api/audits/next-name/", views.get_next_audit_name_api_view, name="api_next_audit_name"),
+    path("manuals/", views.manuals_view, name="manuals"),
+    path("privacy/", views.privacy_policy_view, name="privacy_policy"),
+    path("terms/", views.terms_of_use_view, name="terms_of_use"),
 ]

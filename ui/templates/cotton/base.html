@@ -194,8 +194,28 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-theme-surface border-t border-theme-border py-4 text-center text-xs text-theme-muted">
-        ForensiQ &bull; Forensic Investigation & Data Analytics Workstation
+    <footer class="bg-theme-surface border-t border-theme-border py-6 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-theme-muted">
+            <div class="flex items-center gap-2 text-center sm:text-left">
+                <span class="font-semibold text-theme-text">ForensiQ</span>
+                <span>&bull;</span>
+                <span>Forensic Investigation &amp; Data Analytics Workstation</span>
+            </div>
+            <div class="flex items-center gap-5 sm:gap-6 font-medium">
+                <a href="{% url 'manuals' %}" class="hover:text-amber-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-open text-[11px] text-amber-500"></i>
+                    <span>Manuals</span>
+                </a>
+                <a href="{% url 'privacy_policy' %}" class="hover:text-amber-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-shield-halved text-[11px] text-amber-500"></i>
+                    <span>Privacy Policy</span>
+                </a>
+                <a href="{% url 'terms_of_use' %}" class="hover:text-amber-500 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-scale-balanced text-[11px] text-amber-500"></i>
+                    <span>Terms of Use</span>
+                </a>
+            </div>
+        </div>
     </footer>
 
     <!-- Global Helpers (Modal, CSRF, and Audit Switcher) -->

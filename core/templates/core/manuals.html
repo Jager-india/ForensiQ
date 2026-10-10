@@ -1,0 +1,289 @@
+<c-base title="ForensiQ | User Manuals & Documentation Hub">
+
+    <div x-data="documentationHub" class="max-w-7xl mx-auto py-4 sm:py-6 space-y-6">
+
+        <!-- Top Breadcrumbs / Return Navigation -->
+        <div class="flex items-center justify-between border-b border-theme-border pb-4">
+            <div class="flex items-center space-x-2 text-xs text-theme-muted">
+                <a href="/" class="hover:text-amber-500 transition flex items-center gap-1 font-semibold">
+                    <i class="fa-solid fa-house text-[11px]"></i>
+                    <span>Workstation</span>
+                </a>
+                <span>/</span>
+                <span class="text-amber-500 font-bold">User Manuals</span>
+            </div>
+            <a href="/" class="px-3 py-1.5 rounded-lg bg-theme-subtle hover:bg-theme-subtle/80 text-theme-text text-xs font-semibold border border-theme-border flex items-center gap-1.5 transition">
+                <i class="fa-solid fa-arrow-left text-[10px]"></i>
+                <span>Return to Workstation</span>
+            </a>
+        </div>
+
+        <!-- Hero Header -->
+        <div class="bg-gradient-to-r from-theme-surface via-theme-surface to-amber-500/5 border border-theme-border rounded-2xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
+            <div class="absolute -right-6 -bottom-6 opacity-5 text-theme-text pointer-events-none select-none">
+                <i class="fa-solid fa-book-open text-9xl"></i>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-amber-500 mb-2">
+                <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>ForensiQ Documentation Hub &bull; Field &amp; Investigator Guides</span>
+            </div>
+            <h1 class="text-2xl sm:text-4xl font-black tracking-tight text-theme-text mb-3">
+                Platform Operations &amp; Q-Engine Manuals
+            </h1>
+            <p class="text-sm sm:text-base text-theme-muted max-w-3xl leading-relaxed">
+                Step-by-step investigator workflows, evidence ingestion parameters, risk scoring logic, and operational playbooks for each Forensic-Q analytical module.
+            </p>
+        </div>
+
+        <!-- Documentation Hub Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- Sidebar Column (4 of 12) -->
+            <div class="lg:col-span-4 space-y-4">
+
+                <!-- Search Input Card -->
+                <div class="bg-theme-surface border border-theme-border rounded-2xl p-4 shadow-sm space-y-3">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass text-xs text-theme-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+                        <input type="text" x-model="searchQuery" placeholder="Filter manuals by name or scope..."
+                            class="w-full pl-8 pr-3 py-2 text-xs rounded-xl bg-theme-subtle border border-theme-border text-theme-text focus:outline-none focus:border-amber-500 placeholder-theme-muted/60 transition">
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-theme-muted px-1">
+                        <span class="font-bold uppercase tracking-wider">Available Guides</span>
+                        <span class="font-mono" x-text="filteredManuals().length + ' of ' + manuals.length"></span>
+                    </div>
+                </div>
+
+                <!-- Guides Navigation List -->
+                <nav class="bg-theme-surface border border-theme-border rounded-2xl p-2.5 shadow-sm space-y-1.5 max-h-[650px] overflow-y-auto">
+                    <template x-for="item in filteredManuals()" :key="item.key">
+                        <button type="button" @click="selectManual(item.key)"
+                            class="w-full text-left p-3 rounded-xl transition flex items-start justify-between cursor-pointer border group"
+                            :class="activeKey === item.key ? 'bg-amber-500/10 border-amber-500/40 text-theme-text shadow-xs' : 'border-transparent hover:bg-theme-subtle text-theme-muted hover:text-theme-text'">
+                            <div class="flex items-start gap-3 min-w-0">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm mt-0.5 border"
+                                    :class="activeKey === item.key ? 'bg-amber-500 text-zinc-950 border-amber-400 font-bold' : 'bg-theme-subtle text-theme-muted border-theme-border group-hover:text-amber-500'">
+                                    <i :class="item.icon"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-1.5 mb-0.5">
+                                        <span class="text-xs font-bold truncate" :class="activeKey === item.key ? 'text-amber-500' : 'text-theme-text'" x-text="item.name"></span>
+                                        <span class="text-[9px] font-mono uppercase px-1.5 py-0.2 rounded bg-theme-subtle border border-theme-border font-medium text-theme-muted" x-text="item.category"></span>
+                                    </div>
+                                    <p class="text-[11px] text-theme-muted line-clamp-1" x-text="item.title"></p>
+                                </div>
+                            </div>
+                            <i class="fa-solid fa-chevron-right text-[10px] mt-2.5 shrink-0 transition"
+                                :class="activeKey === item.key ? 'text-amber-500 translate-x-0.5' : 'text-theme-muted/40 group-hover:text-theme-muted'"></i>
+                        </button>
+                    </template>
+
+                    <div x-show="filteredManuals().length === 0" class="py-8 text-center text-xs text-theme-muted">
+                        <i class="fa-solid fa-file-circle-question text-xl mb-2 text-theme-muted/50 block"></i>
+                        No documentation found matching your search.
+                    </div>
+                </nav>
+
+            </div>
+
+            <!-- Main Content Viewer Column (8 of 12) -->
+            <div class="lg:col-span-8 bg-theme-surface border border-theme-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
+
+                <!-- Header Bar for Selected Guide -->
+                <div class="p-5 sm:p-6 border-b border-theme-border bg-theme-subtle/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div class="flex items-start sm:items-center gap-3.5">
+                        <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center text-lg shrink-0">
+                            <i :class="currentManual?.icon || 'fa-solid fa-book'"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-mono text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-500 font-bold" x-text="currentManual?.name"></span>
+                                <span class="text-xs text-theme-muted font-mono uppercase px-2 py-0.5 rounded bg-theme-subtle border border-theme-border" x-text="currentManual?.category"></span>
+                            </div>
+                            <h2 class="text-lg sm:text-xl font-bold text-theme-text" x-text="currentManual?.title"></h2>
+                            <p class="text-xs text-theme-muted mt-0.5" x-text="currentManual?.tagline"></p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 shrink-0">
+                        <template x-if="currentManual?.href && currentManual?.href !== '/'">
+                            <a :href="currentManual.href"
+                                class="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-sm transition">
+                                <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
+                                <span>Launch Engine</span>
+                            </a>
+                        </template>
+                        <button type="button" @click="copyManualLink()"
+                            class="px-3 py-2 rounded-xl bg-theme-subtle hover:bg-theme-subtle/80 text-theme-text border border-theme-border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                            title="Copy link to this manual">
+                            <i class="fa-solid fa-share-nodes text-[11px]"></i>
+                            <span x-text="linkCopied ? 'Copied!' : 'Share'"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Markdown Content Container -->
+                <div class="p-6 sm:p-8 min-h-[500px] overflow-x-auto">
+                    <!-- Dynamic client-rendered HTML -->
+                    <div id="markdown-viewer" class="prose max-w-none text-theme-text text-sm leading-relaxed space-y-4">
+                        {% if active_manual %}
+                        <div class="server-rendered-guide">
+                            <h1 class="text-2xl font-bold text-theme-text mb-2">{{ active_manual.title }}</h1>
+                            <p class="text-xs text-amber-500 font-mono uppercase mb-4">{{ active_manual.category }} &bull; {{ active_manual.name }}</p>
+                            <pre class="p-4 rounded-xl bg-theme-subtle border border-theme-border text-xs font-mono text-theme-text whitespace-pre-wrap">{{ active_manual.content }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Footer of Guide Viewer -->
+                <div class="p-4 border-t border-theme-border bg-theme-subtle/20 flex flex-col sm:flex-row items-center justify-between text-xs text-theme-muted gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-circle-check text-emerald-500 text-[10px]"></i>
+                        <span>ForensiQ Investigation Playbook &bull; Verified Documentation</span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <a href="/privacy/" class="hover:text-amber-500 transition">Privacy Policy</a>
+                        <span>&bull;</span>
+                        <a href="/terms/" class="hover:text-amber-500 transition">Terms of Use</a>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Marked.js Markdown Engine CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+
+    <!-- Alpine.js Documentation Hub Controller -->
+    <script>
+        function initDocumentationHub() {
+            if (!window.Alpine) return;
+            Alpine.data('documentationHub', () => ({
+                manuals: {{ manuals_json|safe }},
+                activeKey: '{{ active_key }}',
+                searchQuery: '',
+                linkCopied: false,
+
+                get currentManual() {
+                    return this.manuals.find(m => m.key === this.activeKey) || this.manuals[0];
+                },
+
+                filteredManuals() {
+                    if (!this.searchQuery.trim()) return this.manuals;
+                    const q = this.searchQuery.toLowerCase();
+                    return this.manuals.filter(m =>
+                        (m.name || '').toLowerCase().includes(q) ||
+                        (m.title || '').toLowerCase().includes(q) ||
+                        (m.category || '').toLowerCase().includes(q) ||
+                        (m.tagline || '').toLowerCase().includes(q)
+                    );
+                },
+
+                selectManual(key) {
+                    this.activeKey = key;
+                    const url = new URL(window.location);
+                    url.searchParams.set('app', key);
+                    window.history.replaceState({}, '', url);
+                    this.renderMarkdown();
+                },
+
+                copyManualLink() {
+                    const url = new URL(window.location);
+                    url.searchParams.set('app', this.activeKey);
+                    navigator.clipboard.writeText(url.toString()).then(() => {
+                        this.linkCopied = true;
+                        setTimeout(() => { this.linkCopied = false; }, 2000);
+                    }).catch(() => {
+                        this.linkCopied = true;
+                        setTimeout(() => { this.linkCopied = false; }, 2000);
+                    });
+                },
+
+                renderMarkdown() {
+                    const viewer = document.getElementById('markdown-viewer');
+                    if (!viewer) return;
+                    const manual = this.currentManual;
+                    if (!manual || !manual.content) return;
+
+                    if (window.marked) {
+                        try {
+                            const rawHtml = marked.parse(manual.content);
+                            viewer.innerHTML = rawHtml;
+                            this.styleRenderedMarkdown(viewer);
+                            return;
+                        } catch (e) {
+                            console.error('Error parsing markdown:', e);
+                        }
+                    }
+
+                    // Fallback formatting if marked fails
+                    viewer.innerHTML = `<pre class="p-4 rounded-xl bg-theme-subtle border border-theme-border text-xs font-mono whitespace-pre-wrap">${manual.content}</pre>`;
+                },
+
+                styleRenderedMarkdown(container) {
+                    // Apply ForensiQ design classes to raw HTML elements
+                    container.querySelectorAll('h1').forEach(el => {
+                        el.className = 'text-2xl font-black text-theme-text border-b border-theme-border pb-3 mb-4';
+                    });
+                    container.querySelectorAll('h2').forEach(el => {
+                        el.className = 'text-lg sm:text-xl font-bold text-theme-text mt-6 mb-3 flex items-center gap-2';
+                    });
+                    container.querySelectorAll('h3').forEach(el => {
+                        el.className = 'text-sm sm:text-base font-bold text-theme-text mt-4 mb-2';
+                    });
+                    container.querySelectorAll('p').forEach(el => {
+                        el.className = 'text-xs sm:text-sm leading-relaxed text-theme-muted mb-3';
+                    });
+                    container.querySelectorAll('ul').forEach(el => {
+                        el.className = 'list-disc pl-5 space-y-1.5 text-xs sm:text-sm text-theme-muted mb-4';
+                    });
+                    container.querySelectorAll('ol').forEach(el => {
+                        el.className = 'list-decimal pl-5 space-y-1.5 text-xs sm:text-sm text-theme-muted mb-4';
+                    });
+                    container.querySelectorAll('li').forEach(el => {
+                        el.className = 'text-theme-muted leading-relaxed';
+                    });
+                    container.querySelectorAll('pre').forEach(el => {
+                        el.className = 'p-4 rounded-xl bg-theme-subtle border border-theme-border text-xs font-mono overflow-x-auto text-theme-text my-4';
+                    });
+                    container.querySelectorAll('code').forEach(el => {
+                        if (el.parentElement.tagName !== 'PRE') {
+                            el.className = 'px-1.5 py-0.5 rounded bg-theme-subtle font-mono text-xs text-amber-500 font-semibold';
+                        }
+                    });
+                    container.querySelectorAll('blockquote').forEach(el => {
+                        el.className = 'p-3 rounded-lg bg-theme-subtle/60 border-l-4 border-amber-500 text-xs text-theme-muted italic my-3';
+                    });
+                    container.querySelectorAll('hr').forEach(el => {
+                        el.className = 'border-theme-border my-6';
+                    });
+                    container.querySelectorAll('strong').forEach(el => {
+                        el.className = 'text-theme-text font-bold';
+                    });
+                },
+
+                init() {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const appParam = urlParams.get('app');
+                    if (appParam && this.manuals.some(m => m.key === appParam)) {
+                        this.activeKey = appParam;
+                    }
+                    this.$nextTick(() => {
+                        this.renderMarkdown();
+                    });
+                }
+            }));
+        }
+
+        if (window.Alpine) {
+            initDocumentationHub();
+        } else {
+            document.addEventListener('alpine:init', initDocumentationHub);
+        }
+    </script>
+
+</c-base>

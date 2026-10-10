@@ -154,8 +154,28 @@
     </main>
 
     <!-- Footer -->
-    <footer class="relative z-10 w-full py-4 text-center text-xs text-zinc-400/90 font-medium drop-shadow-sm">
-        ForensiQ &bull; Audit Forensic Investigation Platform
+    <footer class="relative z-10 w-full py-6 mt-auto text-xs text-zinc-400 font-medium drop-shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-2 justify-center sm:justify-start">
+                <span class="font-bold text-zinc-200">ForensiQ</span>
+                <span>&bull;</span>
+                <span>Audit Forensic Investigation Platform</span>
+            </div>
+            <div class="flex items-center gap-5 sm:gap-6 justify-center sm:justify-end">
+                <a href="{% url 'manuals' %}" class="text-zinc-400 hover:text-amber-400 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-book-open text-[11px] text-amber-400"></i>
+                    <span>Manuals</span>
+                </a>
+                <a href="{% url 'privacy_policy' %}" class="text-zinc-400 hover:text-amber-400 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-shield-halved text-[11px] text-amber-400"></i>
+                    <span>Privacy Policy</span>
+                </a>
+                <a href="{% url 'terms_of_use' %}" class="text-zinc-400 hover:text-amber-400 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-scale-balanced text-[11px] text-amber-400"></i>
+                    <span>Terms of Use</span>
+                </a>
+            </div>
+        </div>
     </footer>
 
     <!-- Scripts -->
