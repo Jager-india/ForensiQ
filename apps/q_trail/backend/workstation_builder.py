@@ -117,9 +117,7 @@ def build_chronological_beats(
                 except Exception:
                     delta_days = 0.0
                 int_delta = (
-                    int(delta_days)
-                    if not (math.isnan(delta_days) or math.isinf(delta_days))
-                    else 0
+                    int(delta_days) if not (math.isnan(delta_days) or math.isinf(delta_days)) else 0
                 )
 
                 raw_events.append(
@@ -314,7 +312,9 @@ def build_conduit_deck(
             )
             recipients_list = list(
                 dict.fromkeys(
-                    _clean_str(d.get("Recipient")) for d in details if _clean_str(d.get("Recipient"))
+                    _clean_str(d.get("Recipient"))
+                    for d in details
+                    if _clean_str(d.get("Recipient"))
                 )
             )
             primary_sender = ", ".join(senders_list) if senders_list else "Auditee A"

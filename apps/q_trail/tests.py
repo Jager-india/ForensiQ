@@ -12,12 +12,14 @@ Comprehensive unit and integration tests covering:
 
 import json
 from decimal import Decimal
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 from q_bank.models import AuditedPerson, BankAccount, BankTransaction
+from q_trail.backend.llm_narrative import generate_loop_forensic_narrative
 from q_trail.backend.reconciliation import (
     DEFAULT_MIN_TRANSACTION_THRESHOLD,
     detect_pass_through_patterns,
@@ -586,6 +588,99 @@ class QTrailSelectorTests(TestCase):
         self.assertIn("Narration", df.columns)
         self.assertIn("Debit", df.columns)
         self.assertEqual(df["Debit"].iloc[0], 25000.0)
+
+    def test_get_transactions_df_reverse_chronological_ordering(self):
+        """
+        Tests that bank statements uploaded in reverse-chronological order (newest at top)
+        are mathematically reconciled via closing balance continuity into chronological order.
+        """
+        rev_person = AuditedPerson.objects.create(
+            full_name="Reverse Test Person", department="Procurement"
+        )
+        rev_account = BankAccount.objects.create(
+            person=rev_person, account_number="REV9999", bank_name="State Bank of India"
+        )
+        base_time = timezone.now()
+        day = timezone.datetime(2025, 11, 5, 10, 0, 0, tzinfo=timezone.UTC)
+
+        # Ingested top-to-bottom in reverse order (newest debits first, oldest credits last)
+        # 1. Outflow 3: Shanthisubu (closing balance 23140.46 after debit 3750)
+        BankTransaction.objects.create(
+            account=rev_account,
+            txn_date=day,
+            created_at=base_time + timezone.timedelta(seconds=1),
+            party_name="SHANTHISUBU",
+            direction=BankTransaction.Direction.DEBIT,
+            debit_amount=Decimal("3750.00"),
+            closing_balance=Decimal("23140.46"),
+        )
+        # 2. Outflow 2: Sathees Kumar (closing balance 26890.46 after debit 3750)
+        BankTransaction.objects.create(
+            account=rev_account,
+            txn_date=day,
+            created_at=base_time + timezone.timedelta(seconds=2),
+            party_name="SATHEES KUMAR R",
+            direction=BankTransaction.Direction.DEBIT,
+            debit_amount=Decimal("3750.00"),
+            closing_balance=Decimal("26890.46"),
+        )
+        # 3. Outflow 1: Mulapaka Kumar (closing balance 30640.46 after debit 3750)
+        BankTransaction.objects.create(
+            account=rev_account,
+            txn_date=day,
+            created_at=base_time + timezone.timedelta(seconds=3),
+            party_name="MULAPAKA KUMAR",
+            direction=BankTransaction.Direction.DEBIT,
+            debit_amount=Decimal("3750.00"),
+            closing_balance=Decimal("30640.46"),
+        )
+        # 4. Inflow 2: Indhumathi 9k (closing balance 34390.46 after credit 9000)
+        BankTransaction.objects.create(
+            account=rev_account,
+            txn_date=day,
+            created_at=base_time + timezone.timedelta(seconds=4),
+            party_name="MS S INDHUMATHI",
+            direction=BankTransaction.Direction.CREDIT,
+            credit_amount=Decimal("9000.00"),
+            closing_balance=Decimal("34390.46"),
+        )
+        # 5. Inflow 1: Indhumathi 15k (closing balance 25390.46 after credit 15000, initial 10390.46)
+        BankTransaction.objects.create(
+            account=rev_account,
+            txn_date=day,
+            created_at=base_time + timezone.timedelta(seconds=5),
+            party_name="MS S INDHUMATHI",
+            direction=BankTransaction.Direction.CREDIT,
+            credit_amount=Decimal("15000.00"),
+            closing_balance=Decimal("25390.46"),
+        )
+
+        df = get_transactions_df_for_profile(str(rev_person.id))
+        self.assertEqual(len(df), 5)
+        # Chronological order should place inflows first and outflows second
+        self.assertEqual(df["Party_Name"].iloc[0], "MS S INDHUMATHI")
+        self.assertEqual(df["Credit"].iloc[0], 15000.0)
+        self.assertEqual(df["Party_Name"].iloc[1], "MS S INDHUMATHI")
+        self.assertEqual(df["Credit"].iloc[1], 9000.0)
+        self.assertEqual(df["Party_Name"].iloc[2], "MULAPAKA KUMAR")
+        self.assertEqual(df["Debit"].iloc[2], 3750.0)
+        self.assertEqual(df["Party_Name"].iloc[3], "SATHEES KUMAR R")
+        self.assertEqual(df["Debit"].iloc[3], 3750.0)
+        self.assertEqual(df["Party_Name"].iloc[4], "SHANTHISUBU")
+        self.assertEqual(df["Debit"].iloc[4], 3750.0)
+
+        # Verify that money trail detects 1-to-3 splits across all 3 beneficiaries
+        trail_res = analyze_profiles_money_trail([str(rev_person.id)])
+        self.assertEqual(trail_res["metrics"]["total_intermediate_hops_count"], 3)
+        self.assertEqual(trail_res["metrics"]["unique_intermediaries_count"], 1)
+        nodes = [n["label"] for n in trail_res["topology_graph"]["nodes"]]
+        self.assertIn("MS S INDHUMATHI", nodes)
+        self.assertIn("MULAPAKA KUMAR", nodes)
+        self.assertIn("SATHEES KUMAR R", nodes)
+        self.assertIn("SHANTHISUBU", nodes)
+        self.assertEqual(len(trail_res["conduit_deck"]), 1)
+        deck_item = trail_res["conduit_deck"][0]
+        self.assertEqual(len(deck_item["recipients_list"]), 3)
 
     def test_generate_trail_sankey_chart(self):
         # Empty case
@@ -1352,3 +1447,209 @@ class QTrailMinimumThresholdTests(TestCase):
         self.assertEqual(res["Outflow_Amount"].sum(), 30000.0)
         self.assertEqual(res["Inflow_Amount"].sum(), 29000.0)
         self.assertEqual(res["Retention_Amount"].sum(), 1000.0)
+
+    def test_detect_pass_through_patterns_all_types(self):
+        # 1-to-1 Pass-Through
+        df_1to1 = pd.DataFrame(
+            [
+                {
+                    "Date": "2026-05-01",
+                    "Credit": 10000.0,
+                    "Debit": 0.0,
+                    "Party": "Alice",
+                    "Counterparty_VPA": "alice@vpa",
+                },
+                {
+                    "Date": "2026-05-01",
+                    "Credit": 0.0,
+                    "Debit": 9000.0,
+                    "Party": "Bob",
+                    "Counterparty_VPA": "bob@vpa",
+                },
+            ]
+        )
+        patterns, _ = detect_pass_through_patterns(df_1to1, account_holder_name="Holder")
+        self.assertEqual(len(patterns), 1)
+        self.assertEqual(patterns[0]["Pattern_Type"], "1-to-1 Pass-Through")
+
+        # Merged Funds
+        df_merged = pd.DataFrame(
+            [
+                {
+                    "Date": "2026-05-02",
+                    "Credit": 5000.0,
+                    "Debit": 0.0,
+                    "Party": "Alice",
+                    "Counterparty_VPA": "alice@vpa",
+                },
+                {
+                    "Date": "2026-05-02",
+                    "Credit": 5000.0,
+                    "Debit": 0.0,
+                    "Party": "Charlie",
+                    "Counterparty_VPA": "charlie@vpa",
+                },
+                {
+                    "Date": "2026-05-02",
+                    "Credit": 0.0,
+                    "Debit": 9000.0,
+                    "Party": "Bob",
+                    "Counterparty_VPA": "bob@vpa",
+                },
+            ]
+        )
+        patterns, _ = detect_pass_through_patterns(df_merged, account_holder_name="Holder")
+        self.assertEqual(len(patterns), 1)
+        self.assertEqual(patterns[0]["Pattern_Type"], "Merged Funds")
+
+        # Split Funds
+        df_split = pd.DataFrame(
+            [
+                {
+                    "Date": "2026-05-03",
+                    "Credit": 10000.0,
+                    "Debit": 0.0,
+                    "Party": "Alice",
+                    "Counterparty_VPA": "alice@vpa",
+                },
+                {
+                    "Date": "2026-05-03",
+                    "Credit": 0.0,
+                    "Debit": 4500.0,
+                    "Party": "Bob",
+                    "Counterparty_VPA": "bob@vpa",
+                },
+                {
+                    "Date": "2026-05-03",
+                    "Credit": 0.0,
+                    "Debit": 4500.0,
+                    "Party": "David",
+                    "Counterparty_VPA": "david@vpa",
+                },
+            ]
+        )
+        patterns, _ = detect_pass_through_patterns(df_split, account_holder_name="Holder")
+        self.assertEqual(len(patterns), 1)
+        self.assertEqual(patterns[0]["Pattern_Type"], "Split Funds")
+
+        # Merged & Split Funds
+        df_both = pd.DataFrame(
+            [
+                {
+                    "Date": "2026-05-04",
+                    "Credit": 5000.0,
+                    "Debit": 0.0,
+                    "Party": "Alice",
+                    "Counterparty_VPA": "alice@vpa",
+                },
+                {
+                    "Date": "2026-05-04",
+                    "Credit": 5000.0,
+                    "Debit": 0.0,
+                    "Party": "Charlie",
+                    "Counterparty_VPA": "charlie@vpa",
+                },
+                {
+                    "Date": "2026-05-04",
+                    "Credit": 0.0,
+                    "Debit": 4500.0,
+                    "Party": "Bob",
+                    "Counterparty_VPA": "bob@vpa",
+                },
+                {
+                    "Date": "2026-05-04",
+                    "Credit": 0.0,
+                    "Debit": 4500.0,
+                    "Party": "David",
+                    "Counterparty_VPA": "david@vpa",
+                },
+            ]
+        )
+        patterns, _ = detect_pass_through_patterns(df_both, account_holder_name="Holder")
+        self.assertEqual(len(patterns), 1)
+        self.assertEqual(patterns[0]["Pattern_Type"], "Merged & Split Funds")
+
+        # Suspicious ratios (< 0.8 and > 1.0)
+        df_suspicious_low = pd.DataFrame(
+            [
+                {"Date": "2026-05-05", "Credit": 10000.0, "Debit": 0.0, "Party": "Alice"},
+                {"Date": "2026-05-05", "Credit": 0.0, "Debit": 5000.0, "Party": "Bob"},
+            ]
+        )
+        _, susp_low = detect_pass_through_patterns(df_suspicious_low, account_holder_name="Holder")
+        self.assertTrue(len(susp_low) >= 1)
+
+        df_suspicious_high = pd.DataFrame(
+            [
+                {"Date": "2026-05-06", "Credit": 10000.0, "Debit": 0.0, "Party": "Alice"},
+                {"Date": "2026-05-06", "Credit": 0.0, "Debit": 15000.0, "Party": "Bob"},
+            ]
+        )
+        _, susp_high = detect_pass_through_patterns(
+            df_suspicious_high, account_holder_name="Holder"
+        )
+        self.assertTrue(len(susp_high) >= 1)
+
+    def test_round_trip_kickback_detection(self):
+        df_kickback = pd.DataFrame(
+            [
+                {
+                    "Date": "2026-05-01",
+                    "Debit": 50000.0,
+                    "Credit": 0.0,
+                    "Party_Name": "Supplier X",
+                    "Narration": "Payment to Supplier X",
+                },
+                {
+                    "Date": "2026-05-02",
+                    "Debit": 0.0,
+                    "Credit": 5000.0,
+                    "Party_Name": "Supplier X",
+                    "Narration": "Rebate from Supplier X",
+                },
+            ]
+        )
+        res = detect_rapid_layering_for_profile(
+            df_kickback, account_holder_name="Employee A", time_window_days=3
+        )
+        self.assertFalse(res.empty)
+        kickbacks = res[res["Layering_Type"] == "ROUND_TRIP_KICKBACK"]
+        self.assertEqual(len(kickbacks), 1)
+        self.assertEqual(kickbacks["Intermediary_Entity"].iloc[0], "Supplier X")
+
+    def test_llm_narrative_synthesis_mocked(self):
+        loop_data = {
+            "originator": "Person A",
+            "counterparty": "Person B",
+            "initial_amount": 50000.0,
+            "return_amount": 45000.0,
+            "retained_amount": 5000.0,
+            "conduits": ["Conduit X"],
+            "cycle_nodes": ["Person A", "Conduit X", "Person B", "Person A"],
+        }
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.read.return_value = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "Comprehensive synthetic forensic intelligence narrative detailing "
+                                "intermediary conduits and circular pass-through fund transfers."
+                            )
+                        }
+                    }
+                ]
+            }
+        ).encode("utf-8")
+        mock_response.__enter__.return_value = mock_response
+
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            narr = generate_loop_forensic_narrative(loop_data)
+            self.assertIn("Comprehensive", narr)
+
+        # Fallback when urlopen raises exception
+        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+            fallback = generate_loop_forensic_narrative(loop_data)
+            self.assertIn("Capital initiated from 'Person A'", fallback)

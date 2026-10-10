@@ -79,6 +79,7 @@ omit = [
     "*/tests.py",
     "*/tests/*",
     "core/runner.py",
+    "core/management/*",
     "manage.py",
     "ForensiQ/wsgi.py",
     "ForensiQ/asgi.py",

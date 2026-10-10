@@ -10,12 +10,14 @@ Strictly adheres to agentic-django guidelines: no mutations, pure read functions
 from __future__ import annotations
 
 import uuid
+from collections import defaultdict
 from decimal import Decimal
 from typing import Any
 
 import pandas as pd
 import plotly.graph_objects as go
 from django.db.models import Count, Q, QuerySet
+from django.utils import timezone
 from loguru import logger
 from q_bank.models import AuditedPerson, BankTransaction
 
@@ -159,19 +161,19 @@ def get_transactions_df_for_profile(
         return empty_df
 
     # Query all transactions linked to any bank account of this auditee
-    qs = (
+    raw_txns = list(
         BankTransaction.objects.filter(
             Q(account__person=auditee) | Q(account__account_holder__iexact=auditee.full_name)
-        )
-        .select_related("account")
-        .order_by("txn_date", "created_at")
+        ).select_related("account")
     )
 
+    ordered_txns = _order_transactions_chronologically(raw_txns)
+
     if limit > 0:
-        qs = qs[:limit]
+        ordered_txns = ordered_txns[:limit]
 
     records: list[dict[str, Any]] = []
-    for idx, t in enumerate(qs):
+    for idx, t in enumerate(ordered_txns):
         # Standardize transaction date
         date_str = ""
         if t.txn_date:
@@ -199,6 +201,111 @@ def get_transactions_df_for_profile(
 
     df = pd.DataFrame(records)
     return df
+
+
+def _order_transactions_chronologically(
+    transactions: list[BankTransaction],
+) -> list[BankTransaction]:
+    """
+    Enforces strict chronological sequence for statement transactions.
+
+    Bank statements are frequently ingested in reverse-chronological order (newest first).
+    Within a day, or across the whole statement, this inverts intra-day causality.
+
+    This function uses double-entry closing balance continuity:
+        Bal_{t} = Bal_{t-1} + Credit_t - Debit_t
+    to mathematically deduce forward vs reverse ingestion order for each account ledger.
+    If closing balances are absent or inconclusive, it evaluates the overall date trajectory.
+    Intra-day clusters on the same date are similarly verified to guarantee that incoming
+    credits precede subsequent outgoing debits.
+    """
+    if len(transactions) <= 1:
+        return list(transactions)
+
+    # 1. Group by originating BankAccount to analyze each statement ledger independently
+    by_acc: dict[Any, list[BankTransaction]] = defaultdict(list)
+    for t in transactions:
+        by_acc[t.account_id].append(t)
+
+    ordered_all: list[BankTransaction] = []
+    tolerance = 0.05
+
+    for _, acc_txns in by_acc.items():
+        if len(acc_txns) <= 1:
+            ordered_all.extend(acc_txns)
+            continue
+
+        # Sort by created_at initially (document ingestion order)
+        acc_txns.sort(key=lambda x: x.created_at or timezone.now())
+
+        # Score forward vs reverse consistency across the account statement
+        forward_matches = 0
+        reverse_matches = 0
+        for i in range(len(acc_txns) - 1):
+            curr, nxt = acc_txns[i], acc_txns[i + 1]
+            c_bal = float(curr.closing_balance or 0.0)
+            n_bal = float(nxt.closing_balance or 0.0)
+            c_cr = float(curr.credit_amount or 0.0)
+            c_dr = float(curr.debit_amount or 0.0)
+            n_cr = float(nxt.credit_amount or 0.0)
+            n_dr = float(nxt.debit_amount or 0.0)
+            if c_bal > 0 and n_bal > 0:
+                if abs(n_bal - (c_bal + n_cr - n_dr)) < tolerance:
+                    forward_matches += 1
+                if abs(c_bal - (n_bal + c_cr - c_dr)) < tolerance:
+                    reverse_matches += 1
+
+        is_reversed = False
+        if reverse_matches > forward_matches:
+            is_reversed = True
+        elif forward_matches == reverse_matches:
+            valid_dates = [
+                (t.txn_date or t.value_date)
+                for t in acc_txns
+                if (t.txn_date or t.value_date) is not None
+            ]
+            if len(valid_dates) >= 2 and valid_dates[0] > valid_dates[-1]:
+                is_reversed = True
+
+        if is_reversed:
+            acc_txns = acc_txns[::-1]
+
+        # Verify intra-day clusters for each date
+        date_groups: dict[str, list[BankTransaction]] = defaultdict(list)
+        for t in acc_txns:
+            d_key = t.txn_date or t.value_date
+            d_str = d_key.strftime("%Y-%m-%d") if d_key else "NO_DATE"
+            date_groups[d_str].append(t)
+
+        acc_ordered: list[BankTransaction] = []
+        for _, day_txns in date_groups.items():
+            if len(day_txns) >= 2:
+                day_f = 0
+                day_r = 0
+                for i in range(len(day_txns) - 1):
+                    c, n = day_txns[i], day_txns[i + 1]
+                    cb = float(c.closing_balance or 0.0)
+                    nb = float(n.closing_balance or 0.0)
+                    ccr = float(c.credit_amount or 0.0)
+                    cdr = float(c.debit_amount or 0.0)
+                    ncr = float(n.credit_amount or 0.0)
+                    ndr = float(n.debit_amount or 0.0)
+                    if cb > 0 and nb > 0:
+                        if abs(nb - (cb + ncr - ndr)) < tolerance:
+                            day_f += 1
+                        if abs(cb - (nb + ccr - cdr)) < tolerance:
+                            day_r += 1
+                if day_r > day_f:
+                    day_txns = day_txns[::-1]
+            acc_ordered.extend(day_txns)
+
+        ordered_all.extend(acc_ordered)
+
+    # Global sort across all accounts chronologically by date
+    # Python's sort is stable, preserving verified intra-day relative order
+    min_date = timezone.datetime.min.replace(tzinfo=timezone.UTC)
+    ordered_all.sort(key=lambda t: t.txn_date or t.value_date or min_date)
+    return ordered_all
 
 
 def generate_trail_sankey_chart(

@@ -1099,7 +1099,9 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
         from core.audits import create_audit
         from core.profiles import create_investigation_profile, get_profile_keywords
 
-        p1 = create_investigation_profile(full_name="Agent Alpha", keywords=["KW_ALPHA_1", "KW_ALPHA_2"])
+        p1 = create_investigation_profile(
+            full_name="Agent Alpha", keywords=["KW_ALPHA_1", "KW_ALPHA_2"]
+        )
         p2 = create_investigation_profile(full_name="Agent Beta", keywords=["KW_BETA_1"])
         audit = create_audit(title="Scope Audit", profile_ids=[str(p1.id)])
 

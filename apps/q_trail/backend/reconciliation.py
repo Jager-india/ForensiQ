@@ -275,12 +275,44 @@ def _prepare_statement_dataframe(
 
     # Retain original index and statement ordering for provenance
     std["orig_idx"] = df.index
+    if "Closing_Balance" in df.columns:
+        std["Closing_Balance"] = pd.to_numeric(df["Closing_Balance"], errors="coerce").fillna(0.0)
+
     if "Row_Order" in df.columns:
         std["Row_Order"] = df["Row_Order"]
     else:
-        std["Row_Order"] = df.index
-    if "Closing_Balance" in df.columns:
-        std["Closing_Balance"] = pd.to_numeric(df["Closing_Balance"], errors="coerce").fillna(0.0)
+        # Determine if statement rows are in reverse-chronological order
+        is_rev = False
+        if "Closing_Balance" in std.columns and len(std) >= 2:
+            f_matches = 0
+            r_matches = 0
+            for i in range(len(std) - 1):
+                cb = float(std["Closing_Balance"].iloc[i] or 0.0)
+                nb = float(std["Closing_Balance"].iloc[i + 1] or 0.0)
+                ncr = float(std["Credit"].iloc[i + 1] or 0.0)
+                ndr = float(std["Debit"].iloc[i + 1] or 0.0)
+                ccr = float(std["Credit"].iloc[i] or 0.0)
+                cdr = float(std["Debit"].iloc[i] or 0.0)
+                if cb > 0 and nb > 0:
+                    if abs(nb - (cb + ncr - ndr)) < 0.05:
+                        f_matches += 1
+                    if abs(cb - (nb + ccr - cdr)) < 0.05:
+                        r_matches += 1
+            if r_matches > f_matches:
+                is_rev = True
+            elif f_matches == r_matches:
+                valid_dates = std["Date_dt"].dropna()
+                if len(valid_dates) >= 2 and valid_dates.iloc[0] > valid_dates.iloc[-1]:
+                    is_rev = True
+        elif len(std) >= 2:
+            valid_dates = std["Date_dt"].dropna()
+            if len(valid_dates) >= 2 and valid_dates.iloc[0] > valid_dates.iloc[-1]:
+                is_rev = True
+
+        if is_rev:
+            std["Row_Order"] = list(range(len(std) - 1, -1, -1))
+        else:
+            std["Row_Order"] = list(range(len(std)))
 
     # Perform feature extraction
     enriched = extract_banking_features(std, narration_col="Narration")
@@ -953,7 +985,9 @@ def detect_rapid_layering_for_profile(
 
             if in_date_str and out_date_str and in_date_str == out_date_str:
                 # Same day: outflow MUST occur strictly after inflow in statement row sequence
-                if out_order > in_order:
+                if out_order > in_order or (
+                    out_order == in_order and out_row.get("orig_idx", 0) > in_row.get("orig_idx", 0)
+                ):
                     is_temporal_match = True
                     delta_hours = 0.5
             elif pd.notna(in_date_dt) and pd.notna(out_date_dt):

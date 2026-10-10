@@ -533,16 +533,20 @@ class QScanDjangoServiceAndViewsTests(TestCase):
         session["active_audit_id"] = str(audit.id)
         session.save()
 
-        res_cfg = self.client.get(reverse("q_scan:download_tool", kwargs={"filename": "config.json"}))
+        res_cfg = self.client.get(
+            reverse("q_scan:download_tool", kwargs={"filename": "config.json"})
+        )
         self.assertEqual(res_cfg.status_code, 200)
         cfg_data = json.loads(res_cfg.content.decode("utf-8"))
         self.assertIn("OFFSHORE_BVI", cfg_data["keywords"])
         self.assertIn("SHELL_CORP_99", cfg_data["keywords"])
 
         # 3. q_scan_package.zip download dynamically injects profile keywords into config.json
-        res_zip = self.client.get(reverse("q_scan:download_tool", kwargs={"filename": "q_scan_package.zip"}))
+        res_zip = self.client.get(
+            reverse("q_scan:download_tool", kwargs={"filename": "q_scan_package.zip"})
+        )
         self.assertEqual(res_zip.status_code, 200)
-        self.assertIn("attachment; filename=\"q_scan_package.zip\"", res_zip["Content-Disposition"])
+        self.assertIn('attachment; filename="q_scan_package.zip"', res_zip["Content-Disposition"])
         with zipfile.ZipFile(io.BytesIO(res_zip.content), "r") as z:
             self.assertIn("config.json", z.namelist())
             zip_cfg = json.loads(z.read("config.json").decode("utf-8"))
