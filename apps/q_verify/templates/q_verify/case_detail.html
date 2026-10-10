@@ -3,7 +3,7 @@
     <!-- Page Header with Breadcrumb & Back Link -->
     <c-page_header 
         title="{{ case.case_title }}" 
-        subtitle="{{ case.case_ref }} &bull; Custodian: {{ case.custodian_name }}{% if case.custodian_department %} ({{ case.custodian_department }}){% endif %}" 
+        subtitle="{{ case.case_ref }} &bull; Auditee: {{ case.custodian_name }}{% if case.custodian_department %} ({{ case.custodian_department }}){% endif %}" 
         icon="fa-solid fa-stamp"
         icon_color="text-rose-400"
         back_url="/verify/">

@@ -61,7 +61,7 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
     """
     custodian_info = get_custodian_profile_detail(custodian_name)
     if not custodian_info["channels"]:
-        raise Http404("No chat records found for this custodian profile.")
+        raise Http404("No chat records found for this auditee profile.")
 
     channels = custodian_info["channels"]
     selected_channel_id = request.GET.get("channel_id", "").strip() or None
@@ -227,7 +227,7 @@ def delete_custodian_view(request: HttpRequest, custodian_name: str) -> HttpResp
             request, f"Successfully deleted {count} chat channel(s) for '{custodian_name}'."
         )
     else:
-        messages.error(request, "Target custodian chat records could not be found.")
+        messages.error(request, "Target auditee chat records could not be found.")
     return redirect("q_chat:dashboard")
 
 

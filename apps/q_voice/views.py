@@ -111,7 +111,7 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
     """
     custodian_info = get_custodian_profile_detail(custodian_name)
     if not custodian_info["recordings"]:
-        raise Http404(f"No voice recording cases found for custodian '{custodian_name}'.")
+        raise Http404(f"No voice recording cases found for auditee '{custodian_name}'.")
 
     recordings = custodian_info["recordings"]
     selected_recording_id = request.GET.get("recording_id", "").strip() or None
@@ -185,7 +185,7 @@ def delete_custodian_view(request: HttpRequest, custodian_name: str) -> HttpResp
             request, f"Successfully removed {count} audio recording(s) for '{custodian_name}'."
         )
     else:
-        messages.error(request, "Target custodian recordings could not be found.")
+        messages.error(request, "Target auditee recordings could not be found.")
 
     return redirect("q_voice:dashboard")
 

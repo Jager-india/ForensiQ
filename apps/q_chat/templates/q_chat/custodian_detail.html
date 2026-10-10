@@ -1,4 +1,4 @@
-<c-base title="Q-Chat | Custodian: {{ custodian_name }}">
+<c-base title="Q-Chat | Auditee: {{ custodian_name }}">
 
     <!-- Page Header with Navigation & Actions -->
     <c-page_header 
@@ -347,11 +347,11 @@
                 </div>
             </div>
 
-            <!-- Custodian Profile Card -->
+            <!-- Auditee Profile Card -->
             <div class="bg-theme-surface rounded-2xl border border-theme-border p-5 text-xs text-theme-muted space-y-2.5">
                 <h5 class="font-bold text-theme-text uppercase tracking-wider text-[10px] flex items-center gap-1.5">
                     <i class="fa-solid fa-id-card-clip text-sky-400"></i>
-                    <span>Custodian Investigation File:</span>
+                    <span>Auditee Investigation File:</span>
                 </h5>
                 <div class="font-mono text-[11px] text-theme-text font-bold">
                     {{ custodian.custodian_name }}
@@ -390,7 +390,7 @@
                 {% csrf_token %}
 
                 <div>
-                    <label class="block text-xs font-semibold text-theme-text mb-1">Target Custodian</label>
+                    <label class="block text-xs font-semibold text-theme-text mb-1">Target Auditee</label>
                     <input type="text" name="custodian_name" value="{{ custodian_name }}" required
                            class="w-full px-3 py-2 text-xs rounded-xl bg-theme-app border border-theme-border text-theme-text focus:outline-none focus:border-sky-500">
                 </div>

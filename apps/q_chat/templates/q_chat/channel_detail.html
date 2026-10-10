@@ -3,7 +3,7 @@
     <!-- Page Header -->
     <c-page_header 
         title="{{ channel.channel_name }}" 
-        subtitle="Platform: {{ channel.get_platform_display }}{% if channel.custodian_name %} • Custodian: {{ channel.custodian_name }}{% endif %} • {{ channel.total_messages }} Ingested Messages" 
+        subtitle="Platform: {{ channel.get_platform_display }}{% if channel.custodian_name %} • Auditee: {{ channel.custodian_name }}{% endif %} • {{ channel.total_messages }} Ingested Messages" 
         icon="fa-solid fa-comments"
         icon_color="text-sky-400"
         back_url="/chat/">

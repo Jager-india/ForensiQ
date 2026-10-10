@@ -1,4 +1,4 @@
-<c-base title="Q-Voice | Custodian: {{ custodian_name }}">
+<c-base title="Q-Voice | Auditee: {{ custodian_name }}">
 
     <!-- Styles for Forensic Timeline & Hotword Badges -->
     <style>
@@ -144,13 +144,13 @@
             back_url="/voice/">
             
             <div class="flex items-center gap-2.5">
-                <!-- Delete Custodian -->
-                <form method="POST" action="{% url 'q_voice:delete_custodian' custodian_name %}" onsubmit="return confirm('Are you sure you want to delete this custodian profile and all associated audio cases?');" class="inline">
+                <!-- Delete Auditee -->
+                <form method="POST" action="{% url 'q_voice:delete_custodian' custodian_name %}" onsubmit="return confirm('Are you sure you want to delete this auditee profile and all associated audio cases?');" class="inline">
                     {% csrf_token %}
                     <button type="submit"
                         class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 border border-rose-500/20 transition-all cursor-pointer">
                         <i class="fa-solid fa-trash-can"></i>
-                        <span>Delete Custodian</span>
+                        <span>Delete Auditee</span>
                     </button>
                 </form>
 
@@ -166,7 +166,7 @@
         </c-page_header>
 
         <!-- ============================================================ -->
-        <!-- 2. 4 EXECUTIVE KPI STAT CARDS (For this Custodian Profile) -->
+        <!-- 2. 4 EXECUTIVE KPI STAT CARDS (For this Auditee Profile)     -->
         <!-- ============================================================ -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             
@@ -174,7 +174,7 @@
             <c-stat_card
                 title="Identities Flagged"
                 value="{{ metrics.identities_count }}"
-                badge="Custodians & Leads"
+                badge="Auditees & Leads"
                 badge_type="info"
                 icon="fa-solid fa-id-badge" />
 
@@ -381,7 +381,7 @@
                         {% empty %}
                         <tr>
                             <td colspan="{% if not selected_recording %}5{% else %}4{% endif %}" class="p-8 text-center text-theme-muted text-xs">
-                                No transcript segments logged for this custodian profile.
+                                No transcript segments logged for this auditee profile.
                             </td>
                         </tr>
                         {% endfor %}
@@ -441,7 +441,7 @@
                         </div>
                     </div>
 
-                    <!-- Hidden or default Custodian Name -->
+                    <!-- Hidden or default Auditee Name -->
                     <input type="hidden" name="custodian_name" value="{{ custodian_name }}" />
 
                     <c-profile_selector
