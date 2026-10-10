@@ -55,7 +55,10 @@ def screen_message_text(
                 flagged.append(term)
                 total_score += DEFAULT_CHAT_EXTRA_KEYWORD_WEIGHT
 
-    risk_score = min(100, total_score)
+    if flagged:
+        risk_score = max(50, min(100, total_score))
+    else:
+        risk_score = min(100, total_score)
     return risk_score, flagged
 
 

@@ -402,7 +402,7 @@
                         {% for item in combined_timeline %}
                         <tr class="hover:bg-theme-subtle/50 transition cursor-pointer"
                             onclick="focusSegmentByIndex({{ forloop.counter0 }})"
-                            x-show="!searchQuery || '{{ item.transcript|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.speaker|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase())">
+                            x-show="!searchQuery || '{{ item.transcript|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.speaker|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.detections|join:', '|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase())">
                             <td class="py-2.5 px-3 text-theme-muted whitespace-nowrap font-mono text-[11px]">
                                 <div class="flex items-center gap-1.5">
                                     <span>{{ item.timestamp }}</span>
@@ -425,10 +425,12 @@
                             <td class="py-2.5 px-3 whitespace-nowrap">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     {% for det in item.detections_detail %}
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold 
-                                        {% if det.type == 'identity' %}tag-pill-identity{% elif det.type == 'financial' %}tag-pill-financial{% else %}tag-pill-suspicious{% endif %}">
+                                    <button type="button" @click.stop="searchQuery = '{{ det.term|escapejs }}'"
+                                        class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer hover:opacity-80 transition hover:scale-105 inline-block
+                                        {% if det.type == 'identity' %}tag-pill-identity{% elif det.type == 'financial' %}tag-pill-financial{% else %}tag-pill-suspicious{% endif %}"
+                                        title="Filter utterances for '{{ det.term }}'">
                                         {{ det.term }}
-                                    </span>
+                                    </button>
                                     {% empty %}
                                     <span class="text-[11px] text-theme-muted italic">Clear</span>
                                     {% endfor %}

@@ -328,6 +328,23 @@
                 </div>
             </div>
 
+            <!-- Table Search Filter & Profile Keyword Registry -->
+            {% if profile_keywords %}
+            <div class="flex flex-wrap items-center gap-2 p-3 bg-purple-500/5 dark:bg-purple-900/10 border border-purple-500/20 rounded-2xl">
+                <span class="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                    <i class="fa-solid fa-bullseye text-xs"></i> Profile Keyword Registry ({{ profile_keywords|length }}):
+                </span>
+                {% for kw in profile_keywords %}
+                <button type="button" @click="searchQuery = '{{ kw|escapejs }}'"
+                   class="px-2.5 py-1 text-[11px] font-mono font-semibold rounded-lg transition border cursor-pointer"
+                   :class="searchQuery.toLowerCase() === '{{ kw|lower|escapejs }}' ? 'bg-purple-600 text-white border-purple-500 shadow-sm' : 'bg-theme-surface border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30'"
+                   title="Filter utterances for keyword '{{ kw }}'">
+                    {{ kw }}
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <!-- Table Container -->
             <div class="overflow-x-auto max-h-[550px] rounded-xl border border-theme-border scrollbar-thin">
                 <table class="w-full text-left text-xs border-collapse">
@@ -345,11 +362,11 @@
                     <tbody class="divide-y divide-theme-border/60 bg-theme-surface">
                         {% for item in combined_timeline %}
                         <tr class="hover:bg-theme-subtle/50 transition"
-                            x-show="!searchQuery || '{{ item.transcript|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.speaker|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.call_ref|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase())">
+                            x-show="!searchQuery || '{{ item.transcript|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.speaker|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.call_ref|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase()) || '{{ item.detections|join:', '|escapejs }}'.toLowerCase().includes(searchQuery.toLowerCase())">
                             {% if not selected_recording %}
                             <td class="py-2.5 px-3 text-theme-muted whitespace-nowrap font-mono text-[11px]">
                                 <a href="{% url 'q_voice:custodian_detail' custodian_name %}?recording_id={{ item.recording_id }}"
-                                   class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-bold border border-indigo-500/20 transition-colors">
+                                    class="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 font-bold border border-indigo-500/20 transition-colors">
                                     {{ item.call_ref }}
                                 </a>
                             </td>
@@ -368,10 +385,12 @@
                             <td class="py-2.5 px-3 whitespace-nowrap">
                                 <div class="flex items-center gap-1.5 flex-wrap">
                                     {% for det in item.detections_detail %}
-                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold 
-                                        {% if det.type == 'identity' %}tag-pill-identity{% elif det.type == 'financial' %}tag-pill-financial{% else %}tag-pill-suspicious{% endif %}">
+                                    <button type="button" @click="searchQuery = '{{ det.term|escapejs }}'"
+                                        class="px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer hover:opacity-80 transition hover:scale-105 inline-block
+                                        {% if det.type == 'identity' %}tag-pill-identity{% elif det.type == 'financial' %}tag-pill-financial{% else %}tag-pill-suspicious{% endif %}"
+                                        title="Filter utterances for '{{ det.term }}'">
                                         {{ det.term }}
-                                    </span>
+                                    </button>
                                     {% empty %}
                                     <span class="text-[11px] text-theme-muted italic">Clear</span>
                                     {% endfor %}

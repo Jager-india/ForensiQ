@@ -141,6 +141,10 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
         for item in timeline
     ]
 
+    from core.profiles import get_profile_keywords
+
+    profile_keywords = get_profile_keywords(custodian_name=custodian_name, request=request)
+
     context: dict[str, Any] = {
         "custodian": custodian_info,
         "custodian_name": custodian_name,
@@ -152,6 +156,7 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
         "timeline_json": json.dumps(clean_json_timeline),
         "all_recordings": get_all_recordings(),
         "voice_endpoint": get_voice_api_endpoint(),
+        "profile_keywords": profile_keywords,
     }
 
     return render(request, "q_voice/custodian_detail.html", context)

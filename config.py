@@ -554,7 +554,7 @@ Comprehensive watchlist of suspicious phrases, risk weights, and investigative c
 used to screen chat messages (WhatsApp, Teams, Slack, Telegram).
 """
 
-DEFAULT_CHAT_EXTRA_KEYWORD_WEIGHT: int = 25
+DEFAULT_CHAT_EXTRA_KEYWORD_WEIGHT: int = 50
 """
 Default risk score increment added when a user-provided or profile-linked keyword hits a chat message.
 """

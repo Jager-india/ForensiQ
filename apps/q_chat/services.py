@@ -76,11 +76,19 @@ def ingest_chat_export_file(
                 "system",
                 "whatsapp",
             )
+            has_flagged_terms = bool(m.get("flagged_terms"))
+            msg_risk = (
+                0
+                if is_sys
+                else (
+                    max(m.get("risk_score", 0), 50) if has_flagged_terms else m.get("risk_score", 0)
+                )
+            )
             if not is_sys:
-                if m["risk_score"] >= 50:
+                if msg_risk >= 50 or has_flagged_terms:
                     flagged_count += 1
-                if m["risk_score"] > max_risk:
-                    max_risk = m["risk_score"]
+                if msg_risk > max_risk:
+                    max_risk = msg_risk
 
             message_objs.append(
                 ChatMessage(
@@ -94,7 +102,7 @@ def ingest_chat_export_file(
                     media_filename=m.get("media_filename", ""),
                     is_deleted=m.get("is_deleted", False),
                     is_edited=m.get("is_edited", False),
-                    risk_score=0 if is_sys else m.get("risk_score", 0),
+                    risk_score=msg_risk,
                     flagged_terms=[] if is_sys else m.get("flagged_terms", []),
                     raw_payload={"is_system": is_sys},
                 )

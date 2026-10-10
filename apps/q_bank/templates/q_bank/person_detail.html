@@ -777,8 +777,9 @@
                                                         class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30"
                                                         x-text="item.fuzzy_score + '%'"></span>
                                                     <template x-if="item.matched_keyword">
-                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-theme-subtle text-rose-600 dark:text-rose-300 border border-rose-500/20 truncate max-w-[90px]"
-                                                            :title="'Matched keyword: ' + item.matched_keyword"
+                                                        <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-theme-subtle text-rose-600 dark:text-rose-300 border border-rose-500/20 truncate max-w-[90px] cursor-pointer hover:bg-rose-500/20 transition"
+                                                            :title="'Filter by matched keyword: ' + item.matched_keyword"
+                                                            @click.stop="fuzzyKeywords = item.matched_keyword; triggerFuzzySearch();"
                                                             x-text="item.matched_keyword"></span>
                                                     </template>
                                                 </div>

@@ -71,6 +71,22 @@
 
     <!-- Evidence Hits Table -->
     <c-card title="Evidence Findings for {{ device.hostname }}" subtitle="list of matched keywords, file paths, and context snippets." icon="fa-solid fa-file-shield" icon_color="text-teal-400">
+        {% if active_profile_keywords %}
+        <!-- Active Profile Keywords Indicator -->
+        <div class="mb-4 flex flex-wrap items-center gap-2 p-3 bg-purple-500/5 dark:bg-purple-900/10 border border-purple-500/20 rounded-2xl">
+            <span class="text-xs font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-bullseye text-xs"></i> Active Profile Keywords ({{ active_profile_keywords|length }}):
+            </span>
+            {% for kw in active_profile_keywords %}
+            <button type="button" onclick="setKeywordFilter('{{ kw|escapejs }}')" 
+               class="px-2.5 py-1 text-[11px] font-mono font-semibold rounded-lg bg-theme-surface border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition cursor-pointer"
+               title="Filter evidence hits for '{{ kw }}'">
+                {{ kw }}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="mb-4 flex flex-wrap items-center gap-3">
             <c-search_bar 
                 id="device-search" 
@@ -90,6 +106,14 @@
     <script>
         let table = null;
         let debounceTimer = null;
+
+        function setKeywordFilter(kw) {
+            const searchInput = document.getElementById("device-search");
+            if (searchInput) {
+                searchInput.value = kw;
+                applyFilters();
+            }
+        }
 
         function applyFilters() {
             if (table) table.setData();
@@ -215,7 +239,9 @@
                         width: 130,
                         headerSort: true,
                         formatter: function (cell) {
-                            return `<span class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-teal-500/15 text-teal-400 border border-teal-500/30">${cell.getValue()}</span>`;
+                            const val = cell.getValue() || "";
+                            const escaped = val.replace(/'/g, "\\'");
+                            return `<button type="button" onclick="setKeywordFilter('${escaped}')" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-teal-500/15 text-teal-400 border border-teal-500/30 hover:bg-teal-500/30 hover:border-teal-500/60 transition cursor-pointer" title="Filter hits for '${val}'">${val}</button>`;
                         }
                     },
                     {

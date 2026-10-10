@@ -37,7 +37,7 @@ def get_chat_dashboard_metrics(audit_names: set[str] | None = None) -> dict[str,
 
     total_channels = channels_qs.count()
     total_messages = messages_qs.count()
-    flagged_messages = messages_qs.filter(risk_score__gte=50).count()
+    flagged_messages = messages_qs.filter(Q(risk_score__gte=50) | ~Q(flagged_terms=[])).count()
     deleted_messages = messages_qs.filter(is_deleted=True).count()
     media_messages = messages_qs.filter(has_media=True).count()
 
@@ -48,7 +48,7 @@ def get_chat_dashboard_metrics(audit_names: set[str] | None = None) -> dict[str,
     )
 
     top_flagged_senders = list(
-        messages_qs.filter(risk_score__gte=50)
+        messages_qs.filter(Q(risk_score__gte=50) | ~Q(flagged_terms=[]))
         .exclude(sender_name__in=["System", "system", "WhatsApp", "whatsapp"])
         .values("sender_name")
         .annotate(flagged_count=Count("id"))
@@ -230,26 +230,64 @@ def get_paginated_chat_messages(
     else:
         qs = ChatMessage.objects.none()
 
+    from core.profiles import get_profile_keywords
+
+    active_profile_kws: list[str] = []
+    if custodian_name:
+        active_profile_kws = get_profile_keywords(custodian_name=custodian_name)
+    elif channel_id:
+        try:
+            ch_obj = ChatChannel.objects.filter(id=channel_id).first()
+            if ch_obj and ch_obj.custodian_name:
+                active_profile_kws = get_profile_keywords(custodian_name=ch_obj.custodian_name)
+        except (ValueError, TypeError, ChatChannel.DoesNotExist):
+            active_profile_kws = []
+
     if search:
-        keywords = extract_keywords_from_string(search)
+        clean_search = search.strip()
+        keywords = extract_keywords_from_string(clean_search)
+        if clean_search and clean_search not in keywords:
+            keywords.insert(0, clean_search)
+
         if keywords:
             if threshold >= 100:
-                q_kw = Q()
+                q_kw = (
+                    Q(message_text__icontains=clean_search)
+                    | Q(flagged_terms__icontains=clean_search)
+                    | Q(sender_name__icontains=clean_search)
+                )
                 for kw in keywords:
-                    q_kw |= Q(message_text__icontains=kw) | Q(sender_name__icontains=kw)
+                    q_kw |= (
+                        Q(message_text__icontains=kw)
+                        | Q(flagged_terms__icontains=kw)
+                        | Q(sender_name__icontains=kw)
+                    )
                 qs = qs.filter(q_kw)
             else:
-                q_exact = Q()
+                q_exact = (
+                    Q(message_text__icontains=clean_search)
+                    | Q(flagged_terms__icontains=clean_search)
+                    | Q(sender_name__icontains=clean_search)
+                )
                 for kw in keywords:
-                    q_exact |= Q(message_text__icontains=kw) | Q(sender_name__icontains=kw)
+                    q_exact |= (
+                        Q(message_text__icontains=kw)
+                        | Q(flagged_terms__icontains=kw)
+                        | Q(sender_name__icontains=kw)
+                    )
                 matched_ids = list(qs.filter(q_exact).values_list("id", flat=True)[:500])
                 if len(matched_ids) < 500:
                     matched_set = set(matched_ids)
                     candidates = qs.exclude(id__in=matched_set).values_list(
-                        "id", "message_text", "sender_name"
+                        "id", "message_text", "sender_name", "flagged_terms"
                     )[:1000]
-                    for msg_id, mtext, sname in candidates:
-                        text_to_check = f"{mtext or ''} {sname or ''}"
+                    for msg_id, mtext, sname, fterms in candidates:
+                        terms_str = (
+                            " ".join(fterms)
+                            if isinstance(fterms, list)
+                            else (str(fterms) if fterms else "")
+                        )
+                        text_to_check = f"{mtext or ''} {sname or ''} {terms_str}"
                         is_matched, _, _ = score_text_against_keywords(
                             text_to_check, keywords, threshold=threshold
                         )
@@ -265,7 +303,13 @@ def get_paginated_chat_messages(
         qs = qs.filter(sender_name__iexact=sender.strip())
 
     if flagged_only:
-        qs = qs.filter(risk_score__gte=50)
+        q_flagged = Q(risk_score__gte=50) | ~Q(flagged_terms=[])
+        if active_profile_kws:
+            for pkw in active_profile_kws:
+                pkw_clean = pkw.strip()
+                if pkw_clean:
+                    q_flagged |= Q(message_text__icontains=pkw_clean)
+        qs = qs.filter(q_flagged)
 
     if media_only:
         qs = qs.filter(has_media=True)
@@ -319,19 +363,6 @@ def get_paginated_chat_messages(
         except Exception:
             right_sender = ""
 
-    from core.profiles import get_profile_keywords
-
-    active_profile_kws: list[str] = []
-    if custodian_name:
-        active_profile_kws = get_profile_keywords(custodian_name=custodian_name)
-    elif channel_id:
-        try:
-            ch_obj = ChatChannel.objects.filter(id=channel_id).first()
-            if ch_obj and ch_obj.custodian_name:
-                active_profile_kws = get_profile_keywords(custodian_name=ch_obj.custodian_name)
-        except (ValueError, TypeError, ChatChannel.DoesNotExist):
-            active_profile_kws = []
-
     paginator = Paginator(qs, page_size)
     page_obj = paginator.get_page(page)
 
@@ -358,6 +389,8 @@ def get_paginated_chat_messages(
                 if pkw_clean and pkw_clean in msg_lower and pkw not in flagged:
                     flagged.append(pkw)
                     score = max(score, 50)
+        if not is_sys and flagged:
+            score = max(score, 50)
 
         rows.append(
             {
@@ -431,7 +464,7 @@ def get_chat_participants_summary(
         .values("sender_name")
         .annotate(
             total_msgs=Count("id"),
-            flagged_msgs=Count("id", filter=Q(risk_score__gte=50)),
+            flagged_msgs=Count("id", filter=Q(risk_score__gte=50) | ~Q(flagged_terms=[])),
             deleted_msgs=Count("id", filter=Q(is_deleted=True)),
             first_seen=Min("sent_at"),
             last_seen=Max("sent_at"),

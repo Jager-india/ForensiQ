@@ -353,3 +353,42 @@ class QChatForensicTests(TestCase):
         res_del = self.client.post(reverse("q_chat:delete_custodian", args=["Arun Kumar"]))
         self.assertEqual(res_del.status_code, 302)
         self.assertEqual(len(get_all_custodian_profiles()), 0)
+
+    def test_keywords_linked_with_flagged_words_and_clickable_hits(self):
+        from core.models import InvestigationProfile
+
+        # 1. Setup profile with custom keywords
+        InvestigationProfile.objects.create(
+            full_name="Arun Kumar",
+            keywords=["tender L1", "consultant"],
+        )
+
+        # 2. Test searching for a flagged term (e.g. 'off the record')
+        hits = get_paginated_chat_messages(self.channel.id, search="off the record")
+        self.assertGreaterEqual(hits["total_count"], 1)
+        found_texts = [m["message_text"] for m in hits["data"]]
+        self.assertTrue(any("off the record" in t for t in found_texts))
+
+        # 3. Test flagged_only filter includes all flagged words & profile keywords
+        flagged_res = get_paginated_chat_messages(
+            self.channel.id, custodian_name="Arun Kumar", flagged_only=True
+        )
+        self.assertGreaterEqual(flagged_res["total_count"], 3)
+        for m in flagged_res["data"]:
+            self.assertTrue(m["risk_score"] >= 50)
+            self.assertTrue(len(m["flagged_terms"]) > 0)
+
+        # 4. Test view renders clickable flagword badge links
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        res = self.client.get(reverse("q_chat:custodian_detail", args=["Arun Kumar"]))
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+
+        # Flagged terms should be clickable links with ?q=
+        self.assertIn("?q=commission", content)
+        self.assertIn("?q=cash", content)
+        self.assertIn("Hit:", content)
+        self.assertIn("Profile Keyword Registry", content)

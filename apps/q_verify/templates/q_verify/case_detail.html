@@ -494,7 +494,13 @@
                 profileKwSection.classList.remove('hidden');
                 data.profile_keywords.forEach(kw => {
                     const badge = document.createElement('span');
-                    badge.className = 'px-2 py-0.5 bg-slate-200 dark:bg-zinc-700 text-slate-700 dark:text-zinc-300 border border-slate-300 dark:border-zinc-600 rounded-full font-bold shadow-sm';
+                    badge.className = 'px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-full font-bold shadow-sm cursor-pointer hover:bg-purple-600 hover:text-white transition';
+                    badge.title = `Search document for '${kw}'`;
+                    badge.onclick = () => {
+                        const inputEl = document.getElementById('drawer-keyword-input');
+                        if (inputEl) inputEl.value = kw;
+                        runDocumentSearch();
+                    };
                     badge.innerText = kw;
                     profileKwList.appendChild(badge);
                 });

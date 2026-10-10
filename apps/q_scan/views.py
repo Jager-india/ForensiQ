@@ -194,6 +194,12 @@ def device_detail_view(request: HttpRequest, device_id: str) -> HttpResponse:
 
     custodian_devices = get_custodian_scanned_devices(device.custodian_name)
 
+    from core.profiles import get_profile_keywords
+
+    active_profile_keywords = get_profile_keywords(
+        custodian_name=device.custodian_name, request=request
+    )
+
     return render(
         request,
         "q_scan/device_detail.html",
@@ -201,6 +207,7 @@ def device_detail_view(request: HttpRequest, device_id: str) -> HttpResponse:
             "device": device,
             "total_hits": total_hits,
             "custodian_devices": custodian_devices,
+            "active_profile_keywords": active_profile_keywords,
         },
     )
 
