@@ -635,6 +635,66 @@ class QLinkThreeOperationalModesTests(TestCase):
         self.assertGreaterEqual(len(res["nodes"]), 1)
         node_labels = [n["label"] for n in res["nodes"]]
         self.assertIn("Maharajan", node_labels)
+        # Verify external entity from outside the audit is excluded
+        self.assertNotIn("Metec Global Outside Audit", node_labels)
+
+    def test_mode1_keyword_graph_audit_scoping_and_star_topology(self):
+        from .selectors import get_mode1_keyword_graph
+
+        # Add counterparties to active audit target
+        cp1, _ = resolve_or_create_entity("EPALANI", ForensicEntity.EntityType.VENDOR)
+        cp2, _ = resolve_or_create_entity("SILVIYAJ", ForensicEntity.EntityType.VENDOR)
+        rel_bank, _ = create_or_update_relationship(
+            self.ent_a, cp1, relation_type="TRANSFERRED_FUNDS", source_module="q_bank"
+        )
+        EvidencePointer.objects.create(
+            relationship=rel_bank,
+            source_module="q_bank",
+            source_model="BankTransaction",
+            source_record_id="TX-101",
+            summary_snippet="NEFT payment to EPALANI",
+        )
+        rel_trail, _ = create_or_update_relationship(
+            self.ent_a, cp2, relation_type="RAPID_LAYERING", source_module="q_trail"
+        )
+        EvidencePointer.objects.create(
+            relationship=rel_trail,
+            source_module="q_trail",
+            source_model="MoneyTrailHop",
+            source_record_id="TR-202",
+            summary_snippet="Rapid turnaround layering with SILVIYAJ",
+        )
+
+        res = get_mode1_keyword_graph(audit_id=str(self.audit.id), keyword="")
+        self.assertEqual(res["mode"], "keyword")
+        node_labels = {n["label"] for n in res["nodes"]}
+
+        # 1. Scope: Active audit auditees and verified counterparties included, external excluded
+        self.assertIn("Maharajan", node_labels)
+        self.assertIn("EPALANI", node_labels)
+        self.assertIn("SILVIYAJ", node_labels)
+        self.assertNotIn("Metec Global Outside Audit", node_labels)
+
+        # 2. Star Topology: every edge must connect to an auditee (ent_a or ent_b)
+        target_ids = {str(self.ent_a.id), str(self.ent_b.id)}
+        for edge in res["edges"]:
+            self.assertTrue(
+                edge["source"] in target_ids or edge["target"] in target_ids,
+                f"Edge {edge} violates star topology (connects two non-target counterparties)",
+            )
+
+        # 3. Tool prefix on edge labels: instead of 'Keyword: name', shows originating tool 'Bank: name' / 'Trail: name'
+        labels = [e["label"] for e in res["edges"]]
+        self.assertTrue(
+            any(lbl.startswith("Bank:") for lbl in labels), f"No Bank: label in {labels}"
+        )
+        self.assertTrue(
+            any(lbl.startswith("Trail:") for lbl in labels), f"No Trail: label in {labels}"
+        )
+        self.assertFalse(
+            any(lbl.startswith("Keyword:") for lbl in labels),
+            f"Unexpected generic Keyword: label in {labels}",
+        )
 
     def test_mode2_audit_graph(self):
         from .selectors import get_mode2_audit_graph

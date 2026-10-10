@@ -49,6 +49,58 @@ def get_all_entities(
     return qs.order_by("-risk_rating", "display_name")
 
 
+TOOL_DISPLAY_MAP: dict[str, str] = {
+    "q_bank": "Bank",
+    "bank": "Bank",
+    "q_voice": "Voice",
+    "voice": "Voice",
+    "q_mail": "Mail",
+    "mail": "Mail",
+    "q_chat": "Chat",
+    "chat": "Chat",
+    "q_scan": "Scan",
+    "scan": "Scan",
+    "q_ledger": "Ledger",
+    "ledger": "Ledger",
+    "q_verify": "Verify",
+    "verify": "Verify",
+    "q_trail": "Trail",
+    "trail": "Trail",
+    "core": "Profile",
+    "profile": "Profile",
+    "q_link": "Link",
+    "link": "Link",
+}
+
+
+def resolve_tool_display_name(module_code: str | None) -> str:
+    """Returns human-friendly short tool name (Bank, Voice, Mail, Scan, Ledger, Verify, etc.)."""
+    if not module_code:
+        return "Bank"
+    clean = str(module_code).strip().lower()
+    return TOOL_DISPLAY_MAP.get(clean, clean.replace("q_", "").capitalize())
+
+
+def resolve_rel_tool_names(rel_or_list: Any) -> str:
+    """
+    Extracts all unique originating forensic tools for a relationship from its evidence pointers.
+    """
+    if not rel_or_list:
+        return "Bank"
+    rels = rel_or_list if isinstance(rel_or_list, list) else [rel_or_list]
+    tools: list[str] = []
+    for r in rels:
+        for ptr in r.evidence_pointers.all():
+            t = resolve_tool_display_name(ptr.source_module)
+            if t and t not in tools:
+                tools.append(t)
+        if not tools and r.source_module:
+            t = resolve_tool_display_name(r.source_module)
+            if t and t not in tools:
+                tools.append(t)
+    return ", ".join(tools) if tools else "Bank"
+
+
 def get_entity_by_id(entity_id: str) -> ForensicEntity | None:
     """
     Fetches a single entity by UUID with preloaded relationships and aliases.
@@ -511,6 +563,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 }
             )
 
+        tool_name = resolve_rel_tool_names(rel)
         return {
             "status": "success",
             "edge": {
@@ -520,10 +573,10 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "source_name": rel.source_entity.display_name,
                 "target_name": rel.target_entity.display_name,
                 "relation_type": rel.relation_type,
-                "relation_type_display": rel.get_relation_type_display(),
-                "label": rel.get_relation_type_display(),
+                "relation_type_display": f"[{tool_name}] {rel.get_relation_type_display()}",
+                "label": f"{tool_name}: {rel.get_relation_type_display()}",
                 "category": category,
-                "module": rel.source_module,
+                "module": rel.source_module or tool_name.lower(),
                 "weight": rel.weight,
                 "confidence": rel.confidence_score,
                 "is_rapid_layering": bool(
@@ -604,6 +657,11 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
             }
         )
 
+    synth_tool = "Bank"
+    if evidence_items:
+        first_mod = evidence_items[0].get("source_module")
+        synth_tool = resolve_tool_display_name(first_mod)
+
     return {
         "status": "success",
         "edge": {
@@ -613,12 +671,12 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
             "source_name": ea.display_name,
             "target_name": eb.display_name,
             "relation_type": "KEYWORD_INTERLINK",
-            "relation_type_display": f"Keyword Interlink ({keyword})"
+            "relation_type_display": f"[{synth_tool}] Keyword Interlink ({keyword})"
             if keyword
-            else "Keyword Interlink",
-            "label": f"Keyword: {keyword}" if keyword else "Keyword Interlink",
+            else f"[{synth_tool}] Keyword Interlink",
+            "label": f"{synth_tool}: {keyword}" if keyword else f"{synth_tool} Interlink",
             "category": category,
-            "module": "q_link",
+            "module": synth_tool.lower(),
             "weight": 2.5,
             "confidence": 0.95,
             "is_rapid_layering": False,
@@ -634,25 +692,87 @@ def get_mode1_keyword_graph(
     keyword: str,
     *,
     max_nodes: int = 120,
+    filter_names: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Mode 1: Interlinks based on keywords
-    Queries all uploaded files, parsed documents, bank narrations, and profiles within the active audit.
-    Emits Nodes for profiles/documents sharing keywords.
-    Emits Edges representing interlinks based on keywords.
+    Strictly scoped to the active audit.
+    Emits Nodes for auditees and verified counterparties within the active audit.
+    Emits Edges using Star Topology (Target Auditee -> Counterparties/Accounts).
+    Labels edges with originating forensic tools (e.g., Bank: Term, Voice: Term, Trail: Term).
     """
     from core.audits import get_audit_by_id
     from core.models import InvestigationProfile, ProfileDocument
 
     audit = get_audit_by_id(audit_id) if audit_id else None
-    audit_profile_names = list(audit.profiles.values_list("full_name", flat=True)) if audit else []
-    target_profs = (
-        list(audit.profiles.all()) if audit else list(InvestigationProfile.objects.all()[:50])
-    )
+
+    # Resolve target profiles strictly within the active audit
+    target_profs: list[InvestigationProfile] = []
+    audit_profile_names: list[str] = []
+    if audit:
+        target_profs = list(audit.profiles.all())
+        audit_profile_names = [p.full_name.strip() for p in target_profs]
+    elif filter_names:
+        audit_profile_names = [str(f).strip() for f in filter_names if str(f).strip()]
+        target_profs = list(InvestigationProfile.objects.filter(full_name__in=audit_profile_names))
+    else:
+        target_profs = list(InvestigationProfile.objects.all()[:20])
+        audit_profile_names = [p.full_name.strip() for p in target_profs]
+
+    profile_map = {p.full_name.strip().lower(): p for p in InvestigationProfile.objects.all()}
+
+    # Resolve target entities corresponding to active audit profiles
+    target_entities: list[ForensicEntity] = []
+    if audit_profile_names:
+        target_q = Q()
+        for name in audit_profile_names:
+            target_q |= Q(display_name__iexact=name) | Q(aliases__alias_name__iexact=name)
+        target_entities = list(
+            ForensicEntity.objects.filter(target_q).distinct().prefetch_related("aliases")
+        )
+
+    if not target_entities:
+        target_entities = list(
+            ForensicEntity.objects.filter(is_target=True).prefetch_related("aliases")[:10]
+        )
+        if not target_entities and ForensicEntity.objects.exists():
+            target_entities = list(ForensicEntity.objects.prefetch_related("aliases")[:5])
+
+    target_entity_ids = {e.id for e in target_entities}
+    target_entity_dict = {str(e.id): e for e in target_entities}
+
+    # Scope relationships strictly to those involving target auditees
+    if target_entity_ids:
+        audit_rels = list(
+            EntityRelationship.objects.filter(
+                Q(source_entity_id__in=target_entity_ids)
+                | Q(target_entity_id__in=target_entity_ids)
+            )
+            .select_related("source_entity", "target_entity")
+            .prefetch_related("evidence_pointers")
+        )
+    else:
+        audit_rels = list(
+            EntityRelationship.objects.select_related(
+                "source_entity", "target_entity"
+            ).prefetch_related("evidence_pointers")[:100]
+        )
+
+    # Allowed entities strictly within the active audit scope
+    allowed_entities_dict: dict[str, ForensicEntity] = {str(e.id): e for e in target_entities}
+    for r in audit_rels:
+        allowed_entities_dict[str(r.source_entity_id)] = r.source_entity
+        allowed_entities_dict[str(r.target_entity_id)] = r.target_entity
+
+    rel_map: dict[tuple[str, str], list[EntityRelationship]] = {}
+    for r in audit_rels:
+        s_id = str(r.source_entity_id)
+        t_id = str(r.target_entity_id)
+        rel_map.setdefault((s_id, t_id), []).append(r)
+        rel_map.setdefault((t_id, s_id), []).append(r)
 
     kw = (keyword or "").strip()
     if not kw:
-        # Discover all active forensic interlinks based on keywords across the entire audit
         STOPWORDS = {
             "the",
             "and",
@@ -688,16 +808,6 @@ def get_mode1_keyword_graph(
             "balance",
         }
 
-        # 1. Collect all entities in scope
-        all_entities = list(ForensicEntity.objects.prefetch_related("aliases").all()[:150])
-        entity_by_name: dict[str, ForensicEntity] = {
-            e.display_name.lower().strip(): e for e in all_entities
-        }
-        for e in all_entities:
-            for al in e.aliases.all():
-                entity_by_name[al.alias_name.lower().strip()] = e
-
-        # 2. Gather Candidate Keywords from Profiles, Documents, and Entities
         candidate_keywords: set[str] = set()
 
         for p in target_profs:
@@ -713,157 +823,153 @@ def get_mode1_keyword_graph(
                 if len(part_clean) >= 4 and part_clean.lower() not in STOPWORDS:
                     candidate_keywords.add(part_clean)
 
-        for e in all_entities:
-            e_name = e.display_name.strip()
-            if len(e_name) >= 3 and e_name.lower() not in STOPWORDS:
-                candidate_keywords.add(e_name)
-            for al in e.aliases.all():
-                al_name = al.alias_name.strip()
-                if len(al_name) >= 3 and al_name.lower() not in STOPWORDS:
-                    candidate_keywords.add(al_name)
+        for ent in allowed_entities_dict.values():
+            if ent.id not in target_entity_ids:
+                e_name = ent.display_name.strip()
+                if len(e_name) >= 3 and e_name.lower() not in STOPWORDS:
+                    candidate_keywords.add(e_name)
+                for al in ent.aliases.all():
+                    al_name = al.alias_name.strip()
+                    if len(al_name) >= 3 and al_name.lower() not in STOPWORDS:
+                        candidate_keywords.add(al_name)
 
-        # 3. Associate Entities with Keywords
-        kw_to_entities: dict[str, set[ForensicEntity]] = {}
-
-        docs_list = list(
-            ProfileDocument.objects.filter(profile__in=target_profs).select_related("profile")[:60]
-        )
-        ptrs_list = list(
-            EvidencePointer.objects.select_related(
-                "relationship__source_entity", "relationship__target_entity"
-            )[:150]
-        )
-
-        for k_term in sorted(candidate_keywords):
-            k_low = k_term.lower()
-            matching_ents_for_kw: set[ForensicEntity] = set()
-
-            # Direct entity name / alias / tag match
-            for e in all_entities:
-                if (
-                    k_low == e.display_name.lower()
-                    or (len(k_low) >= 4 and k_low in e.display_name.lower())
-                    or any(k_low == al.alias_name.lower() for al in e.aliases.all())
-                    or any(k_low in str(t).lower() for t in e.tags)
-                ):
-                    matching_ents_for_kw.add(e)
-
-            # Profile keywords match
-            for p in target_profs:
-                p_kws = [str(x).lower().strip() for x in (p.keywords or [])]
-                if any(k_low in kw_str or kw_str in k_low for kw_str in p_kws):
-                    fe = entity_by_name.get(p.full_name.lower())
-                    if fe:
-                        matching_ents_for_kw.add(fe)
-
-            # Document text match
-            for d in docs_list:
-                doc_text = (d.extracted_text or "").lower()
-                doc_fname = d.filename.lower()
-                if k_low in doc_text or k_low in doc_fname:
-                    fe = entity_by_name.get(d.profile.full_name.lower())
-                    if fe:
-                        matching_ents_for_kw.add(fe)
-
-            # Evidence pointer match
-            for ptr in ptrs_list:
-                ptr_text = (ptr.summary_snippet or "").lower()
-                if k_low in ptr_text:
-                    if ptr.relationship:
-                        matching_ents_for_kw.add(ptr.relationship.source_entity)
-                        matching_ents_for_kw.add(ptr.relationship.target_entity)
-
-            if len(matching_ents_for_kw) >= 2:
-                kw_to_entities[k_term] = matching_ents_for_kw
-
-        matching_entities_dict: dict[str, ForensicEntity] = {}
-        interlink_edges: list[dict[str, Any]] = []
+        matched_nodes: dict[str, ForensicEntity] = {str(te.id): te for te in target_entities}
+        edges: list[dict[str, Any]] = []
         edge_set: set[tuple[str, str]] = set()
         active_kw_names: set[str] = set()
 
-        for k_term, ents_set in kw_to_entities.items():
-            ents = list(ents_set)
-            for i in range(len(ents)):
-                for j in range(i + 1, min(len(ents), i + 4)):
-                    ea, eb = ents[i], ents[j]
-                    if ea.id == eb.id:
+        for k_term in sorted(candidate_keywords):
+            k_low = k_term.lower()
+            matching_cps: list[ForensicEntity] = []
+            for c in allowed_entities_dict.values():
+                if c.id in target_entity_ids:
+                    continue
+
+                matched = False
+                if k_low == c.display_name.lower() or (
+                    len(k_low) >= 4 and k_low in c.display_name.lower()
+                ):
+                    matched = True
+                elif any(k_low == al.alias_name.lower() for al in c.aliases.all()):
+                    matched = True
+                elif any(k_low in str(t).lower() for t in c.tags):
+                    matched = True
+                else:
+                    for r in audit_rels:
+                        if r.source_entity_id == c.id or r.target_entity_id == c.id:
+                            for ptr in r.evidence_pointers.all():
+                                if k_low in (ptr.summary_snippet or "").lower():
+                                    matched = True
+                                    break
+                        if matched:
+                            break
+
+                if matched:
+                    matching_cps.append(c)
+
+            if not matching_cps:
+                continue
+
+            active_kw_names.add(k_term)
+
+            # Star Topology: Connect target auditees directly to each matching counterparty
+            for cp in matching_cps:
+                matched_nodes[str(cp.id)] = cp
+
+                connected_targets = [
+                    te for te in target_entities if (str(te.id), str(cp.id)) in rel_map
+                ]
+                if not connected_targets and target_entities:
+                    connected_targets = [target_entities[0]]
+
+                for te in connected_targets:
+                    pair_key = tuple(sorted([str(te.id), str(cp.id)]))
+                    if pair_key in edge_set:
                         continue
-                    matching_entities_dict[str(ea.id)] = ea
-                    matching_entities_dict[str(eb.id)] = eb
-                    pair_key = tuple(sorted([str(ea.id), str(eb.id)]))
-                    if pair_key not in edge_set:
-                        edge_set.add(pair_key)
-                        active_kw_names.add(k_term)
-
-                        # Check if a real DB relationship exists
-                        rel_match = (
-                            EntityRelationship.objects.filter(
-                                Q(source_entity=ea, target_entity=eb)
-                                | Q(source_entity=eb, target_entity=ea)
-                            )
-                            .select_related("source_entity", "target_entity")
-                            .prefetch_related("evidence_pointers")
-                            .first()
-                        )
-                        if rel_match:
-                            edge_dict = _format_edge(rel_match)
-                            edge_dict["label"] = f"Keyword: {k_term}"
-                            edge_dict["relation_type_display"] = (
-                                f"{rel_match.get_relation_type_display()} ({k_term})"
-                            )
-                            interlink_edges.append(edge_dict)
-                        else:
-                            snip = f"Interlink based on forensic keyword '{k_term}' correlating '{ea.display_name}' and '{eb.display_name}' across audit evidence."
-                            interlink_edges.append(
-                                {
-                                    "id": f"kw__{ea.id}__{eb.id}__{k_term}",
-                                    "source": str(ea.id),
-                                    "target": str(eb.id),
-                                    "from": str(ea.id),
-                                    "to": str(eb.id),
-                                    "relation_type": "KEYWORD_INTERLINK",
-                                    "label": f"Keyword: {k_term}",
-                                    "weight": 2.5,
-                                    "confidence": 0.95,
-                                    "module": "q_link",
-                                    "is_direct": False,
-                                    "is_rapid_layering": False,
-                                    "is_external": False,
-                                    "evidence": {
-                                        "source_module": "Q-Link",
-                                        "snippet": snip,
-                                    },
-                                    "evidence_count": 1,
-                                }
-                            )
-
-        # Also pull any existing direct relationships between matching entities
-        if matching_entities_dict:
-            existing_rels = (
-                EntityRelationship.objects.filter(
-                    source_entity_id__in=matching_entities_dict.keys(),
-                    target_entity_id__in=matching_entities_dict.keys(),
-                )
-                .select_related("source_entity", "target_entity")
-                .prefetch_related("evidence_pointers")
-            )
-            for r in existing_rels:
-                pair_key = tuple(sorted([str(r.source_entity_id), str(r.target_entity_id)]))
-                if pair_key not in edge_set:
                     edge_set.add(pair_key)
-                    interlink_edges.append(_format_edge(r))
 
-        # Fallback to target profiles if no interlinks
-        if not matching_entities_dict:
-            for p in target_profs[:12]:
-                fe = ForensicEntity.objects.filter(display_name__iexact=p.full_name).first()
-                if fe:
-                    matching_entities_dict[str(fe.id)] = fe
+                    rels = rel_map.get((str(te.id), str(cp.id)), [])
+                    rel_match = rels[0] if rels else None
+                    tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
 
-        from core.models import InvestigationProfile
+                    if rel_match:
+                        edge_dict = _format_edge(rel_match)
+                        edge_dict["label"] = f"{tool_name}: {k_term}"
+                        edge_dict["relation_type_display"] = (
+                            f"[{tool_name}] {rel_match.get_relation_type_display()} ({k_term})"
+                        )
+                        edges.append(edge_dict)
+                    else:
+                        snip = (
+                            f"Interlink based on forensic keyword '{k_term}' "
+                            f"correlating '{te.display_name}' and '{cp.display_name}' across audit evidence."
+                        )
+                        edges.append(
+                            {
+                                "id": f"kw__{te.id}__{cp.id}__{k_term}",
+                                "source": str(te.id),
+                                "target": str(cp.id),
+                                "from": str(te.id),
+                                "to": str(cp.id),
+                                "relation_type": "KEYWORD_INTERLINK",
+                                "relation_type_display": f"[{tool_name}] Keyword Correlation ({k_term})",
+                                "label": f"{tool_name}: {k_term}",
+                                "weight": 2.5,
+                                "confidence": 0.95,
+                                "module": "q_link",
+                                "is_direct": False,
+                                "is_rapid_layering": False,
+                                "is_external": False,
+                                "evidence": {
+                                    "source_module": f"Q-{tool_name}",
+                                    "snippet": snip,
+                                },
+                                "evidence_count": 1,
+                            }
+                        )
 
-        profile_map = {p.full_name.strip().lower(): p for p in InvestigationProfile.objects.all()}
-        nodes = [_format_node(e, profile_map=profile_map) for e in matching_entities_dict.values()]
+        # Include remaining audit relationships involving target auditees (Star Topology)
+        for r in audit_rels:
+            s_id = str(r.source_entity_id)
+            t_id = str(r.target_entity_id)
+
+            if s_id not in target_entity_dict and t_id not in target_entity_dict:
+                continue
+
+            pair_key = tuple(sorted([s_id, t_id]))
+            if pair_key not in edge_set:
+                edge_set.add(pair_key)
+                tool_name = resolve_rel_tool_names(r)
+                other_entity = r.target_entity if s_id in target_entity_dict else r.source_entity
+                edge_dict = _format_edge(r)
+                edge_dict["label"] = f"{tool_name}: {other_entity.display_name}"
+                edge_dict["relation_type_display"] = (
+                    f"[{tool_name}] {r.get_relation_type_display()}"
+                )
+                edges.append(edge_dict)
+                matched_nodes[s_id] = r.source_entity
+                matched_nodes[t_id] = r.target_entity
+
+        # If audit has multiple target auditees, connect them if relationships exist
+        if len(target_entities) >= 2:
+            for i in range(len(target_entities)):
+                for j in range(i + 1, len(target_entities)):
+                    te1, te2 = target_entities[i], target_entities[j]
+                    pair_key = tuple(sorted([str(te1.id), str(te2.id)]))
+                    if pair_key not in edge_set and pair_key in rel_map:
+                        edge_set.add(pair_key)
+                        rels = rel_map[pair_key]
+                        tool_name = resolve_rel_tool_names(rels)
+                        edge_dict = _format_edge(rels[0])
+                        edge_dict["label"] = f"{tool_name}: {te2.display_name}"
+                        edges.append(edge_dict)
+
+        nodes = [_format_node(e, profile_map=profile_map) for e in matched_nodes.values()][
+            :max_nodes
+        ]
+        node_ids = {n["id"] for n in nodes}
+        valid_edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
+
         key_terms_str = (
             f" (Key terms: {', '.join(sorted(active_kw_names)[:6])})" if active_kw_names else ""
         )
@@ -872,155 +978,137 @@ def get_mode1_keyword_graph(
             "keyword": "",
             "title": "Interlinks based on keywords",
             "nodes": nodes,
-            "edges": interlink_edges,
+            "edges": valid_edges,
             "total_entities": len(nodes),
-            "message": f"Showing {len(interlink_edges)} interlink(s) based on keywords across {len(nodes)} entities{key_terms_str}.",
+            "message": f"Showing {len(valid_edges)} interlink(s) based on keywords across {len(nodes)} entities{key_terms_str}.",
         }
 
+    # Keyword search scoped strictly to active audit
     kw_lower = kw.lower()
+    matched_nodes = {str(te.id): te for te in target_entities}
+    edges = []
+    edge_set = set()
 
-    # 1. Matching Entities directly (by display_name, identifier, or alias)
-    entity_q = (
-        Q(display_name__icontains=kw)
-        | Q(identifier__icontains=kw)
-        | Q(aliases__alias_name__icontains=kw)
-    )
-    matching_entities: list[ForensicEntity] = list(
-        ForensicEntity.objects.filter(entity_q).prefetch_related("aliases")[:max_nodes]
-    )
-    entity_ids = {str(e.id) for e in matching_entities}
-    entity_dict = {str(e.id): e for e in matching_entities}
-
-    # 2. Match Profiles with matching keywords, notes, or name
-    prof_q = Q(full_name__icontains=kw) | Q(notes__icontains=kw)
-    if audit:
-        prof_q &= Q(audits=audit)
-    matched_profiles = list(InvestigationProfile.objects.filter(prof_q)[:50])
-    for p in matched_profiles:
-        fe = ForensicEntity.objects.filter(display_name__iexact=p.full_name).first()
-        if fe and str(fe.id) not in entity_ids:
-            matching_entities.append(fe)
-            entity_ids.add(str(fe.id))
-            entity_dict[str(fe.id)] = fe
-
-    # Also check if keyword is in profile.keywords
-    for p in target_profs:
-        if any(kw_lower in str(k).lower() for k in (p.keywords or [])):
-            fe = ForensicEntity.objects.filter(display_name__iexact=p.full_name).first()
-            if fe and str(fe.id) not in entity_ids:
-                matching_entities.append(fe)
-                entity_ids.add(str(fe.id))
-                entity_dict[str(fe.id)] = fe
-
-    # 3. Match ProfileDocuments containing keyword
-    doc_q = Q(filename__icontains=kw) | Q(extracted_text__icontains=kw)
-    if audit:
-        doc_q &= Q(profile__audits=audit)
-    matched_docs = list(ProfileDocument.objects.filter(doc_q).select_related("profile")[:50])
-    for d in matched_docs:
-        fe = ForensicEntity.objects.filter(display_name__iexact=d.profile.full_name).first()
-        if fe and str(fe.id) not in entity_ids:
-            matching_entities.append(fe)
-            entity_ids.add(str(fe.id))
-            entity_dict[str(fe.id)] = fe
-
-    # 4. Match EvidencePointers (bank narrations, POs, chats, transcripts)
-    ev_pointers = list(
-        EvidencePointer.objects.filter(
-            Q(summary_snippet__icontains=kw) | Q(metadata__icontains=kw)
-        ).select_related("relationship__source_entity", "relationship__target_entity")[:100]
-    )
-    for ev in ev_pointers:
-        rel = ev.relationship
-        if not rel or not rel.source_entity or not rel.target_entity:
+    # Find matching counterparties in active audit scope
+    matching_cps = []
+    for c in allowed_entities_dict.values():
+        if c.id in target_entity_ids:
             continue
-        for e in [rel.source_entity, rel.target_entity]:
-            if (
-                audit_profile_names
-                and e.display_name not in audit_profile_names
-                and not any(
-                    a in audit_profile_names
-                    for a in [rel.source_entity.display_name, rel.target_entity.display_name]
-                )
-            ):
-                continue
-            if str(e.id) not in entity_ids and len(matching_entities) < max_nodes:
-                matching_entities.append(e)
-                entity_ids.add(str(e.id))
-                entity_dict[str(e.id)] = e
+        matched = False
+        if kw_lower in c.display_name.lower():
+            matched = True
+        elif any(kw_lower in al.alias_name.lower() for al in c.aliases.all()):
+            matched = True
+        elif any(kw_lower in str(t).lower() for t in c.tags):
+            matched = True
+        else:
+            for r in audit_rels:
+                if r.source_entity_id == c.id or r.target_entity_id == c.id:
+                    for ptr in r.evidence_pointers.all():
+                        if (
+                            kw_lower in (ptr.summary_snippet or "").lower()
+                            or kw_lower in str(ptr.metadata or {}).lower()
+                        ):
+                            matched = True
+                            break
+                if matched:
+                    break
+        if matched:
+            matching_cps.append(c)
 
-    # Fetch existing relationships connecting these entities
-    existing_rels = list(
-        EntityRelationship.objects.filter(
-            source_entity_id__in=entity_ids,
-            target_entity_id__in=entity_ids,
+    # Check if target auditees match kw
+    target_matched = any(
+        kw_lower in te.display_name.lower()
+        or any(
+            kw_lower in str(k).lower()
+            for k in (getattr(profile_map.get(te.display_name.lower()), "keywords", []) or [])
         )
-        .select_related("source_entity", "target_entity")
-        .prefetch_related("evidence_pointers")
+        for te in target_entities
     )
-
-    # If single or isolated matches in the audit, include connected audit profiles to visualize the interlink
-    if (len(matching_entities) == 1 or len(existing_rels) == 0) and matching_entities:
-        neighbor_rels = list(
-            EntityRelationship.objects.filter(
-                Q(source_entity_id__in=entity_ids) | Q(target_entity_id__in=entity_ids)
-            )
-            .select_related("source_entity", "target_entity")
-            .prefetch_related("evidence_pointers")[:20]
+    if not target_matched:
+        target_matched = (
+            ProfileDocument.objects.filter(profile__in=target_profs)
+            .filter(Q(filename__icontains=kw) | Q(extracted_text__icontains=kw))
+            .exists()
         )
-        for nr in neighbor_rels:
-            other = nr.target_entity if str(nr.source_entity_id) in entity_ids else nr.source_entity
-            if audit_profile_names and other.display_name not in audit_profile_names:
+
+    # Star Topology: Connect target auditee(s) to matching counterparties
+    for cp in matching_cps:
+        matched_nodes[str(cp.id)] = cp
+        connected_targets = [te for te in target_entities if (str(te.id), str(cp.id)) in rel_map]
+        if not connected_targets and target_entities:
+            connected_targets = [target_entities[0]]
+
+        for te in connected_targets:
+            pair_key = tuple(sorted([str(te.id), str(cp.id)]))
+            if pair_key in edge_set:
                 continue
-            if str(other.id) not in entity_ids and len(matching_entities) < max_nodes:
-                matching_entities.append(other)
-                entity_ids.add(str(other.id))
-                entity_dict[str(other.id)] = other
-            if nr not in existing_rels:
-                existing_rels.append(nr)
+            edge_set.add(pair_key)
+            rels = rel_map.get((str(te.id), str(cp.id)), [])
+            rel_match = rels[0] if rels else None
+            tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
 
-    from core.models import InvestigationProfile
+            if rel_match:
+                edge_dict = _format_edge(rel_match)
+                edge_dict["label"] = f"{tool_name}: {kw}"
+                edge_dict["relation_type_display"] = (
+                    f"[{tool_name}] {rel_match.get_relation_type_display()} ({kw})"
+                )
+                edges.append(edge_dict)
+            else:
+                edges.append(
+                    {
+                        "id": f"kw__{te.id}__{cp.id}__{kw}",
+                        "source": str(te.id),
+                        "target": str(cp.id),
+                        "from": str(te.id),
+                        "to": str(cp.id),
+                        "relation_type": "KEYWORD_INTERLINK",
+                        "relation_type_display": f"[{tool_name}] Keyword Correlation ({kw})",
+                        "label": f"{tool_name}: {kw}",
+                        "weight": 2.5,
+                        "confidence": 0.95,
+                        "module": "q_link",
+                        "is_direct": False,
+                        "is_rapid_layering": False,
+                        "is_external": False,
+                        "evidence": {
+                            "source_module": f"Q-{tool_name}",
+                            "snippet": f"Interlink based on keyword '{kw}' between '{te.display_name}' and '{cp.display_name}'.",
+                        },
+                        "evidence_count": 1,
+                    }
+                )
 
-    profile_map = {p.full_name.strip().lower(): p for p in InvestigationProfile.objects.all()}
-    nodes = [_format_node(e, profile_map=profile_map) for e in matching_entities]
-
-    edges = [_format_edge(r) for r in existing_rels]
-    connected_pairs = {(e["source"], e["target"]) for e in edges} | {
-        (e["target"], e["source"]) for e in edges
-    }
-
-    # Synthesize interlink keyword edges between matching entities if disconnected
-    if len(matching_entities) >= 2 and len(edges) < len(matching_entities):
-        node_ids_list = list(entity_ids)
-        for i in range(len(node_ids_list)):
-            for j in range(i + 1, min(len(node_ids_list), i + 4)):
-                id_a, id_b = node_ids_list[i], node_ids_list[j]
-                if (id_a, id_b) not in connected_pairs:
-                    ent_a = entity_dict[id_a]
-                    ent_b = entity_dict[id_b]
-                    rel_match = (
-                        EntityRelationship.objects.filter(
-                            Q(source_entity=ent_a, target_entity=ent_b)
-                            | Q(source_entity=ent_b, target_entity=ent_a)
-                        )
-                        .select_related("source_entity", "target_entity")
-                        .prefetch_related("evidence_pointers")
-                        .first()
-                    )
+    # If target auditees matched kw, or if only target auditees exist (e.g., Maharajan & Dhanasekaran)
+    if (target_matched or not matching_cps) and len(target_entities) >= 2:
+        for i in range(len(target_entities)):
+            for j in range(i + 1, len(target_entities)):
+                te1, te2 = target_entities[i], target_entities[j]
+                pair_key = tuple(sorted([str(te1.id), str(te2.id)]))
+                if pair_key not in edge_set:
+                    edge_set.add(pair_key)
+                    rels = rel_map.get((str(te1.id), str(te2.id)), [])
+                    rel_match = rels[0] if rels else None
+                    tool_name = resolve_rel_tool_names(rels) if rels else "Profile"
                     if rel_match:
                         edge_dict = _format_edge(rel_match)
-                        edge_dict["label"] = f"Keyword: {kw}"
+                        edge_dict["label"] = f"{tool_name}: {kw}"
+                        edge_dict["relation_type_display"] = (
+                            f"[{tool_name}] {rel_match.get_relation_type_display()} ({kw})"
+                        )
                         edges.append(edge_dict)
                     else:
                         edges.append(
                             {
-                                "id": f"kw__{id_a}__{id_b}__{kw}",
-                                "source": id_a,
-                                "target": id_b,
-                                "from": id_a,
-                                "to": id_b,
+                                "id": f"kw__{te1.id}__{te2.id}__{kw}",
+                                "source": str(te1.id),
+                                "target": str(te2.id),
+                                "from": str(te1.id),
+                                "to": str(te2.id),
                                 "relation_type": "KEYWORD_INTERLINK",
-                                "label": f"Keyword: {kw}",
+                                "relation_type_display": f"[{tool_name}] Keyword Interlink ({kw})",
+                                "label": f"{tool_name}: {kw}",
                                 "weight": 2.0,
                                 "confidence": 0.9,
                                 "module": "q_link",
@@ -1028,21 +1116,44 @@ def get_mode1_keyword_graph(
                                 "is_rapid_layering": False,
                                 "is_external": False,
                                 "evidence": {
-                                    "source_module": "Q-Link",
-                                    "snippet": f"Interlink based on keyword '{kw}' between '{ent_a.display_name}' and '{ent_b.display_name}'",
+                                    "source_module": f"Q-{tool_name}",
+                                    "snippet": f"Interlink based on keyword '{kw}' between '{te1.display_name}' and '{te2.display_name}'.",
                                 },
                                 "evidence_count": 1,
                             }
                         )
-                    connected_pairs.add((id_a, id_b))
+
+    # If still no edges and target_matched, pull existing audit relationships for target entities
+    if not edges and target_matched:
+        for r in audit_rels[:15]:
+            s_id = str(r.source_entity_id)
+            t_id = str(r.target_entity_id)
+            if s_id in target_entity_dict or t_id in target_entity_dict:
+                pair_key = tuple(sorted([s_id, t_id]))
+                if pair_key not in edge_set:
+                    edge_set.add(pair_key)
+                    tool_name = resolve_rel_tool_names(r)
+                    other_entity = (
+                        r.target_entity if s_id in target_entity_dict else r.source_entity
+                    )
+                    edge_dict = _format_edge(r)
+                    edge_dict["label"] = f"{tool_name}: {kw}"
+                    edges.append(edge_dict)
+                    matched_nodes[s_id] = r.source_entity
+                    matched_nodes[t_id] = r.target_entity
+
+    nodes = [_format_node(e, profile_map=profile_map) for e in matched_nodes.values()][:max_nodes]
+    node_ids = {n["id"] for n in nodes}
+    valid_edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
 
     return {
         "mode": "keyword",
         "keyword": kw,
         "title": f"Interlinks based on keywords: {kw}",
         "nodes": nodes,
-        "edges": edges,
+        "edges": valid_edges,
         "total_entities": len(nodes),
+        "message": f"Found {len(nodes)} entities and {len(valid_edges)} connections for keyword '{kw}'.",
     }
 
 
@@ -1337,7 +1448,12 @@ def get_graph_overview(
     """
     clean_mode = (mode or "audit").strip().lower()
     if clean_mode == "keyword":
-        return get_mode1_keyword_graph(audit_id, keyword or "", max_nodes=max_nodes)
+        return get_mode1_keyword_graph(
+            audit_id,
+            keyword or "",
+            max_nodes=max_nodes,
+            filter_names=filter_names,
+        )
     elif clean_mode in ["global", "vault"]:
         return get_mode3_global_graph(audit_id, query=keyword, max_nodes=max_nodes)
     else:
