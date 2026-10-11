@@ -2144,6 +2144,12 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertEqual(stats["bank"]["stats_line2"], "Last checked: —")
         self.assertEqual(stats["link"]["status_badge"], "HUB")
         self.assertFalse(stats["link"]["is_used"])
+        # Q-Trail has no direct upload mechanism; without bank statements it awaits bank data
+        self.assertIn("trail", stats)
+        self.assertFalse(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Awaiting Bank Data")
+        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
+        self.assertEqual(stats["trail"]["stats_line2"], "Source: Requires Q-Bank statements")
 
     def test_module_stats_with_active_audit_and_uploaded_data(self):
         from decimal import Decimal
@@ -2240,16 +2246,50 @@ class ActiveAuditHomepageTests(TestCase):
 
         stats = get_active_audit_module_stats(self.audit)
 
-        for module_name in ["bank", "trail", "mail", "scan", "verify", "voice", "ledger", "chat"]:
+        for module_name in ["bank", "mail", "scan", "verify", "voice", "ledger", "chat"]:
             self.assertTrue(
                 stats[module_name]["is_used"], f"Expected {module_name} to be marked as used"
             )
             self.assertEqual(stats[module_name]["status_badge"], "Uploaded")
             self.assertNotEqual(stats[module_name]["stats_line2"], "Last checked: —")
 
+        # Q-Trail is derived from Q-Bank and has "Mapped" badge instead of "Uploaded"
+        self.assertTrue(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Mapped")
+        self.assertIn("Fund trails mapped: 1", stats["trail"]["stats_line1"])
+        self.assertIn("Synced from Q-Bank", stats["trail"]["stats_line2"])
+
         # Q-Link Hub should reflect all 8 used tools
         self.assertTrue(stats["link"]["is_used"])
         self.assertIn("8/8", stats["link"]["stats_line1"])
+
+    def test_q_trail_stats_ready_when_bank_has_data_but_no_trails(self):
+        from django.apps import apps
+
+        BankAccount = apps.get_model("q_bank", "BankAccount")
+
+        # Q-Bank has data for the audit profile, but no FundTrailPath exists
+        BankAccount.objects.create(
+            account_holder="Rajesh Sharma",
+            account_number="HDFC-001928",
+            bank_name="HDFC Bank",
+            statement_label="Rajesh Personal",
+            total_transactions=15,
+        )
+
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertFalse(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Ready")
+        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
+        self.assertEqual(stats["trail"]["stats_line2"], "Source: Q-Bank (Data ready)")
+
+    def test_q_trail_stats_awaiting_bank_data(self):
+        # Active audit with no bank statements uploaded
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertFalse(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Awaiting Bank Data")
+        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
+        self.assertEqual(stats["trail"]["stats_line2"], "Source: Requires Q-Bank statements")
 
     def test_module_stats_running_status(self):
         from django.apps import apps
@@ -2360,8 +2400,7 @@ class ActiveAuditHomepageTests(TestCase):
         LedgerDataset = apps.get_model("q_ledger", "LedgerDataset")
         LedgerDataset.objects.create(
             title=f"General Ledger for {self.audit.name}",
-            file_name="ledger_2026.csv",
-            row_count=500,
+            record_count=500,
             is_active=True,
         )
         stats = get_active_audit_module_stats(self.audit)

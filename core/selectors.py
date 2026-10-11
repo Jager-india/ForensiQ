@@ -22,7 +22,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
     app_name like 'q_bank') to metadata dict:
     {
         'is_used': bool,
-        'status_badge': str ('Uploaded', 'Not Uploaded', 'Running', 'HUB'),
+        'status_badge': str ('Uploaded', 'Not Uploaded', 'Running', 'HUB', 'Mapped', 'Ready', 'Awaiting Bank Data'),
         'stats_line1': str,
         'stats_line2': str,
     }
@@ -73,9 +73,10 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
             "stats_line2": "Last checked: —",
         }
 
-    # 2. Q-Trail
+    # 2. Q-Trail (End-to-End Money Trail Mapper — Ingests transactions from Q-Bank)
     try:
         FundTrailPath = apps.get_model("q_trail", "FundTrailPath")
+        bank_has_data = stats.get("bank", {}).get("is_used", False)
         if audit and profile_names and FundTrailPath:
             trail_qs = FundTrailPath.objects.filter(
                 models.Q(source_entity__in=profile_names)
@@ -85,26 +86,43 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
             count = trail_qs.count()
             latest = trail_qs.order_by("-created_at").first()
             date_str = latest.created_at.strftime("%d %b %Y") if latest else "—"
+
+            if count > 0:
+                status_badge = "Mapped"
+                stats_line2 = f"Synced from Q-Bank • {date_str}"
+            elif bank_has_data:
+                status_badge = "Ready"
+                stats_line2 = "Source: Q-Bank (Data ready)"
+            else:
+                status_badge = "Awaiting Bank Data"
+                stats_line2 = "Source: Requires Q-Bank statements"
+
             stats["trail"] = {
                 "is_used": count > 0,
-                "status_badge": "Uploaded" if count > 0 else "Not Uploaded",
+                "status_badge": status_badge,
                 "stats_line1": f"Fund trails mapped: {count}",
-                "stats_line2": f"Last analyzed: {date_str}",
+                "stats_line2": stats_line2,
             }
         else:
+            status_badge = "Ready" if bank_has_data else "Awaiting Bank Data"
+            stats_line2 = (
+                "Source: Q-Bank (Data ready)"
+                if bank_has_data
+                else "Source: Requires Q-Bank statements"
+            )
             stats["trail"] = {
                 "is_used": False,
-                "status_badge": "Not Uploaded",
+                "status_badge": status_badge,
                 "stats_line1": "Fund trails mapped: 0",
-                "stats_line2": "Last analyzed: —",
+                "stats_line2": stats_line2,
             }
     except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Trail stats: {exc}")
         stats["trail"] = {
             "is_used": False,
-            "status_badge": "Not Uploaded",
+            "status_badge": "Awaiting Bank Data",
             "stats_line1": "Fund trails mapped: 0",
-            "stats_line2": "Last analyzed: —",
+            "stats_line2": "Source: Requires Q-Bank statements",
         }
 
     # 3. Q-Mail
