@@ -14,8 +14,37 @@
             </h1>
         </div>
 
-        <!-- Top Right: Audits & Profiles Buttons -->
-        <div class="flex items-center gap-2">
+        <!-- Top Right: Active Audit Pill & Audits & Profiles Buttons -->
+        <div class="flex items-center flex-wrap sm:flex-nowrap gap-2">
+            <!-- Compact Active Audit Indicator Pill -->
+            {% if active_audit %}
+            <button type="button" 
+                    id="landing-active-audit-pill" 
+                    @click="openModalTab('audits')"
+                    class="h-10 px-3.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-text dark:text-white"
+                    title="Active Audit: {{ active_audit.name }} — Click to view audits directory">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">{{ active_audit.name }}</span>
+                {% if active_audit.title %}
+                <span class="text-theme-muted hidden md:inline truncate max-w-[150px]">{{ active_audit.title }}</span>
+                {% endif %}
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold">ACTIVE</span>
+            </button>
+            {% else %}
+            <button type="button" 
+                    id="landing-active-audit-pill" 
+                    @click="openModalTab('audits')"
+                    class="h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700/80 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-muted hover:text-theme-text"
+                    title="No active audit selected — Click to select an audit">
+                <span class="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-500"></span>
+                <span class="font-mono text-zinc-500 dark:text-zinc-400">No Active Audit</span>
+                <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">SELECT</span>
+            </button>
+            {% endif %}
+
             <button type="button" id="landing-audits-btn" @click="openModalTab('audits')"
                 class="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-amber-500/20 cursor-pointer">
                 <i class="fa-solid fa-folder-tree text-xs"></i>
@@ -1005,6 +1034,31 @@
             </div>
         </div>
 
+        <!-- Floating Q-Link Interlock Error Toast Notification -->
+        <div x-show="interlockToastVisible" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+             x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+             x-transition:leave-end="opacity-0 translate-y-4 scale-95"
+             x-cloak 
+             id="qlink-interlock-toast"
+             class="fixed bottom-6 right-6 z-50 max-w-md w-full bg-rose-950/95 border border-rose-500/50 text-rose-100 p-4 rounded-2xl shadow-2xl backdrop-blur-md flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-lock text-base"></i>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-rose-300 uppercase tracking-wider font-mono">Q-Link Interlock Engaged</h4>
+                    <p class="text-xs font-medium text-rose-100 mt-0.5" x-text="interlockToastMessage"></p>
+                </div>
+            </div>
+            <button type="button" @click="interlockToastVisible = false" class="text-rose-400 hover:text-white p-1 rounded-lg transition cursor-pointer">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+
         <!-- Dynamic Modules Grid with Q-Link Golden Thread Visual Nexus -->
         <div id="modules-hub-container" class="relative my-4">
             <!-- Golden Threads Visual Nexus SVG Layer -->
@@ -1045,17 +1099,20 @@
             </svg>
 
             <!-- 3x3 Dynamic Modules Grid with Q-Link in the Center -->
-            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 lg:gap-8 items-stretch">
                 {% for module in modules %}
-                <div class="module-card-wrapper flex transition-all duration-300 {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.02]{% else %}z-10 hover:z-20{% endif %}"
+                <div class="module-card-wrapper flex transition-all duration-300 {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.03] w-full{% else %}satellite-card z-10 hover:z-20 max-w-[360px] w-full mx-auto{% endif %}"
                      id="module-card-{{ module.name|lower }}"
                      data-module-name="{{ module.name }}"
                      data-is-hub="{% if module.name == 'Link' %}true{% else %}false{% endif %}"
+                     data-is-used="{% if module.is_used %}true{% else %}false{% endif %}"
                      {% if module.tag != 'BUILDING' %}
                      @click.prevent="promptLaunchModule('{{ module.name }}', '{{ module.href }}')"
                      {% endif %}>
                     <c-module_card :num="module.num" :category="module.category" :name="module.name" :tag="module.tag"
-                        :accent="module.accent" :href="module.href" :tagline="module.tagline" />
+                        :accent="module.accent" :href="module.href" :tagline="module.tagline"
+                        :is_used="module.is_used" :status_badge="module.status_badge"
+                        :stats_line1="module.stats_line1" :stats_line2="module.stats_line2" />
                 </div>
                 {% empty %}
                 <div
@@ -1080,6 +1137,21 @@
                 auditSearchQuery: '',
                 profileAuditFilterQuery: '',
 
+                // Active Audit Tool Usage & Q-Link Interlock State
+                usedToolsCount: {{ used_satellite_count|default:0 }},
+                interlockToastVisible: false,
+                interlockToastMessage: '',
+                interlockToastTimer: null,
+
+                triggerInterlockError(message) {
+                    this.interlockToastMessage = message || "At least one tool must be used to open Q-Link.";
+                    this.interlockToastVisible = true;
+                    if (this.interlockToastTimer) clearTimeout(this.interlockToastTimer);
+                    this.interlockToastTimer = setTimeout(() => {
+                        this.interlockToastVisible = false;
+                    }, 4500);
+                },
+
                 // Launch Modal State
                 showLaunchModal: false,
                 pendingModule: { name: '', href: '' },
@@ -1087,6 +1159,13 @@
                 currentActiveAuditId: '{{ active_audit.id|default:'' }}',
 
                 promptLaunchModule(name, href) {
+                    // Q-Link Interlock Gate: Cannot open Q-Link unless at least one tool has been used for the active audit
+                    const isLinkHub = name && (name.toLowerCase() === 'link' || name.toLowerCase() === 'q_link');
+                    if (isLinkHub && this.usedToolsCount === 0) {
+                        this.triggerInterlockError("At least one tool must be used to open Q-Link.");
+                        return;
+                    }
+
                     this.pendingModule = { name: name, href: href };
                     this.launchAuditSearchQuery = '';
                     this.showLaunchModal = true;
@@ -1692,15 +1771,26 @@
                 const endX = hubCenterX - cos * scaleHub;
                 const endY = hubCenterY - sin * scaleHub;
 
-                // Elegant subtle organic curvature (perpendicular arc offset)
-                const midX = (startX + endX) / 2;
-                const midY = (startY + endY) / 2;
+                // Large Golden Arrowhead Dimensions pointing towards Q-Link Hub
+                const arrowLen = 14;
+                const arrowWidth = 7;
+                const baseX = endX - cos * arrowLen;
+                const baseY = endY - sin * arrowLen;
+                const w1X = baseX - sin * arrowWidth;
+                const w1Y = baseY + cos * arrowWidth;
+                const w2X = baseX + sin * arrowWidth;
+                const w2Y = baseY - cos * arrowWidth;
+
+                // Elegant subtle organic curvature (perpendicular arc offset) terminating at arrowhead base
+                const midX = (startX + baseX) / 2;
+                const midY = (startY + baseY) / 2;
                 const perpX = -sin * 12;
                 const perpY = cos * 12;
                 const ctrlX = midX + perpX;
                 const ctrlY = midY + perpY;
 
-                const pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${endX.toFixed(1)} ${endY.toFixed(1)}`;
+                const pathD = `M ${startX.toFixed(1)} ${startY.toFixed(1)} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${baseX.toFixed(1)} ${baseY.toFixed(1)}`;
+                const arrowPoints = `${endX.toFixed(1)},${endY.toFixed(1)} ${w1X.toFixed(1)},${w1Y.toFixed(1)} ${w2X.toFixed(1)},${w2Y.toFixed(1)}`;
 
                 html += `
                     <g class="golden-thread-item transition-all duration-300" data-target-card="${cardId}">
@@ -1709,8 +1799,8 @@
                               class="golden-thread-glow transition-all duration-300"
                               fill="none" 
                               stroke="#f59e0b" 
-                              stroke-width="5" 
-                              opacity="0.18" 
+                              stroke-width="7" 
+                              opacity="0.22" 
                               stroke-linecap="round" />
                         
                         <!-- Core High-Definition Metallic Golden Thread -->
@@ -1718,8 +1808,8 @@
                               class="golden-thread-line transition-all duration-300"
                               fill="none" 
                               stroke="url(#goldThreadGrad)" 
-                              stroke-width="1.8" 
-                              opacity="0.8" 
+                              stroke-width="2.4" 
+                              opacity="0.85" 
                               stroke-linecap="round" />
 
                         <!-- Active Golden Energy Pulse Particle traveling along thread -->
@@ -1727,19 +1817,21 @@
                               class="golden-thread-pulse"
                               fill="none" 
                               stroke="url(#goldPulseGrad)" 
-                              stroke-width="2.6" 
-                              stroke-dasharray="14 60" 
+                              stroke-width="3.2" 
+                              stroke-dasharray="16 60" 
                               stroke-linecap="round" />
 
                         <!-- Satellite Terminal Golden Node Pin -->
-                        <circle cx="${startX.toFixed(1)}" cy="${startY.toFixed(1)}" r="3.5" 
+                        <circle cx="${startX.toFixed(1)}" cy="${startY.toFixed(1)}" r="4" 
                                 class="golden-thread-node-sat transition-all duration-300"
-                                fill="#f59e0b" stroke="#fef08a" stroke-width="1.5" />
+                                fill="#f59e0b" stroke="#fef08a" stroke-width="1.8" />
 
-                        <!-- Q-Link Hub Terminal Golden Node Pin -->
-                        <circle cx="${endX.toFixed(1)}" cy="${endY.toFixed(1)}" r="4.2" 
-                                class="golden-thread-node-hub transition-all duration-300"
-                                fill="#ea580c" stroke="#fde047" stroke-width="1.5" />
+                        <!-- Large Golden Arrowhead Pointing Directly into Q-Link Hub -->
+                        <polygon points="${arrowPoints}" 
+                                 class="golden-thread-arrowhead transition-all duration-300"
+                                 fill="#f59e0b" 
+                                 stroke="#fef08a" 
+                                 stroke-width="1.6" />
                     </g>
                 `;
             });
@@ -1875,6 +1967,19 @@
         /* Dim unselected threads when one is focused */
         #modules-hub-container.has-active-thread .golden-thread-item:not(.active-thread) {
             opacity: 0.2;
+        }
+
+        /* Large Golden Arrowhead Styling */
+        .golden-thread-arrowhead {
+            filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.7));
+        }
+
+        #modules-hub-container.hub-hovered .golden-thread-arrowhead,
+        .golden-thread-item.active-thread .golden-thread-arrowhead {
+            fill: #fef08a;
+            stroke: #ffffff;
+            stroke-width: 2px;
+            filter: drop-shadow(0 0 10px rgba(254, 240, 138, 1));
         }
     </style>
 </c-base>

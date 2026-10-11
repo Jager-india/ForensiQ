@@ -13,11 +13,13 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 
+from core.audits import create_audit
 from core.db import configure_database_connection
 from core.file_uploader import FileUploader
 from core.logging import InterceptHandler, setup_logging
 from core.models import InvestigationProfile
 from core.modules import get_discovered_modules
+from core.selectors import get_active_audit_module_stats
 
 
 class CoreFileUploaderTests(TestCase):
@@ -2004,3 +2006,201 @@ class FooterAndManualsTests(TestCase):
         self.assertContains(response, reverse("manuals"))
         self.assertContains(response, reverse("privacy_policy"))
         self.assertContains(response, reverse("terms_of_use"))
+
+
+class ActiveAuditHomepageTests(TestCase):
+    """
+    Tests for Issue #124 Homepage Modifications:
+    - Active audit header indicator pill
+    - Per-module active audit statistics and dynamic status badges
+    - Used vs. Unused visual states
+    - Q-Link interlock gate DOM integration
+    """
+
+    def setUp(self):
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        self.profile = InvestigationProfile.objects.create(
+            full_name="Rajesh Sharma",
+            department="Procurement",
+            email="rajesh.sharma@example.com",
+        )
+        self.audit = create_audit(
+            name="2026-WB-88",
+            title="Procurement Tender Audit",
+            profile_ids=[self.profile.id],
+        )
+
+    def test_module_stats_with_no_audit(self):
+        stats = get_active_audit_module_stats(None)
+        self.assertIn("bank", stats)
+        self.assertFalse(stats["bank"]["is_used"])
+        self.assertEqual(stats["bank"]["status_badge"], "Not Uploaded")
+        self.assertIn("0", stats["bank"]["stats_line1"])
+        self.assertEqual(stats["bank"]["stats_line2"], "Last checked: —")
+        self.assertEqual(stats["link"]["status_badge"], "HUB")
+        self.assertFalse(stats["link"]["is_used"])
+
+    def test_module_stats_with_active_audit_and_uploaded_data(self):
+        from decimal import Decimal
+
+        from django.apps import apps
+        from django.utils import timezone
+
+        BankAccount = apps.get_model("q_bank", "BankAccount")
+        ChatChannel = apps.get_model("q_chat", "ChatChannel")
+        VendorMaster = apps.get_model("q_ledger", "VendorMaster")
+        PurchaseOrder = apps.get_model("q_ledger", "PurchaseOrder")
+        MailboxInvestigation = apps.get_model("q_mail", "MailboxInvestigation")
+        ScannedDevice = apps.get_model("q_scan", "ScannedDevice")
+        FundTrailPath = apps.get_model("q_trail", "FundTrailPath")
+        VerificationCase = apps.get_model("q_verify", "VerificationCase")
+        VerifiedDocument = apps.get_model("q_verify", "VerifiedDocument")
+        AudioRecording = apps.get_model("q_voice", "AudioRecording")
+
+        # 1. Q-Bank
+        BankAccount.objects.create(
+            account_holder="Rajesh Sharma",
+            account_number="HDFC-001928",
+            bank_name="HDFC Bank",
+            statement_label="Rajesh Personal",
+            total_transactions=15,
+        )
+
+        # 2. Q-Trail
+        FundTrailPath.objects.create(
+            source_entity="Rajesh Sharma",
+            destination_entity="Vendor Apex",
+            total_amount=Decimal("500000.00"),
+        )
+
+        # 3. Q-Mail
+        MailboxInvestigation.objects.create(
+            audit_ref="2026-WB-88",
+            audit_name="Procurement Tender Audit",
+            auditee_name="Rajesh Sharma",
+            auditee_email="rajesh.sharma@example.com",
+            pst_file_name="rajesh_archive.pst",
+            status=MailboxInvestigation.IngestionStatus.COMPLETED,
+        )
+
+        # 4. Q-Scan
+        ScannedDevice.objects.create(
+            hostname="DESKTOP-PROC-01",
+            custodian_name="Rajesh Sharma",
+            scan_title="2026-WB-88 Endpoint Review",
+            status=ScannedDevice.ScanStatus.COMPLETED,
+        )
+
+        # 5. Q-Verify
+        v_case = VerificationCase.objects.create(
+            case_ref="VER-2026-WB-88",
+            case_title="Tender Agreement Authenticity",
+            custodian_name="Rajesh Sharma",
+            status=VerificationCase.CaseStatus.COMPLETED,
+        )
+        VerifiedDocument.objects.create(
+            case=v_case,
+            filename="tender_bid_doc.pdf",
+            file_size_bytes=1024,
+        )
+
+        # 6. Q-Voice
+        AudioRecording.objects.create(
+            call_ref="CALL-88-01",
+            call_title="2026-WB-88 Supplier Intercept",
+            custodian_name="Rajesh Sharma",
+            call_timestamp=timezone.now(),
+            transcription_status=AudioRecording.TranscriptionStatus.COMPLETED,
+        )
+
+        # 7. Q-Ledger
+        vendor = VendorMaster.objects.create(
+            vendor_code="VND-9901",
+            vendor_name="Apex Logistics Ltd",
+        )
+        PurchaseOrder.objects.create(
+            po_number="PO-2026-7788",
+            vendor=vendor,
+            po_date=timezone.now(),
+            total_amount=Decimal("1200000.00"),
+            approved_by="Rajesh Sharma",
+        )
+
+        # 8. Q-Chat
+        ChatChannel.objects.create(
+            channel_name="Rajesh - Vendor Comms",
+            custodian_name="Rajesh Sharma",
+            total_messages=42,
+        )
+
+        stats = get_active_audit_module_stats(self.audit)
+
+        for module_name in ["bank", "trail", "mail", "scan", "verify", "voice", "ledger", "chat"]:
+            self.assertTrue(
+                stats[module_name]["is_used"], f"Expected {module_name} to be marked as used"
+            )
+            self.assertEqual(stats[module_name]["status_badge"], "Uploaded")
+            self.assertNotEqual(stats[module_name]["stats_line2"], "Last checked: —")
+
+        # Q-Link Hub should reflect all 8 used tools
+        self.assertTrue(stats["link"]["is_used"])
+        self.assertIn("8/8", stats["link"]["stats_line1"])
+
+    def test_module_stats_running_status(self):
+        from django.apps import apps
+
+        MailboxInvestigation = apps.get_model("q_mail", "MailboxInvestigation")
+
+        MailboxInvestigation.objects.create(
+            audit_ref="2026-WB-88",
+            audit_name="Procurement Tender Audit",
+            auditee_name="Rajesh Sharma",
+            pst_file_name="active_processing.pst",
+            status=MailboxInvestigation.IngestionStatus.PROCESSING,
+        )
+
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertTrue(stats["mail"]["is_used"])
+        self.assertEqual(stats["mail"]["status_badge"], "Running")
+
+    def test_landing_page_renders_active_audit_pill_and_interlock_elements(self):
+        # Set active audit in session
+        session = self.client.session
+        session["active_audit_id"] = str(self.audit.id)
+        session["active_audit_name"] = self.audit.name
+        session["portal_authenticated"] = True
+        session.save()
+
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+
+        # Active audit pill in top bar
+        self.assertContains(response, "landing-active-audit-pill")
+        self.assertContains(response, self.audit.name)
+        self.assertContains(response, "ACTIVE")
+
+        # Interlock toast notification element
+        self.assertContains(response, 'id="qlink-interlock-toast"')
+        self.assertContains(response, "Q-Link Interlock Engaged")
+
+        # Satellite card wrappers have data-is-used attributes
+        self.assertContains(response, 'data-is-used="false"')
+        self.assertContains(response, "satellite-card")
+        self.assertContains(response, "hub-center-card")
+
+    def test_landing_page_renders_no_active_audit_pill_when_none_selected(self):
+        session = self.client.session
+        session["active_audit_id"] = ""
+        session["active_audit_name"] = ""
+        session["portal_authenticated"] = True
+        session.save()
+
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+
+        self.assertContains(response, "landing-active-audit-pill")
+        self.assertContains(response, "No Active Audit")
+        self.assertContains(response, "SELECT")

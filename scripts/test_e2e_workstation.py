@@ -160,7 +160,10 @@ class ForensiQE2ETestRunner:
         self.assert_test(b"Ledger" in res.content, "Q-Ledger module card active")
         self.assert_test(b"Chat" in res.content, "Q-Chat module card active")
         self.assert_test(
-            b"BUILDING" in res.content or b"LIVE" in res.content,
+            any(
+                tag in res.content
+                for tag in (b"BUILDING", b"LIVE", b"UPLOADED", b"NOT UPLOADED", b"RUNNING", b"HUB")
+            ),
             "Forensic module catalog cards rendered with active/pipeline tags",
         )
 

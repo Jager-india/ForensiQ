@@ -13,6 +13,7 @@ from config import ALLOWED_KEYWORDS_EXTENSIONS, MAX_KEYWORDS_FILE_SIZE
 from .audits import (
     create_audit,
     generate_next_audit_name,
+    get_active_audit,
     get_all_audits,
     map_profiles_to_audit,
     set_active_audit,
@@ -28,6 +29,7 @@ from .profiles import (
     set_active_profile,
     update_investigation_profile,
 )
+from .selectors import get_active_audit_module_stats
 
 
 @csrf_protect
@@ -84,9 +86,23 @@ def landing_view(request: HttpRequest) -> HttpResponse:
     """
     ForensiQ Landing Page dynamically loading all modules from apps/ directory,
     registered investigation profiles with their investigation keywords,
-    and forensic audits with mapped profiles.
+    forensic audits with mapped profiles, and active audit usage statistics.
     """
     modules = get_discovered_modules()
+    active_audit = get_active_audit(request)
+    module_stats = get_active_audit_module_stats(active_audit)
+
+    used_satellite_count = 0
+    for m in modules:
+        m_name = m.get("name", "").lower()
+        stat_item = module_stats.get(m_name) or module_stats.get(m.get("app_name", "")) or {}
+        m["is_used"] = stat_item.get("is_used", False)
+        m["status_badge"] = stat_item.get("status_badge", m.get("tag", "LIVE"))
+        m["stats_line1"] = stat_item.get("stats_line1", "")
+        m["stats_line2"] = stat_item.get("stats_line2", "")
+        if m_name != "link" and m["is_used"]:
+            used_satellite_count += 1
+
     profiles = [p.to_dict() for p in get_all_profiles()]
     audits = [a.to_dict() for a in get_all_audits()]
     next_audit_name = generate_next_audit_name()
@@ -96,6 +112,7 @@ def landing_view(request: HttpRequest) -> HttpResponse:
         {
             "modules": modules,
             "total_modules": len(modules),
+            "used_satellite_count": used_satellite_count,
             "profiles": profiles,
             "profiles_json": json.dumps(profiles),
             "audits": audits,
