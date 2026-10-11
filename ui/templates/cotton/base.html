@@ -81,93 +81,97 @@
                 </button>
 
                 <!-- Audit Switcher Modal -->
-                <div x-show="showAuditModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 text-left">
-                    <div @click.outside="showAuditModal = false"
-                        class="bg-theme-surface border border-theme-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative flex flex-col max-h-[85vh]">
-                        
-                        <!-- Modal Header -->
-                        <div class="p-4 border-b border-theme-border flex items-center justify-between bg-theme-subtle/40">
-                            <div class="flex items-center gap-2.5">
-                                <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center text-sm">
-                                    <i class="fa-solid fa-folder-tree"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-theme-text">Active Audit Workspace</h3>
-                                    <p class="text-[11px] text-theme-muted">Filter profiles and evidence specifically for this audit.</p>
-                                </div>
-                            </div>
-                            <button type="button" @click="showAuditModal = false" class="text-theme-muted hover:text-theme-text cursor-pointer p-1">
-                                <i class="fa-solid fa-xmark text-sm"></i>
-                            </button>
-                        </div>
-
-                        <!-- Modal Body -->
-                        <div class="p-4 space-y-3 flex-1 overflow-y-auto">
-                            <!-- Search -->
-                            <div class="relative">
-                                <i class="fa-solid fa-magnifying-glass text-xs text-theme-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
-                                <input type="text" x-model="searchAuditQuery" placeholder="Search audits by name, title, or scope..."
-                                    class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-theme-subtle border border-theme-border text-theme-text focus:outline-none focus:border-amber-500">
-                            </div>
-
-                            <!-- Show All Option -->
-                            <button type="button" @click="switchAudit('')"
-                                class="w-full p-2.5 rounded-xl border text-left text-xs transition flex items-center justify-between cursor-pointer {% if not active_audit %}border-amber-500 bg-amber-500/10 font-bold text-amber-500{% else %}border-theme-border hover:bg-theme-subtle text-theme-muted hover:text-theme-text{% endif %}">
-                                <div class="flex items-center gap-2">
-                                    <i class="fa-solid fa-globe text-xs text-amber-500"></i>
+                <template x-teleport="body">
+                    <div x-show="showAuditModal" x-cloak
+                        @keydown.escape.window="showAuditModal = false"
+                        class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 text-left">
+                        <div @click.outside="showAuditModal = false"
+                            class="bg-theme-surface border border-theme-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative flex flex-col max-h-[85vh]">
+                            
+                            <!-- Modal Header -->
+                            <div class="p-4 border-b border-theme-border flex items-center justify-between bg-theme-subtle/40 shrink-0">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center text-sm">
+                                        <i class="fa-solid fa-folder-tree"></i>
+                                    </div>
                                     <div>
-                                        <div>All Profiles (Global Workspace)</div>
-                                        <div class="text-[10px] text-theme-muted font-normal">No audit filter applied &bull; {{ total_profiles_count }} total profiles</div>
+                                        <h3 class="text-sm font-bold text-theme-text">Active Audit Workspace</h3>
+                                        <p class="text-[11px] text-theme-muted">Filter profiles and evidence specifically for this audit.</p>
                                     </div>
                                 </div>
-                                {% if not active_audit %}
-                                <i class="fa-solid fa-circle-check text-amber-500 text-sm"></i>
-                                {% endif %}
-                            </button>
+                                <button type="button" @click="showAuditModal = false" class="text-theme-muted hover:text-theme-text cursor-pointer p-1">
+                                    <i class="fa-solid fa-xmark text-sm"></i>
+                                </button>
+                            </div>
 
-                            <!-- Audits List -->
-                            <div class="space-y-2">
-                                <template x-for="audit in filteredAudits()" :key="audit.id">
-                                    <button type="button" @click="switchAudit(audit.id)"
-                                        class="w-full p-3 rounded-xl border text-left transition flex items-center justify-between cursor-pointer"
-                                        :class="currentAuditId === audit.id ? 'border-amber-500 bg-amber-500/10 shadow-xs' : 'border-theme-border hover:border-theme-border-strong bg-theme-subtle/30'">
-                                        <div class="min-w-0 pr-2">
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <span class="font-mono font-bold text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-500" x-text="audit.name"></span>
-                                                <h4 class="font-bold text-xs text-theme-text truncate" x-text="audit.title || 'Untitled Audit'"></h4>
-                                            </div>
-                                            <p class="text-[11px] text-theme-muted truncate" x-show="audit.description" x-text="audit.description"></p>
-                                            <div class="flex items-center gap-2 mt-1 text-[10px] text-theme-muted">
-                                                <span class="font-semibold text-amber-500" x-text="(audit.profiles_count || (audit.profiles || []).length) + ' mapped profile(s)'"></span>
-                                                <span>&bull;</span>
-                                                <span class="uppercase tracking-wider" x-text="audit.status"></span>
-                                            </div>
-                                        </div>
-                                        <div class="shrink-0">
-                                            <i class="fa-solid fa-circle-check text-amber-500 text-base" x-show="currentAuditId === audit.id"></i>
-                                            <span x-show="currentAuditId !== audit.id" class="text-[11px] font-bold text-amber-500 hover:underline">Select</span>
-                                        </div>
-                                    </button>
-                                </template>
+                            <!-- Modal Body -->
+                            <div class="p-4 space-y-3 flex-1 min-h-0 overflow-y-auto">
+                                <!-- Search -->
+                                <div class="relative">
+                                    <i class="fa-solid fa-magnifying-glass text-xs text-theme-muted absolute left-3 top-1/2 -translate-y-1/2"></i>
+                                    <input type="text" x-model="searchAuditQuery" placeholder="Search audits by name, title, or scope..."
+                                        class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-theme-subtle border border-theme-border text-theme-text focus:outline-none focus:border-amber-500">
+                                </div>
 
-                                <div x-show="filteredAudits().length === 0" class="py-6 text-center text-xs text-theme-muted">
-                                    No audits found matching search.
+                                <!-- Show All Option -->
+                                <button type="button" @click="switchAudit('')"
+                                    class="w-full p-2.5 rounded-xl border text-left text-xs transition flex items-center justify-between cursor-pointer {% if not active_audit %}border-amber-500 bg-amber-500/10 font-bold text-amber-500{% else %}border-theme-border hover:bg-theme-subtle text-theme-muted hover:text-theme-text{% endif %}">
+                                    <div class="flex items-center gap-2">
+                                        <i class="fa-solid fa-globe text-xs text-amber-500"></i>
+                                        <div>
+                                            <div>All Profiles (Global Workspace)</div>
+                                            <div class="text-[10px] text-theme-muted font-normal">No audit filter applied &bull; {{ total_profiles_count }} total profiles</div>
+                                        </div>
+                                    </div>
+                                    {% if not active_audit %}
+                                    <i class="fa-solid fa-circle-check text-amber-500 text-sm"></i>
+                                    {% endif %}
+                                </button>
+
+                                <!-- Audits List -->
+                                <div class="space-y-2">
+                                    <template x-for="audit in filteredAudits()" :key="audit.id">
+                                        <button type="button" @click="switchAudit(audit.id)"
+                                            class="w-full p-3 rounded-xl border text-left transition flex items-center justify-between cursor-pointer"
+                                            :class="currentAuditId === audit.id ? 'border-amber-500 bg-amber-500/10 shadow-xs' : 'border-theme-border hover:border-theme-border-strong bg-theme-subtle/30'">
+                                            <div class="min-w-0 pr-2">
+                                                <div class="flex items-center gap-2 mb-1">
+                                                    <span class="font-mono font-bold text-xs px-2 py-0.5 rounded bg-amber-500/15 text-amber-500" x-text="audit.name"></span>
+                                                    <h4 class="font-bold text-xs text-theme-text truncate" x-text="audit.title || 'Untitled Audit'"></h4>
+                                                </div>
+                                                <p class="text-[11px] text-theme-muted truncate" x-show="audit.description" x-text="audit.description"></p>
+                                                <div class="flex items-center gap-2 mt-1 text-[10px] text-theme-muted">
+                                                    <span class="font-semibold text-amber-500" x-text="(audit.profiles_count || (audit.profiles || []).length) + ' mapped profile(s)'"></span>
+                                                    <span>&bull;</span>
+                                                    <span class="uppercase tracking-wider" x-text="audit.status"></span>
+                                                </div>
+                                            </div>
+                                            <div class="shrink-0">
+                                                <i class="fa-solid fa-circle-check text-amber-500 text-base" x-show="currentAuditId === audit.id"></i>
+                                                <span x-show="currentAuditId !== audit.id" class="text-[11px] font-bold text-amber-500 hover:underline">Select</span>
+                                            </div>
+                                        </button>
+                                    </template>
+
+                                    <div x-show="filteredAudits().length === 0" class="py-6 text-center text-xs text-theme-muted">
+                                        No audits found matching search.
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Footer -->
-                        <div class="p-3 border-t border-theme-border flex items-center justify-between text-xs bg-theme-subtle/40">
-                            <a href="/#landing-audits-btn" class="text-amber-500 hover:text-amber-400 font-semibold flex items-center gap-1">
-                                <i class="fa-solid fa-plus text-[10px]"></i>
-                                <span>Manage / Create Audits</span>
-                            </a>
-                            <button type="button" @click="showAuditModal = false" class="px-3 py-1.5 rounded-lg bg-theme-subtle text-theme-text border border-theme-border font-medium cursor-pointer">
-                                Close
-                            </button>
+                            <!-- Footer -->
+                            <div class="p-3 border-t border-theme-border flex items-center justify-between text-xs bg-theme-subtle/40 shrink-0">
+                                <a href="/#landing-audits-btn" class="text-amber-500 hover:text-amber-400 font-semibold flex items-center gap-1">
+                                    <i class="fa-solid fa-plus text-[10px]"></i>
+                                    <span>Manage / Create Audits</span>
+                                </a>
+                                <button type="button" @click="showAuditModal = false" class="px-3 py-1.5 rounded-lg bg-theme-subtle text-theme-text border border-theme-border font-medium cursor-pointer">
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </template>
                 {% endif %}
 
                 {% if request.session.portal_authenticated %}
