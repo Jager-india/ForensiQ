@@ -285,6 +285,10 @@ def run_verification():
         "Select Audit" in html_cleared,
     )
 
+    # Clean up test audit
+    if audit and audit.id:
+        audit.delete()
+
     print("\n" + "=" * 70)
     print(f"  VERIFICATION RESULTS: {len(passed_checks)} PASSED, {len(failed_checks)} FAILED")
     print("=" * 70)

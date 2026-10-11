@@ -680,3 +680,109 @@ class QBankServicesAndSelectorsTests(TestCase):
         self.assertIn("Period", content)
         self.assertIn(self.account.statement_label, content)
         self.assertNotIn("records", content)
+
+    def test_dashboard_with_active_audit_syncs_profiles_and_scopes_metrics(self):
+        """
+        Ensure that when an active audit is present, mapped investigation profiles
+        are automatically synchronized to AuditedPerson, and dashboard metrics are scoped.
+        """
+        from core.audits import create_audit
+        from core.models import InvestigationProfile
+
+        p1 = InvestigationProfile.objects.create(
+            full_name="Target Officer Kumar",
+            department="Procurement",
+            designation="Manager",
+        )
+        audit = create_audit(
+            title="Kumar Procurement Audit",
+            description="Audit testing",
+            profile_ids=[str(p1.id)],
+        )
+
+        # Before hitting dashboard, no AuditedPerson existed for Kumar
+        self.assertFalse(AuditedPerson.objects.filter(full_name="Target Officer Kumar").exists())
+
+        # Set active audit in session
+        session = self.client.session
+        session["active_audit_id"] = str(audit.id)
+        session["active_audit_name"] = audit.name
+        session["portal_authenticated"] = True
+        session.save()
+
+        res = self.client.get(reverse("q_bank:dashboard"))
+        self.assertEqual(res.status_code, 200)
+
+        # Profile was auto-synchronized to AuditedPerson
+        self.assertTrue(AuditedPerson.objects.filter(full_name="Target Officer Kumar").exists())
+        # Target Auditee directory displays Kumar
+        self.assertEqual(len(res.context["persons"]), 1)
+        self.assertEqual(res.context["persons"][0]["full_name"], "Target Officer Kumar")
+        # Scoped metrics reflect 1 auditee, 0 statements, 0 transactions
+        self.assertEqual(res.context["metrics"]["total_persons"], 1)
+        self.assertEqual(res.context["metrics"]["total_accounts"], 0)
+        self.assertEqual(res.context["metrics"]["total_txns"], 0)
+
+        # Upload statement and verify scoping:
+        acc = BankAccount.objects.create(
+            person=AuditedPerson.objects.get(full_name="Target Officer Kumar"),
+            account_holder="Target Officer Kumar",
+            bank_name="State Bank of India",
+            account_number="SBI-778899",
+            source_filename="kumar_sbi.csv",
+            statement_label="Kumar Statement",
+            total_transactions=2,
+        )
+        BankTransaction.objects.create(
+            account=acc,
+            narration="SALARY CREDIT",
+            party_name="Hyundai Motors",
+            credit_amount=Decimal("150000.00"),
+            closing_balance=Decimal("150000.00"),
+            is_hyundai_related=True,
+        )
+
+        res2 = self.client.get(reverse("q_bank:dashboard"))
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.context["metrics"]["total_accounts"], 1)
+        self.assertEqual(res2.context["metrics"]["total_txns"], 1)
+        self.assertEqual(res2.context["metrics"]["total_credit"], 150000.0)
+
+        # Clean up
+        audit.delete()
+        p1.delete()
+
+    def test_get_frequent_counterparties_with_audit_filter(self):
+        from core.audits import create_audit
+        from core.models import InvestigationProfile
+
+        p1 = InvestigationProfile.objects.create(
+            full_name="Scoped Profile Alpha",
+            department="Finance",
+        )
+        audit = create_audit(
+            title="Scoped Counterparties Audit",
+            description="Testing frequent counterparties scoping",
+            profile_ids=[str(p1.id)],
+        )
+        person = AuditedPerson.objects.create(full_name="Scoped Profile Alpha")
+        acc = BankAccount.objects.create(
+            person=person,
+            account_holder="Scoped Profile Alpha",
+            bank_name="Axis Bank",
+            source_filename="alpha_stmt.csv",
+        )
+        for i in range(3):
+            BankTransaction.objects.create(
+                account=acc,
+                narration=f"VENDOR PAYMENT {i}",
+                party_name="Vendor X Scoped",
+                debit_amount=Decimal("1000.00"),
+            )
+
+        frequent = get_frequent_counterparties(audit=audit, min_interactions=2)
+        self.assertEqual(len(frequent), 1)
+        self.assertEqual(frequent[0]["party_name"], "Vendor X Scoped")
+
+        audit.delete()
+        p1.delete()

@@ -44,9 +44,17 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
     try:
         BankAccount = apps.get_model("q_bank", "BankAccount")
         if audit and profile_names and BankAccount:
-            bank_qs = BankAccount.objects.filter(
-                models.Q(person__full_name__in=profile_names)
-                | models.Q(account_holder__in=profile_names)
+            bank_qs = (
+                BankAccount.objects.filter(
+                    models.Q(person__full_name__in=profile_names)
+                    | models.Q(account_holder__in=profile_names)
+                )
+                .filter(
+                    models.Q(source_filename__gt="")
+                    | models.Q(total_transactions__gt=0)
+                    | models.Q(transactions__isnull=False)
+                )
+                .distinct()
             )
             count = bank_qs.count()
             latest = bank_qs.order_by("-created_at").first()

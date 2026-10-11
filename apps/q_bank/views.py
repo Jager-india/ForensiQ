@@ -6,6 +6,7 @@ Thin controllers routing requests, coordinating selectors & services, and render
 from pathlib import Path
 
 from django.contrib import messages
+from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -16,6 +17,7 @@ from core.fuzzy import extract_keywords_from_file, extract_keywords_from_string
 from core.profiles import get_profile_keywords, resolve_or_create_profile_from_request
 
 from .backend.exporter import generate_frequent_counterparties_excel, generate_ledger_excel
+from .models import BankAccount
 from .selectors import (
     fuzzy_search_transactions,
     get_all_audited_persons,
@@ -50,7 +52,16 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     Presents the Audited Persons Directory as the primary operational entry point.
     """
     active_audit = get_active_audit(request)
-    metrics = get_bank_dashboard_metrics()
+
+    if active_audit:
+        for profile in active_audit.profiles.all():
+            person = get_or_create_audited_person_from_profile(profile)
+            BankAccount.objects.filter(
+                person__isnull=True,
+                account_holder__iexact=person.full_name,
+            ).update(person=person)
+
+    metrics = get_bank_dashboard_metrics(audit=active_audit)
     persons = get_all_audited_persons()
     accounts = get_all_bank_accounts()
 
@@ -58,9 +69,12 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         audit_names_set = {p.full_name.strip().lower() for p in active_audit.profiles.all()}
         audit_names_list = list(active_audit.profiles.values_list("full_name", flat=True))
         persons = [p for p in persons if p["full_name"].strip().lower() in audit_names_set]
-        accounts = accounts.filter(person__full_name__in=audit_names_list)
-
-    frequent_entities = get_frequent_counterparties(limit=10)
+        accounts = accounts.filter(
+            Q(person__full_name__in=audit_names_list) | Q(account_holder__in=audit_names_list)
+        )
+        frequent_entities = get_frequent_counterparties(audit=active_audit, limit=10)
+    else:
+        frequent_entities = get_frequent_counterparties(limit=10)
 
     context = {
         "metrics": metrics,

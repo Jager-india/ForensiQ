@@ -2291,6 +2291,27 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
         self.assertEqual(stats["trail"]["stats_line2"], "Source: Requires Q-Bank statements")
 
+    def test_empty_bank_account_not_counted_as_uploaded(self):
+        from django.apps import apps
+
+        BankAccount = apps.get_model("q_bank", "BankAccount")
+
+        # BankAccount exists for profile but has no source_filename, 0 transactions, and no related txns
+        BankAccount.objects.create(
+            account_holder="Rajesh Sharma",
+            account_number="AXIS-999999",
+            bank_name="Axis Bank",
+            source_filename="",
+            total_transactions=0,
+        )
+
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertFalse(stats["bank"]["is_used"])
+        self.assertEqual(stats["bank"]["status_badge"], "Not Uploaded")
+        self.assertEqual(stats["bank"]["stats_line1"], "Statements uploaded: 0")
+        self.assertFalse(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Awaiting Bank Data")
+
     def test_module_stats_running_status(self):
         from django.apps import apps
 

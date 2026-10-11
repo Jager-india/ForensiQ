@@ -464,43 +464,50 @@ class ForensiQE2ETestRunner:
             },
         )
 
-        audit = create_audit(
-            title="E2E Master Workstation Audit",
-            description="End-to-end verification audit",
-            profile_ids=[str(p1.id), str(p2.id)],
-        )
-        self.assert_test(
-            bool(audit.name) and "-WB-" in audit.name,
-            f"Created audit with auto-sequence name: {audit.name}",
-        )
-        self.assert_test(audit.profiles.count() == 2, "Mapped 2 target investigation profiles")
+        audit = None
+        try:
+            audit = create_audit(
+                title="E2E Master Workstation Audit",
+                description="End-to-end verification audit",
+                profile_ids=[str(p1.id), str(p2.id)],
+            )
+            self.assert_test(
+                bool(audit.name) and "-WB-" in audit.name,
+                f"Created audit with auto-sequence name: {audit.name}",
+            )
+            self.assert_test(audit.profiles.count() == 2, "Mapped 2 target investigation profiles")
 
-        res_set = self.client.post(
-            reverse("set_active_audit"),
-            data=json.dumps({"audit_id": str(audit.id)}),
-            content_type="application/json",
-        )
-        self.assert_test(res_set.status_code == 200, "Active audit switched via session API")
+            res_set = self.client.post(
+                reverse("set_active_audit"),
+                data=json.dumps({"audit_id": str(audit.id)}),
+                content_type="application/json",
+            )
+            self.assert_test(res_set.status_code == 200, "Active audit switched via session API")
 
-        res_trail_audit = self.client.get(reverse("q_trail:dashboard") + "?scope=audit")
-        self.assert_test(
-            res_trail_audit.status_code == 200, "Q-Trail loaded with scope=audit (HTTP 200)"
-        )
+            res_trail_audit = self.client.get(reverse("q_trail:dashboard") + "?scope=audit")
+            self.assert_test(
+                res_trail_audit.status_code == 200, "Q-Trail loaded with scope=audit (HTTP 200)"
+            )
 
-        res_trail_all = self.client.get(reverse("q_trail:dashboard") + "?scope=all")
-        self.assert_test(
-            res_trail_all.status_code == 200, "Q-Trail loaded with scope=all (HTTP 200)"
-        )
+            res_trail_all = self.client.get(reverse("q_trail:dashboard") + "?scope=all")
+            self.assert_test(
+                res_trail_all.status_code == 200, "Q-Trail loaded with scope=all (HTTP 200)"
+            )
 
-        res_analyze = self.client.post(
-            reverse("q_trail:analyze_api"),
-            data=json.dumps({"profile_ids": [str(p1.id), str(p2.id)]}),
-            content_type="application/json",
-        )
-        self.assert_test(
-            res_analyze.status_code == 200,
-            "Q-Trail multi-bank reconciliation API returned HTTP 200",
-        )
+            res_analyze = self.client.post(
+                reverse("q_trail:analyze_api"),
+                data=json.dumps({"profile_ids": [str(p1.id), str(p2.id)]}),
+                content_type="application/json",
+            )
+            self.assert_test(
+                res_analyze.status_code == 200,
+                "Q-Trail multi-bank reconciliation API returned HTTP 200",
+            )
+        finally:
+            if audit and audit.id:
+                audit.delete()
+            p1.delete()
+            p2.delete()
 
 
 if __name__ == "__main__":

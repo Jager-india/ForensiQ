@@ -157,15 +157,33 @@ def get_bank_account_by_id(account_id: str | uuid.UUID) -> BankAccount | None:
         return None
 
 
-def get_bank_dashboard_metrics() -> dict[str, Any]:
+def get_bank_dashboard_metrics(audit: Any = None) -> dict[str, Any]:
     """
     Aggregates high-level forensic metrics across all bank statement audits and persons.
+    When audit is provided, scopes the metrics to auditees in that audit.
     """
-    total_persons = AuditedPerson.objects.count()
-    total_accounts = BankAccount.objects.count()
-    total_txns = BankTransaction.objects.count()
+    if audit:
+        profile_names = list(audit.profiles.values_list("full_name", flat=True))
+        person_qs = AuditedPerson.objects.filter(
+            Q(full_name__in=profile_names) | Q(bank_accounts__account_holder__in=profile_names)
+        ).distinct()
+        account_qs = BankAccount.objects.filter(
+            Q(person__full_name__in=profile_names) | Q(account_holder__in=profile_names)
+        ).distinct()
+        txn_qs = BankTransaction.objects.filter(
+            Q(account__person__full_name__in=profile_names)
+            | Q(account__account_holder__in=profile_names)
+        ).distinct()
+    else:
+        person_qs = AuditedPerson.objects.all()
+        account_qs = BankAccount.objects.all()
+        txn_qs = BankTransaction.objects.all()
 
-    sums = BankTransaction.objects.aggregate(
+    total_persons = person_qs.count()
+    total_accounts = account_qs.count()
+    total_txns = txn_qs.count()
+
+    sums = txn_qs.aggregate(
         total_debit=Sum("debit_amount"),
         total_credit=Sum("credit_amount"),
         cash_deposits=Count("id", filter=Q(is_cash_deposit=True)),
@@ -174,7 +192,7 @@ def get_bank_dashboard_metrics() -> dict[str, Any]:
     )
 
     top_counterparties_qs = (
-        BankTransaction.objects.exclude(
+        txn_qs.exclude(
             party_name__in=["Internal Transfer", "Other Account Operations", "Unknown Entity"]
         )
         .values("party_name")
@@ -355,6 +373,7 @@ def get_paginated_bank_transactions(
 def get_frequent_counterparties(
     account_id: str | uuid.UUID | None = None,
     person_id: str | uuid.UUID | None = None,
+    audit: Any = None,
     min_interactions: int = 2,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
@@ -366,6 +385,12 @@ def get_frequent_counterparties(
         qs = qs.filter(account_id=account_id)
     elif person_id:
         qs = qs.filter(account__person_id=person_id)
+    elif audit:
+        profile_names = list(audit.profiles.values_list("full_name", flat=True))
+        qs = qs.filter(
+            Q(account__person__full_name__in=profile_names)
+            | Q(account__account_holder__in=profile_names)
+        )
 
     qs = qs.exclude(
         party_name__in=["Internal Transfer", "Other Account Operations", "Unknown Entity", ""]
