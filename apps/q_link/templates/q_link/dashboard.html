@@ -163,66 +163,68 @@
 
             <!-- Active Mode Information & Interlinks Status Banner -->
             <div id="mode-status-banner" class="px-3.5 py-2 bg-theme-subtle border-b border-theme-border flex flex-wrap items-center justify-between text-xs text-theme-text gap-2">
-                <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-link text-amber-600 dark:text-amber-400 text-xs" id="mode-status-icon"></i>
-                    <span class="font-bold text-amber-700 dark:text-amber-400 font-mono tracking-wide" id="mode-status-title">Keyword Interlinks</span>
-                    <span class="text-theme-muted hidden sm:inline">•</span>
-                    <span class="text-theme-muted text-[11px] hidden sm:inline" id="mode-status-desc">Correlating cross-module entities sharing active audit keywords</span>
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <i class="fa-solid fa-link text-amber-600 dark:text-amber-400 text-xs shrink-0" id="mode-status-icon"></i>
+                    <span class="font-bold text-amber-700 dark:text-amber-400 font-mono tracking-wide shrink-0" id="mode-status-title">Keyword Interlinks</span>
+                    <span class="text-theme-muted hidden sm:inline shrink-0">•</span>
+                    <span class="text-theme-muted text-[11px] truncate flex-1 min-w-0" id="mode-status-desc">Correlating cross-module entities sharing active audit keywords</span>
                 </div>
-                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-theme-surface text-theme-muted border border-theme-border" id="mode-status-count">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-theme-surface text-theme-muted border border-theme-border shrink-0" id="mode-status-count">
                     Discovering Interlinks...
                 </span>
             </div>
 
-            <!-- Vis.js Graph Rendering Container with Matrix Dot Grid (Full Width & Expansive Height) -->
-            <div id="qlink-canvas" class="w-full h-[740px] bg-theme-surface relative transition-colors duration-200"></div>
+            <!-- Vis.js Graph Rendering Container with Matrix Dot Grid & Clean In-Canvas Legend -->
+            <div class="relative w-full overflow-hidden">
+                <div id="qlink-canvas" class="w-full h-[740px] bg-theme-surface relative transition-colors duration-200"></div>
 
-            <!-- Floating "Signal" Legend Card (Matching Image 2 Reference) -->
-            <div class="absolute top-16 right-4 z-20 bg-theme-surface/95 dark:bg-slate-900/95 backdrop-blur-md border border-theme-border rounded-2xl p-4 shadow-xl text-xs space-y-3 pointer-events-auto min-w-[185px]">
-                <div class="flex items-center justify-between border-b border-theme-border pb-2">
-                    <span class="font-bold text-xs text-theme-text flex items-center gap-1.5">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Signal
-                    </span>
-                    <span class="text-[10px] text-theme-muted font-mono">Signal & Entity Types</span>
-                </div>
-                
-                <!-- 5 Status Dots from Image 2 Reference -->
-                <div class="space-y-1.5 text-[11px] font-medium text-theme-text">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                        <span>Healthy (Verified)</span>
+                <!-- Floating "Signal" Legend Card (Matching Image 2 Reference - Positioned Cleanly Inside Canvas Area) -->
+                <div class="absolute top-4 right-4 z-20 bg-theme-surface/95 dark:bg-slate-900/95 backdrop-blur-md border border-theme-border rounded-2xl p-4 shadow-xl text-xs space-y-3 pointer-events-auto min-w-[175px]">
+                    <div class="flex items-center justify-between border-b border-theme-border pb-2">
+                        <span class="font-bold text-xs text-theme-text flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>Signal</span>
+                        </span>
                     </div>
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                        <span>Degraded (Risk)</span>
+                    
+                    <!-- 5 Status Dots from Image 2 Reference -->
+                    <div class="space-y-1.5 text-[11px] font-medium text-theme-text">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                            <span>Healthy (Verified)</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                            <span>Degraded (Risk)</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                            <span>Failing (Layering)</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                            <span>Idle (External)</span>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
+                            <span>Request path</span>
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                        <span>Failing (Layering)</span>
-                    </div>
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                        <span>Idle (External)</span>
-                    </div>
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
-                        <span>Request path</span>
-                    </div>
-                </div>
 
-                <!-- Quick Entity Types Reference -->
-                <div class="pt-2 border-t border-theme-border space-y-1 text-[10px] text-theme-muted font-mono">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-user text-cyan-500 text-[10px]"></i> <span>Employee / Auditee</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-building text-amber-500 text-[10px]"></i> <span>Vendor Partner</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-building-columns text-emerald-500 text-[10px]"></i> <span>Bank Account</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-file-lines text-rose-500 text-[10px]"></i> <span>Document / PO</span>
+                    <!-- Quick Entity Types Reference -->
+                    <div class="pt-2 border-t border-theme-border space-y-1 text-[10px] text-theme-muted font-mono">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-user text-cyan-500 text-[10px]"></i> <span>Employee / Auditee</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-building text-amber-500 text-[10px]"></i> <span>Vendor Partner</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-building-columns text-emerald-500 text-[10px]"></i> <span>Bank Account</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-file-lines text-rose-500 text-[10px]"></i> <span>Document / PO</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -251,7 +253,7 @@
         @close-workstation.window="isOpen = false"
         @switch-panel-tab.window="isOpen = true; if($event.detail) activeTab = $event.detail;"
         :class="isOpen ? 'translate-x-0' : 'translate-x-full'"
-        class="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] md:w-[520px] bg-theme-surface border-l border-theme-border shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col">
+        class="fixed inset-y-0 right-0 z-[60] w-full sm:w-[480px] md:w-[520px] bg-theme-surface border-l border-theme-border shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col">
         
         <!-- Workstation Drawer Header -->
         <div class="p-3.5 border-b border-theme-border flex items-center justify-between bg-theme-subtle">
@@ -444,11 +446,11 @@
 
     <!-- Backdrop for Workstation Drawer -->
     <div id="workstation-backdrop" onclick="closeWorkstationDrawer()"
-        class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs z-40 hidden transition-opacity"></div>
+        class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs z-[55] hidden transition-opacity"></div>
 
     <!-- Slide-out Side Drawer: Audit Evidence Trail -->
     <div id="evidence-trail-drawer"
-        class="fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] bg-theme-surface border-l border-theme-border shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        class="fixed inset-y-0 right-0 z-[70] w-full sm:w-[460px] bg-theme-surface border-l border-theme-border shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
         <!-- Drawer Header -->
         <div class="p-4 border-b border-theme-border flex items-center justify-between bg-theme-subtle backdrop-blur">
             <div class="flex items-center gap-2.5">
@@ -474,11 +476,11 @@
 
     <!-- Backdrop for Drawer -->
     <div id="drawer-backdrop" onclick="closeEvidenceDrawer()"
-        class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs z-40 hidden transition-opacity"></div>
+        class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs z-[65] hidden transition-opacity"></div>
 
     <!-- Archivus-Style Document & Flagged Item Inspection Drawer -->
     <div id="evidence-reader-drawer"
-        class="fixed inset-y-0 right-0 z-[60] w-full sm:w-[540px] md:w-[600px] bg-theme-surface border-l border-theme-border shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        class="fixed inset-y-0 right-0 z-[80] w-full sm:w-[540px] md:w-[600px] bg-theme-surface border-l border-theme-border shadow-2xl transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
         <!-- Drawer Header -->
         <div class="p-5 border-b border-theme-border flex items-center justify-between bg-theme-subtle backdrop-blur">
             <div class="flex items-center gap-3">
@@ -592,7 +594,7 @@
 
     <!-- Backdrop for Evidence Reader Drawer -->
     <div id="reader-drawer-backdrop" onclick="closeEvidenceReaderDrawer()"
-        class="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs z-[55] hidden transition-opacity"></div>
+        class="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs z-[75] hidden transition-opacity"></div>
 
     <!-- Interactive Vis.js & Copilot Integration Script -->
     <script type="text/javascript">

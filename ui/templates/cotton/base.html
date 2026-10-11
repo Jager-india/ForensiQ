@@ -84,7 +84,7 @@
                 <template x-teleport="body">
                     <div x-show="showAuditModal" x-cloak
                         @keydown.escape.window="showAuditModal = false"
-                        class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 text-left">
+                        class="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 text-left">
                         <div @click.outside="showAuditModal = false"
                             class="bg-theme-surface border border-theme-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden relative flex flex-col max-h-[85vh]">
                             
