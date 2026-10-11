@@ -8,35 +8,58 @@
             this.selectAll = !this.selectAll;
         },
         isLoading: false,
-        currentThought: 'Reading bank statements...',
-        thoughtList: [
-            'Reading bank statements...',
-            'Matching payments between accounts...',
-            'Looking for hidden middlemen passing cash...',
-            'Tracing money transfers step-by-step...',
-            'Checking if any money looped back to the sender...',
-            'Connecting who sent money to whom...',
-            'Calculating how much money middlemen kept...',
-            'Finding patterns across bank transfer dates...',
-            'Piecing together the money trail puzzle...',
-            'Searching for matching transaction amounts...',
-            'Mapping the complete route funds traveled...',
-            'Checking accounts across different banks...',
-            'Organizing the financial timeline...',
-            'Double-checking transfer reference codes...',
-            'Almost done! Finalizing the visual money map...'
+        loadingProgress: 0,
+        currentStepIndex: 0,
+        loadingSteps: [
+            { title: 'Reading Data', desc: 'Scanning bank statements and transaction ledgers...' },
+            { title: 'Finding Paths', desc: 'Reconciling UTR bank reference codes & exact amounts...' },
+            { title: 'Analyzing Loops', desc: 'Detecting pass-through accounts and hidden middlemen...' },
+            { title: 'Drawing Map', desc: 'Compiling fund topology graph & final trail narrative...' }
         ],
-        thoughtIndex: 0,
-        thoughtTimer: null,
-        startLoading() {
+        stepTimer: null,
+        progressTimer: null,
+        runSequentialLoading(onComplete) {
             this.isLoading = true;
-            this.thoughtIndex = Math.floor(Math.random() * this.thoughtList.length);
-            this.currentThought = this.thoughtList[this.thoughtIndex];
-            if (this.thoughtTimer) clearInterval(this.thoughtTimer);
-            this.thoughtTimer = setInterval(() => {
-                this.thoughtIndex = (this.thoughtIndex + 1) % this.thoughtList.length;
-                this.currentThought = this.thoughtList[this.thoughtIndex];
-            }, 1500);
+            this.loadingProgress = 0;
+            this.currentStepIndex = 0;
+            if (this.progressTimer) clearInterval(this.progressTimer);
+            if (this.stepTimer) clearInterval(this.stepTimer);
+
+            const totalDurationMs = 5500;
+            const intervalMs = 50;
+            const progressIncrement = (intervalMs / totalDurationMs) * 100;
+
+            this.progressTimer = setInterval(() => {
+                this.loadingProgress = Math.min(100, this.loadingProgress + progressIncrement);
+            }, intervalMs);
+
+            const stepDurationMs = totalDurationMs / 4;
+            this.stepTimer = setInterval(() => {
+                if (this.currentStepIndex < this.loadingSteps.length - 1) {
+                    this.currentStepIndex++;
+                }
+            }, stepDurationMs);
+
+            setTimeout(() => {
+                clearInterval(this.progressTimer);
+                clearInterval(this.stepTimer);
+                this.loadingProgress = 100;
+                this.currentStepIndex = this.loadingSteps.length - 1;
+                if (onComplete) {
+                    onComplete();
+                }
+            }, totalDurationMs);
+        },
+        submitWithDelay(event) {
+            const form = event.target;
+            this.runSequentialLoading(() => {
+                form.submit();
+            });
+        },
+        compareAllWithDelay(url) {
+            this.runSequentialLoading(() => {
+                window.location.href = url;
+            });
         }
     }">
 
@@ -70,7 +93,7 @@
                         <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
                         <span>AI Reasoning Engine</span>
                         <span class="text-theme-muted">•</span>
-                        <span class="text-theme-muted">Tracing Money</span>
+                        <span>Step <span x-text="currentStepIndex + 1"></span> of 4</span>
                     </div>
                     <h3 class="text-xl sm:text-2xl font-black tracking-tight text-theme-text">
                         Following the Money Trail...
@@ -80,28 +103,46 @@
                     </p>
                 </div>
 
-                <!-- LLM Rotating Thought Stream (Layman Words) -->
-                <div class="w-full bg-theme-surface border border-theme-border rounded-2xl p-4 shadow-xl min-h-[72px] flex items-center justify-center">
-                    <div class="flex items-center gap-3">
-                        <i class="fa-solid fa-brain text-amber-500 text-sm animate-pulse"></i>
-                        <p class="text-sm font-medium text-theme-text transition-all duration-300"
-                           x-text="currentThought"></p>
+                <!-- Active Step Card -->
+                <div class="w-full bg-theme-surface border border-theme-border rounded-2xl p-4 shadow-xl min-h-[76px] flex items-center justify-center">
+                    <div class="flex items-center gap-3 text-left">
+                        <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-brain text-sm animate-pulse"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-amber-500 dark:text-amber-400 uppercase tracking-wider"
+                                 x-text="loadingSteps[currentStepIndex].title"></div>
+                            <p class="text-sm font-medium text-theme-text transition-all duration-300"
+                               x-text="loadingSteps[currentStepIndex].desc"></p>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Shimmering Progress Bar -->
-                <div class="w-full max-w-xs space-y-2">
-                    <div class="h-1.5 w-full bg-theme-subtle rounded-full overflow-hidden relative">
-                        <div class="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 rounded-full w-1/2 absolute animate-pulse"></div>
+                <!-- Smooth Progress Bar & Steps -->
+                <div class="w-full max-w-sm space-y-2.5">
+                    <div class="h-2 w-full bg-theme-subtle rounded-full overflow-hidden relative border border-theme-border">
+                        <div class="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 rounded-full transition-all duration-100 ease-out"
+                             :style="`width: ${loadingProgress}%`"></div>
                     </div>
-                    <div class="flex items-center justify-between text-[11px] text-theme-muted font-mono">
-                        <span class="flex items-center gap-1">
-                            <i class="fa-solid fa-circle-check text-emerald-500"></i> Reading Data
-                        </span>
-                        <span class="flex items-center gap-1">
-                            <i class="fa-solid fa-spinner fa-spin text-amber-500"></i> Finding Paths
-                        </span>
-                        <span class="text-theme-subtle">Drawing Map</span>
+                    <!-- 4 Steps Indicators -->
+                    <div class="grid grid-cols-4 gap-1 text-[11px] font-mono">
+                        <template x-for="(step, idx) in loadingSteps" :key="idx">
+                            <div class="flex flex-col items-center gap-1 transition-colors"
+                                 :class="currentStepIndex > idx ? 'text-emerald-500 font-bold' : (currentStepIndex === idx ? 'text-amber-500 font-bold' : 'text-theme-muted opacity-60')">
+                                <span class="flex items-center gap-1">
+                                    <template x-if="currentStepIndex > idx">
+                                        <i class="fa-solid fa-circle-check text-[10px]"></i>
+                                    </template>
+                                    <template x-if="currentStepIndex === idx">
+                                        <i class="fa-solid fa-spinner fa-spin text-[10px]"></i>
+                                    </template>
+                                    <template x-if="currentStepIndex < idx">
+                                        <i class="fa-regular fa-circle text-[10px]"></i>
+                                    </template>
+                                    <span class="truncate" x-text="step.title"></span>
+                                </span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -120,7 +161,7 @@
             <c-slot name="actions">
                 <div class="flex items-center gap-2.5">
                     <a href="{% url 'q_trail:dashboard' %}?compare_all=1"
-                        @click="startLoading()"
+                        @click.prevent="compareAllWithDelay($event.currentTarget.href)"
                         class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all transform hover:-translate-y-0.5 cursor-pointer">
                         <i class="fa-solid fa-arrows-split-up-and-left text-xs"></i>
                         <span>Compare All People at Once</span>
@@ -132,7 +173,7 @@
         <!-- Profile Selection & Parameter Controls Card -->
         <div class="bg-theme-surface rounded-xl p-5 border border-theme-border shadow-sm mb-6">
 
-            <form method="POST" action="{% url 'q_trail:dashboard' %}" class="space-y-4" @submit="startLoading()">
+            <form method="POST" action="{% url 'q_trail:dashboard' %}" class="space-y-4" @submit.prevent="submitWithDelay($event)">
                 {% csrf_token %}
                 <input type="hidden" name="scope" value="{{ scope }}">
 
@@ -254,14 +295,15 @@
                     <div class="flex items-center gap-2">
                         <label for="min_amount"
                             class="text-xs font-semibold text-theme-text whitespace-nowrap">
-                            <i class="fa-solid fa-filter-circle-dollar text-amber-500 mr-1"></i>Min Amount:
+                            <i class="fa-solid fa-filter-circle-dollar text-amber-500 mr-1"></i>Min Amount <span class="text-[11px] font-normal text-amber-500/90">(Min: ₹1,000)</span>:
                         </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs text-theme-muted font-mono">₹</span>
-                            <input type="number" id="min_amount" name="min_amount" min="0" step="100"
+                            <input type="number" id="min_amount" name="min_amount" min="1000" step="100"
                                 value="{{ min_amount|default:1000|floatformat:0 }}"
+                                @change="if (Number($event.target.value) < 1000) $event.target.value = 1000"
                                 class="w-24 pl-5 pr-2 rounded-lg border border-theme-border bg-theme-surface text-xs font-semibold py-1.5 text-theme-text focus:ring-amber-500 focus:border-amber-500 cursor-pointer"
-                                title="Exclude transactions below this threshold (default: ₹1,000)">
+                                title="Exclude transactions below this threshold (minimum: ₹1,000)">
                         </div>
                     </div>
 
@@ -442,86 +484,8 @@
     <c-trail.valuenote />
     {% endif %}
 
-    <!-- 5. 1-Hop Suspected Intermediary Conduits Triage Deck -->
-    <c-trail.conduit_deck />
-
-    <!-- Cross-Profile Pairwise Flow Matrix (Who Paid Whom Summary Table) -->
-    <div
-        class="bg-theme-surface rounded-xl p-5 border border-theme-border shadow-sm mb-8 overflow-hidden">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <div>
-                <h3 class="font-bold text-base text-theme-text tracking-tight flex items-center gap-2">
-                    <i class="fa-solid fa-table-cells text-amber-500"></i>
-                    <span>Who Paid Whom Summary Table</span>
-                </h3>
-                <p class="text-xs text-theme-muted mt-0.5">
-                    Total money moved between selected people (Direct payments + money passed through middlemen).
-                </p>
-            </div>
-            <div class="flex items-center gap-2">
-                <span
-                    class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full font-mono">
-                    {{ profile_names|length }} × {{ profile_names|length }} Matrix
-                </span>
-            </div>
-        </div>
-
-        <div class="overflow-x-auto">
-            <table class="w-full text-xs text-left border-collapse">
-                <thead>
-                    <tr class="border-b border-theme-border text-theme-muted">
-                        <th class="p-3 bg-theme-surface font-semibold rounded-tl-lg min-w-[160px]">
-                            Sender (From ↓) \ Receiver (To →)
-                        </th>
-                        {% for col_name in profile_names %}
-                        <th class="p-3 bg-theme-surface font-semibold text-center truncate min-w-[140px] max-w-[180px]"
-                            title="{{ col_name }}">
-                            {{ col_name }}
-                        </th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-theme-border font-mono">
-                    {% for row in pairwise_matrix %}
-                    <tr class="hover:bg-theme-subtle transition">
-                        <td class="p-3 font-sans font-bold text-theme-text bg-theme-surface truncate max-w-[180px]"
-                            title="{{ row.source_name }}">
-                            {{ row.source_name }}
-                        </td>
-                        {% for cell in row.targets %}
-                        <td class="p-3 text-center">
-                            {% if cell.is_self %}
-                            <span class="text-slate-300 dark:text-zinc-700 select-none">—</span>
-                            {% elif cell.has_flow %}
-                            <div class="inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 cursor-default"
-                                title="Direct: ₹{{ cell.direct_formatted }} ({{ cell.direct_count }} txns) | Middlemen: ₹{{ cell.intermediate_formatted }} ({{ cell.intermediate_count }} passes through {{ cell.intermediaries|join:', ' }})">
-                                <span class="font-bold text-xs">₹{{ cell.total_formatted }}</span>
-                                <span class="text-[10px] text-emerald-500/90 font-sans">
-                                    {% if cell.direct_count > 0 %}{{ cell.direct_count }} direct{% endif %}
-                                    {% if cell.direct_count > 0 and cell.intermediate_count > 0 %} + {% endif %}
-                                    {% if cell.intermediate_count > 0 %}{{ cell.intermediate_count }} via middlemen{% endif %}
-                                </span>
-                            </div>
-                            {% else %}
-                            <span class="text-slate-400 dark:text-zinc-600 text-[11px]">₹0.00</span>
-                            {% endif %}
-                        </td>
-                        {% endfor %}
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="100%" class="p-4 text-center text-slate-400 dark:text-zinc-500">
-                            Select 2 or more profiles to generate the cross-profile comparison matrix.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Match Tables: Direct Transfers and 1-Hop Intermediate Passes -->
-    <div class="space-y-8 mb-10" x-data="{
+    <!-- 5. Match Tables: Direct Transfers and 1-Hop Intermediate Passes -->
+    <div class="space-y-8 mb-8" x-data="{
         activeTab: 'direct',
         switchTab(tab) {
             this.activeTab = tab;
@@ -610,6 +574,97 @@
                 </div>
 
                 <div id="table-intermediate-transfers" class="w-full"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. 1-Hop Suspected Intermediary Conduits Triage Deck -->
+    <c-trail.conduit_deck />
+
+    <!-- 7. Cross-Profile Pairwise Flow Matrix (Who Paid Whom Summary Table) -->
+    <div x-data="{ isExpanded: false }"
+        class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all">
+
+        <!-- Header Bar: Click to Expand / Collapse -->
+        <button type="button" @click="isExpanded = !isExpanded"
+            class="w-full flex items-center justify-between p-5 text-left cursor-pointer hover:bg-theme-subtle transition select-none">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">
+                    <i class="fa-solid fa-table-cells"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
+                        <span>Who Paid Whom Summary Table</span>
+                        <span class="text-xs bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono font-normal">
+                            {{ profile_names|length }} × {{ profile_names|length }} Matrix
+                        </span>
+                    </h3>
+                    <p class="text-xs text-theme-muted mt-0.5">
+                        Total money moved between selected people (Direct payments + money passed through middlemen).
+                    </p>
+                </div>
+            </div>
+
+            <!-- Dropdown / Caret Icon -->
+            <div class="flex items-center gap-2 text-theme-muted">
+                <i class="fa-solid fa-chevron-down text-sm transition-transform duration-200"
+                    :class="{ 'rotate-180': isExpanded }"></i>
+            </div>
+        </button>
+
+        <!-- Collapsible Content Body -->
+        <div x-show="isExpanded" x-cloak class="p-5 pt-0 border-t border-theme-border space-y-4">
+            <div class="overflow-x-auto pt-4">
+                <table class="w-full text-xs text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-theme-border text-theme-muted">
+                            <th class="p-3 bg-theme-surface font-semibold rounded-tl-lg min-w-[160px]">
+                                Sender (From ↓) \ Receiver (To →)
+                            </th>
+                            {% for col_name in profile_names %}
+                            <th class="p-3 bg-theme-surface font-semibold text-center truncate min-w-[140px] max-w-[180px]"
+                                title="{{ col_name }}">
+                                {{ col_name }}
+                            </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-theme-border font-mono">
+                        {% for row in pairwise_matrix %}
+                        <tr class="hover:bg-theme-subtle transition">
+                            <td class="p-3 font-sans font-bold text-theme-text bg-theme-surface truncate max-w-[180px]"
+                                title="{{ row.source_name }}">
+                                {{ row.source_name }}
+                            </td>
+                            {% for cell in row.targets %}
+                            <td class="p-3 text-center">
+                                {% if cell.is_self %}
+                                <span class="text-slate-300 dark:text-zinc-700 select-none">—</span>
+                                {% elif cell.has_flow %}
+                                <div class="inline-flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 cursor-default"
+                                    title="Direct: ₹{{ cell.direct_formatted }} ({{ cell.direct_count }} txns) | Middlemen: ₹{{ cell.intermediate_formatted }} ({{ cell.intermediate_count }} passes through {{ cell.intermediaries|join:', ' }})">
+                                    <span class="font-bold text-xs">₹{{ cell.total_formatted }}</span>
+                                    <span class="text-[10px] text-emerald-500/90 font-sans">
+                                        {% if cell.direct_count > 0 %}{{ cell.direct_count }} direct{% endif %}
+                                        {% if cell.direct_count > 0 and cell.intermediate_count > 0 %} + {% endif %}
+                                        {% if cell.intermediate_count > 0 %}{{ cell.intermediate_count }} via middlemen{% endif %}
+                                    </span>
+                                </div>
+                                {% else %}
+                                <span class="text-slate-400 dark:text-zinc-600 text-[11px]">₹0.00</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="100%" class="p-4 text-center text-slate-400 dark:text-zinc-500">
+                                Select 2 or more profiles to generate the cross-profile comparison matrix.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

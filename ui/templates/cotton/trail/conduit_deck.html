@@ -3,8 +3,9 @@
     subtitle="Third parties who received money from one person and forwarded it to another."
 />
 
-<div class="bg-theme-surface rounded-xl p-5 border border-theme-border shadow-sm mb-8"
+<div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
      x-data="{
+         isExpanded: false,
          priorityModel: 'composite',
          expandedConduit: null,
          get sortedConduits() {
@@ -21,44 +22,53 @@
          }
      }">
 
-    <!-- Header & Model Switcher Bar -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-theme-border pb-4 mb-4">
-        <div>
-            <div class="flex items-center gap-2">
-                <span class="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-xs">
-                    <i class="fa-solid fa-user-secret"></i>
-                </span>
-                <h3 class="font-bold text-sm sm:text-base text-theme-text">
-                    {{ title }}
-                </h3>
-                <span class="text-xs font-mono px-2 py-0.5 rounded bg-theme-subtle text-theme-muted"
-                      x-text="(window.conduitDeckData || []).length + ' Middlemen'"></span>
+    <!-- Header Bar: Click to Expand / Collapse -->
+    <button type="button" @click="isExpanded = !isExpanded"
+        class="w-full flex items-center justify-between p-5 text-left cursor-pointer hover:bg-theme-subtle transition select-none">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">
+                <i class="fa-solid fa-user-secret"></i>
             </div>
-            <p class="text-xs text-theme-muted mt-1">
-                {{ subtitle }}
-            </p>
+            <div>
+                <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
+                    <span>{{ title }}</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-theme-subtle text-theme-muted font-normal"
+                          x-text="(window.conduitDeckData || []).length + ' Middlemen'"></span>
+                </h3>
+                <p class="text-xs text-theme-muted mt-0.5">
+                    {{ subtitle }}
+                </p>
+            </div>
         </div>
 
+        <!-- Dropdown / Caret Icon -->
+        <div class="flex items-center gap-2 text-theme-muted">
+            <i class="fa-solid fa-chevron-down text-sm transition-transform duration-200"
+                :class="{ 'rotate-180': isExpanded }"></i>
+        </div>
+    </button>
+
+    <!-- Collapsible Content Body -->
+    <div x-show="isExpanded" x-cloak class="p-5 pt-0 border-t border-theme-border space-y-4">
         <!-- Priority Model Segmented Switcher -->
-        <div class="flex items-center gap-1.5 p-1 bg-theme-subtle rounded-xl border border-theme-border self-start md:self-auto text-xs font-semibold">
+        <div class="flex items-center justify-end gap-1.5 p-1 pt-4 self-end text-xs font-semibold">
             <span class="text-[11px] text-theme-muted px-2 select-none">Sort By:</span>
             <button type="button" @click="priorityModel = 'composite'"
-                    :class="priorityModel === 'composite' ? 'bg-theme-surface text-amber-500 shadow-sm' : 'text-theme-muted hover:text-theme-text'"
+                    :class="priorityModel === 'composite' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30' : 'text-theme-muted hover:text-theme-text border border-theme-border'"
                     class="px-2.5 py-1 rounded-lg transition cursor-pointer">
                 Overall Risk
             </button>
             <button type="button" @click="priorityModel = 'value'"
-                    :class="priorityModel === 'value' ? 'bg-theme-surface text-amber-500 shadow-sm' : 'text-theme-muted hover:text-theme-text'"
+                    :class="priorityModel === 'value' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30' : 'text-theme-muted hover:text-theme-text border border-theme-border'"
                     class="px-2.5 py-1 rounded-lg transition cursor-pointer">
                 Highest Cut Kept
             </button>
             <button type="button" @click="priorityModel = 'velocity'"
-                    :class="priorityModel === 'velocity' ? 'bg-theme-surface text-amber-500 shadow-sm' : 'text-theme-muted hover:text-theme-text'"
+                    :class="priorityModel === 'velocity' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30' : 'text-theme-muted hover:text-theme-text border border-theme-border'"
                     class="px-2.5 py-1 rounded-lg transition cursor-pointer">
                 Fastest Hand-off
             </button>
         </div>
-    </div>
 
     <!-- Triage Explanation Callout -->
     <div class="mb-4 p-3 rounded-lg bg-theme-subtle/50 border border-theme-border text-xs text-theme-muted flex items-start gap-2.5">
@@ -205,5 +215,6 @@
                 </div>
             </div>
         </template>
+        </div>
     </div>
 </div>

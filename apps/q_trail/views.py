@@ -104,7 +104,7 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         time_window_days = 0
 
     try:
-        min_amount = max(0.0, float(min_amount_str))
+        min_amount = max(1000.0, float(min_amount_str))
     except (ValueError, TypeError):
         min_amount = 1000.0
 
@@ -289,11 +289,11 @@ def analyze_api_view(request: HttpRequest) -> JsonResponse:
             payload = json.loads(request.body.decode("utf-8"))
             profile_ids = payload.get("profile_ids", [])
             time_window_days = int(payload.get("time_window_days", 0))
-            min_amount = float(payload.get("min_amount", 1000.0))
+            min_amount = max(1000.0, float(payload.get("min_amount", 1000.0)))
         else:
             profile_ids = request.POST.getlist("profile_ids")
             time_window_days = int(request.POST.get("time_window_days", 0))
-            min_amount = float(request.POST.get("min_amount", 1000.0))
+            min_amount = max(1000.0, float(request.POST.get("min_amount", 1000.0)))
     except Exception as e:
         logger.warning(f"Invalid API request payload to Q-Trail analyze: {e}")
         return JsonResponse({"status": "error", "message": "Invalid request payload."}, status=400)

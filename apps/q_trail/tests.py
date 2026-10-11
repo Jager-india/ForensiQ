@@ -905,6 +905,52 @@ class QTrailViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["time_window_days"], 0)
 
+    def test_dashboard_view_min_amount_floor_enforced(self):
+        """Verifies min_amount is strictly floored at 1000 in dashboard view."""
+        url = reverse("q_trail:dashboard")
+        # Test low value under 1000 clamped to 1000
+        res_low = self.client.get(
+            url,
+            {
+                "profile_ids": f"{self.person_a.id},{self.person_b.id}",
+                "min_amount": "250",
+            },
+        )
+        self.assertEqual(res_low.status_code, 200)
+        self.assertEqual(res_low.context["min_amount"], 1000.0)
+        content = res_low.content.decode("utf-8")
+        self.assertIn("(Min: ₹1,000)", content)
+        self.assertIn('min="1000"', content)
+        self.assertIn("runSequentialLoading", content)
+        self.assertIn("submitWithDelay", content)
+
+        # Test valid higher value preserved
+        res_high = self.client.post(
+            url,
+            {
+                "profile_ids": [str(self.person_a.id), str(self.person_b.id)],
+                "min_amount": "5000",
+            },
+        )
+        self.assertEqual(res_high.status_code, 200)
+        self.assertEqual(res_high.context["min_amount"], 5000.0)
+
+    def test_analyze_api_min_amount_floor_enforced(self):
+        """Verifies min_amount floor of 1000 is enforced in analyze_api_view."""
+        url = reverse("q_trail:analyze_api")
+        payload = {
+            "profile_ids": [str(self.person_a.id), str(self.person_b.id)],
+            "min_amount": 100,
+        }
+        res = self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertGreaterEqual(data["metrics"]["min_amount_threshold"], 1000.0)
+
     def test_analyze_api_view_form_data_and_invalid_payload(self):
         url = reverse("q_trail:analyze_api")
         # Form-encoded POST
