@@ -2278,7 +2278,7 @@ class ActiveAuditHomepageTests(TestCase):
         )
 
         stats = get_active_audit_module_stats(self.audit)
-        self.assertFalse(stats["trail"]["is_used"])
+        self.assertTrue(stats["trail"]["is_used"])
         self.assertEqual(stats["trail"]["status_badge"], "Ready")
         self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
         self.assertEqual(stats["trail"]["stats_line2"], "Source: Q-Bank (Data ready)")
@@ -2406,3 +2406,44 @@ class ActiveAuditHomepageTests(TestCase):
         stats = get_active_audit_module_stats(self.audit)
         self.assertTrue(stats["ledger"]["is_used"])
         self.assertIn("Datasets loaded", stats["ledger"]["stats_line1"])
+
+    def test_landing_page_direct_launch_when_audit_active(self):
+        # When an active audit is set in session, landing page populates currentActiveAuditId
+        session = self.client.session
+        session["active_audit_id"] = str(self.audit.id)
+        session["active_audit_name"] = self.audit.name
+        session["portal_authenticated"] = True
+        session.save()
+
+        res = self.client.get(reverse("landing"))
+        self.assertEqual(res.status_code, 200)
+        self.assertContains(res, f"currentActiveAuditId: '{self.audit.id}'")
+
+    def test_q_trail_landing_card_not_blacked_out_when_ready(self):
+        from django.apps import apps
+
+        BankAccount = apps.get_model("q_bank", "BankAccount")
+        BankAccount.objects.create(
+            account_holder=self.profile.full_name,
+            account_number="HDFC-001928",
+            bank_name="HDFC Bank",
+            statement_label="Rajesh Personal",
+            total_transactions=15,
+        )
+
+        session = self.client.session
+        session["active_audit_id"] = str(self.audit.id)
+        session["active_audit_name"] = self.audit.name
+        session["portal_authenticated"] = True
+        session.save()
+
+        res = self.client.get(reverse("landing"))
+        self.assertEqual(res.status_code, 200)
+        html = res.content.decode()
+
+        # Q-Trail card should have data-is-used="true" and READY badge
+        self.assertIn('id="module-card-trail"', html)
+        self.assertIn('data-module-name="Trail"', html)
+        self.assertIn('data-is-used="true"', html)
+        self.assertIn("READY", html)
+        self.assertIn("Source: Q-Bank (Data ready)", html)

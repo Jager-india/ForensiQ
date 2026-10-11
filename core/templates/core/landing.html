@@ -1217,6 +1217,12 @@
                         return;
                     }
 
+                    // If an active audit is already selected, navigate directly into the module
+                    if (this.currentActiveAuditId) {
+                        window.location.href = href;
+                        return;
+                    }
+
                     this.pendingModule = { name: name, href: href };
                     this.launchAuditSearchQuery = '';
                     this.showLaunchModal = true;
@@ -1234,7 +1240,7 @@
 
                 async launchWithAudit(auditId) {
                     try {
-                        const csrfToken = window.getCookie('csrftoken') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                        const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
                         await fetch('/audits/active/', {
                             method: 'POST',
                             headers: {
@@ -1252,7 +1258,7 @@
 
                 async launchWithoutAudit() {
                     try {
-                        const csrfToken = window.getCookie('csrftoken') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                        const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
                         await fetch('/audits/active/', {
                             method: 'POST',
                             headers: {

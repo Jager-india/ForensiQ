@@ -90,15 +90,18 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
             if count > 0:
                 status_badge = "Mapped"
                 stats_line2 = f"Synced from Q-Bank • {date_str}"
+                is_used = True
             elif bank_has_data:
                 status_badge = "Ready"
                 stats_line2 = "Source: Q-Bank (Data ready)"
+                is_used = True
             else:
                 status_badge = "Awaiting Bank Data"
                 stats_line2 = "Source: Requires Q-Bank statements"
+                is_used = False
 
             stats["trail"] = {
-                "is_used": count > 0,
+                "is_used": is_used,
                 "status_badge": status_badge,
                 "stats_line1": f"Fund trails mapped: {count}",
                 "stats_line2": stats_line2,
@@ -111,7 +114,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 else "Source: Requires Q-Bank statements"
             )
             stats["trail"] = {
-                "is_used": False,
+                "is_used": bank_has_data,
                 "status_badge": status_badge,
                 "stats_line1": "Fund trails mapped: 0",
                 "stats_line2": stats_line2,
