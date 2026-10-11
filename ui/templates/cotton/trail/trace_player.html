@@ -58,9 +58,9 @@
      ">
 
     <!-- Top Transport Bar & Active Beat Headline -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-theme-border pb-3 mb-3">
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-theme-border pb-3 mb-3">
         <!-- Transport Controls -->
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
             <span class="text-[11px] font-bold tracking-wider uppercase text-theme-muted mr-1 select-none">
                 <i class="fa-solid fa-film text-amber-500 mr-1"></i>Trace
             </span>
@@ -103,16 +103,16 @@
 
         <!-- Active Beat Info -->
         <template x-if="activeBeat">
-            <div class="flex items-center gap-3">
-                <div>
+            <div class="flex items-center gap-3 min-w-0 flex-wrap sm:flex-nowrap">
+                <div class="min-w-0">
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-mono font-bold text-amber-500" x-text="'Beat ' + activeBeat.n + ' / ' + beats.length"></span>
-                        <span class="font-bold text-xs text-theme-text" x-text="activeBeat.title"></span>
+                        <span class="text-[10px] font-mono font-bold text-amber-500 shrink-0" x-text="'Beat ' + activeBeat.n + ' / ' + beats.length"></span>
+                        <span class="font-bold text-xs text-theme-text truncate" x-text="activeBeat.title"></span>
                         <template x-if="activeBeat.amount > 0">
-                            <span class="font-mono text-xs text-emerald-400 font-bold" x-text="'₹' + Number(activeBeat.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})"></span>
+                            <span class="font-mono text-xs text-emerald-400 font-bold shrink-0" x-text="'₹' + Number(activeBeat.amount).toLocaleString('en-IN', {minimumFractionDigits: 2})"></span>
                         </template>
                     </div>
-                    <div class="text-[11px] text-theme-muted truncate max-w-md" x-text="activeBeat.cap"></div>
+                    <div class="text-[11px] text-theme-muted truncate max-w-xs sm:max-w-md" x-text="activeBeat.cap"></div>
                 </div>
 
                 <!-- Beat Kind Badge -->

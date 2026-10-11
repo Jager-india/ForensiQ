@@ -64,15 +64,24 @@ def run_visual_suite():
     print("  STARTING FORENSIQ LIVE PLAYWRIGHT VISUAL TESTING SUITE")
     print("=================================================================")
 
-    # 1. Start Live Django Server
-    port = 8089
-    server_thread = LiveServerThread("127.0.0.1", StaticFilesHandler, port=port)
-    server_thread.daemon = True
-    server_thread.start()
-    server_thread.is_ready.wait(timeout=10)
+    # 1. Connect to live Django server (port 8000 if active, else spawn LiveServerThread)
+    server_thread = None
+    import socket
 
-    base_url = f"http://127.0.0.1:{server_thread.port}"
-    print(f"[*] Live Django Server active at {base_url}")
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    is_port_8000_open = s.connect_ex(("127.0.0.1", 8000)) == 0
+    s.close()
+
+    if is_port_8000_open:
+        base_url = "http://127.0.0.1:8000"
+        print(f"[*] Connecting to active Django server at {base_url}")
+    else:
+        server_thread = LiveServerThread("127.0.0.1", StaticFilesHandler, port=0)
+        server_thread.daemon = True
+        server_thread.start()
+        server_thread.is_ready.wait(timeout=10)
+        base_url = f"http://127.0.0.1:{server_thread.port}"
+        print(f"[*] Live Django Server started at {base_url}")
 
     session_key = create_authenticated_session()
     print(f"[*] Authenticated test session initialized: {session_key[:8]}...")
@@ -124,7 +133,8 @@ def run_visual_suite():
             url = f"{base_url}{path}"
             print(f"\n--> Inspecting [{app_name}] at {path}")
 
-            resp = page.goto(url, wait_until="networkidle")
+            resp = page.goto(url, wait_until="commit", timeout=15000)
+            time.sleep(1.0)
             status = resp.status if resp else "N/A"
 
             # Check if loading overlay exists (Q-Trail or Q-Link)
@@ -140,9 +150,31 @@ def run_visual_suite():
                 )
                 time.sleep(0.5)
 
-            # Check Horizontal Overflow
-            is_overflowing = page.evaluate(
-                "document.documentElement.scrollWidth > window.innerWidth"
+            # Check Horizontal Overflow across Responsive Viewports (Desktop, Tablet, Mobile)
+            viewport_overflows = {}
+            for vp_name, vp_size in [
+                ("Desktop", {"width": 1440, "height": 900}),
+                ("Tablet", {"width": 768, "height": 1024}),
+                ("Mobile", {"width": 375, "height": 667}),
+            ]:
+                page.set_viewport_size(vp_size)
+                time.sleep(0.15)
+                overflow = page.evaluate("document.documentElement.scrollWidth > window.innerWidth")
+                if overflow:
+                    blowout_px = page.evaluate(
+                        "document.documentElement.scrollWidth - window.innerWidth"
+                    )
+                    viewport_overflows[vp_name] = f"+{blowout_px}px"
+
+            # Reset viewport back to desktop for visual inspection & screenshots
+            page.set_viewport_size({"width": 1440, "height": 900})
+            time.sleep(0.15)
+
+            is_overflowing = len(viewport_overflows) > 0
+            overflow_detail = (
+                "PASS"
+                if not is_overflowing
+                else f"FAIL ({', '.join(f'{k}: {v}' for k, v in viewport_overflows.items())})"
             )
 
             # Page-specific deep inspections
@@ -210,7 +242,7 @@ def run_visual_suite():
                     "app": app_name,
                     "path": path,
                     "status": status,
-                    "overflow": "FAIL" if is_overflowing else "PASS",
+                    "overflow": overflow_detail,
                     "layout": layout_issue or "PASS",
                     "screenshot": str(screenshot_path),
                 }
@@ -218,13 +250,22 @@ def run_visual_suite():
 
         browser.close()
 
-    server_thread.terminate()
+    if server_thread:
+        server_thread.terminate()
 
-    print("\n=================================================================")
-    print("                     VISUAL TESTING RESULTS                      ")
-    print("=================================================================")
-    print(f"{'App':<14} | {'Status':<6} | {'Overflow':<8} | {'Visual Alignment':<25}")
-    print("-" * 65)
+    print(
+        "\n========================================================================================="
+    )
+    print(
+        "                              VISUAL TESTING RESULTS                                     "
+    )
+    print(
+        "========================================================================================="
+    )
+    print(
+        f"{'App':<14} | {'Status':<6} | {'Overflow (All Breakpoints)':<28} | {'Visual Alignment':<25}"
+    )
+    print("-" * 85)
 
     all_passed = True
     for r in results:
@@ -233,7 +274,7 @@ def run_visual_suite():
         layout_str = r["layout"]
         if overflow_str != "PASS" or layout_str != "PASS":
             all_passed = False
-        print(f"{r['app']:<14} | {status_str:<6} | {overflow_str:<8} | {layout_str:<25}")
+        print(f"{r['app']:<14} | {status_str:<6} | {overflow_str:<28} | {layout_str:<25}")
 
     print("=================================================================")
     if all_passed:

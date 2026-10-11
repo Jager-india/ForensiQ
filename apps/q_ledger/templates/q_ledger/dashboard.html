@@ -8,7 +8,7 @@
         icon_color="text-amber-400"
         back_url="/">
         
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             <!-- Master Data Background Store Status & Upload Button -->
             <button onclick="openMastersModal()" 
                     title="Upload or update GL Account and SLoc master datasets stored in the background"
@@ -55,38 +55,38 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <c-stat_card 
             title="Total Spend Volume" 
-            value="{{ total_amount }}" 
+            value="{{ total_amount|default:'₹0.00' }}" 
             subtitle="Local Currency INR Spend" 
             icon="fa-solid fa-indian-rupee-sign" 
             variant="amber" />
             
         <c-stat_card 
             title="Audited Counterparties" 
-            value="{{ vendor_count }}" 
+            value="{{ vendor_count|default:'0' }}" 
             subtitle="{{ record_count|default:'0' }} Ingested SAP Line Items" 
             icon="fa-solid fa-users" 
             variant="teal" />
             
         <c-stat_card 
             title="Tracked Budget Areas" 
-            value="{{ material_count }}" 
-            subtitle="{{ cost_count }} Cost Centers Monitored" 
+            value="{{ material_count|default:'0' }}" 
+            subtitle="{{ cost_count|default:'0' }} Cost Centers Monitored" 
             icon="fa-solid fa-boxes-stacked" 
             variant="slate" />
             
         <c-stat_card 
             title="Purchase Orders" 
-            value="{{ po_count }}" 
-            subtitle="{{ gl_count }} G/L Accounts Active" 
+            value="{{ po_count|default:'0' }}" 
+            subtitle="{{ gl_count|default:'0' }} G/L Accounts Active" 
             icon="fa-solid fa-file-lines" 
             variant="emerald" />
     </div>
 
     <!-- Interactive Filter & Vendor Drilldown Bar -->
-    <div class="mb-8 p-4 rounded-2xl bg-theme-surface border border-theme-border shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-        <form method="POST" action="{% url 'q_ledger:dashboard' %}" x-ref="form" class="flex-1 flex items-center space-x-3 w-full">
+    <div class="mb-8 p-4 rounded-2xl bg-theme-surface border border-theme-border shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <form method="POST" action="{% url 'q_ledger:dashboard' %}" x-ref="form" class="flex-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full min-w-0">
             {% csrf_token %}
-            <div class="flex items-center space-x-2 text-xs font-semibold text-theme-text whitespace-nowrap">
+            <div class="flex items-center space-x-2 text-xs font-semibold text-theme-text whitespace-nowrap shrink-0">
                 <i class="fa-solid fa-filter text-amber-500"></i>
                 <span>Vendor Drilldown:</span>
             </div>

@@ -46,8 +46,9 @@
                         <i class="fa-solid fa-xmark text-xs"></i>
                     </button>
                 </div>
-                <span class="text-xs font-mono text-slate-400 font-semibold whitespace-nowrap">{{ persons|length }}
-                    Auditee(s) Configured</span>
+                <span class="text-xs font-mono text-theme-muted font-semibold bg-theme-surface border border-theme-border px-3 py-1 rounded-full whitespace-nowrap">
+                    {{ persons|length }} Auditee(s) Configured
+                </span>
             </div>
         </div>
 
@@ -106,22 +107,26 @@
                     </div>
 
                     <!-- Stats Grid (In, Out, Balance, Period) -->
-                    <div class="grid grid-cols-2 gap-2 bg-theme-subtle/50 rounded-xl p-3 border border-theme-border text-xs font-mono mb-3">
-                        <div>
-                            <span class="text-[10px] uppercase text-slate-400 block font-sans">Total Inflows</span>
-                            <span class="font-bold text-emerald-500 text-xs" x-text="'₹' + currentStats.inflow">₹{{ p.total_credit_formatted }}</span>
+                    <div class="bg-theme-subtle/50 rounded-xl p-3 border border-theme-border text-xs font-mono mb-3 space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block font-sans">Total Inflows</span>
+                                <span class="font-bold text-emerald-500 text-xs" x-text="'₹' + currentStats.inflow">₹{{ p.total_credit_formatted }}</span>
+                            </div>
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block font-sans">Total Outflows</span>
+                                <span class="font-bold text-rose-500 text-xs" x-text="'₹' + currentStats.outflow">₹{{ p.total_debit_formatted }}</span>
+                            </div>
                         </div>
-                        <div>
-                            <span class="text-[10px] uppercase text-slate-400 block font-sans">Total Outflows</span>
-                            <span class="font-bold text-rose-500 text-xs" x-text="'₹' + currentStats.outflow">₹{{ p.total_debit_formatted }}</span>
-                        </div>
-                        <div class="pt-1.5 border-t border-slate-200/50 dark:border-zinc-700/50">
-                            <span class="text-[10px] uppercase text-slate-400 block font-sans">Balance</span>
-                            <span class="font-bold text-slate-800 dark:text-zinc-200 text-xs" x-text="'₹' + currentStats.balance">₹{{ p.closing_balance_formatted }}</span>
-                        </div>
-                        <div class="pt-1.5 border-t border-slate-200/50 dark:border-zinc-700/50">
-                            <span class="text-[10px] uppercase text-slate-400 block font-sans">Period</span>
-                            <span class="font-bold text-slate-700 dark:text-zinc-300 text-xs truncate block" :title="currentStats.period" x-text="currentStats.period">{{ p.statement_period }}</span>
+                        <div class="pt-2 border-t border-slate-200/50 dark:border-zinc-700/50 flex items-center justify-between gap-2">
+                            <div>
+                                <span class="text-[10px] uppercase text-slate-400 block font-sans">Closing Balance</span>
+                                <span class="font-bold text-slate-800 dark:text-zinc-200 text-xs" x-text="'₹' + currentStats.balance">₹{{ p.closing_balance_formatted }}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] uppercase text-slate-400 block font-sans">Period</span>
+                                <span class="font-bold text-slate-700 dark:text-zinc-300 text-[11px]" :title="currentStats.period" x-text="currentStats.period">{{ p.statement_period }}</span>
+                            </div>
                         </div>
                     </div>
 

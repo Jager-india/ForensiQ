@@ -236,7 +236,7 @@
         </svg>
 
         <!-- 2. HTML Layer (Integrated Node Cards with Embedded Avatar) -->
-        <div class="absolute inset-0 pointer-events-none">
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
             <template x-for="p in (graph.plates || [])" :key="p.id">
                 <div class="absolute pointer-events-auto transition-all duration-200"
                      :style="'left: ' + ((p.x / (graph.W || 1060)) * 100) + '%; top: ' + ((p.y / (graph.H || 580)) * 100) + '%; width: ' + ((p.w / (graph.W || 1060)) * 100) + '%; height: ' + ((p.h / (graph.H || 580)) * 100) + '%;'"

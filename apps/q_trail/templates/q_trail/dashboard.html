@@ -84,10 +84,10 @@
             x-transition:leave="transition ease-in duration-200"
             x-transition:leave-start="opacity-100"
             x-transition:leave-end="opacity-0"
-            class="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-theme-app/90 dark:bg-zinc-950/85 backdrop-blur-xl select-none">
+            class="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-theme-app/90 dark:bg-zinc-950/85 backdrop-blur-xl select-none overflow-x-hidden p-4">
 
             <!-- Glowing Animation & Reasoning Thoughts -->
-            <div class="relative flex flex-col items-center max-w-lg px-6 text-center space-y-6">
+            <div class="relative flex flex-col items-center w-full max-w-sm sm:max-w-lg px-2 sm:px-6 text-center space-y-6">
                 <!-- Glowing Pulsing Orb -->
                 <div class="relative flex items-center justify-center">
                     <div class="absolute w-36 h-36 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-500 blur-2xl opacity-50 animate-pulse"
@@ -132,7 +132,7 @@
                 </div>
 
                 <!-- Smooth Progress Bar & Steps -->
-                <div class="w-full max-w-sm space-y-2.5">
+                <div class="w-full max-w-xs sm:max-w-sm space-y-2.5">
                     <div class="h-2 w-full bg-theme-subtle rounded-full overflow-hidden relative border border-theme-border">
                         <div class="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 rounded-full transition-all duration-100 ease-out"
                              :style="`width: ${loadingProgress}%`"></div>
@@ -184,7 +184,7 @@
         </c-page_header>
 
         <!-- Profile Selection & Parameter Controls Card -->
-        <div class="bg-theme-surface rounded-xl p-5 border border-theme-border shadow-sm mb-6">
+        <div class="bg-theme-surface rounded-xl p-4 sm:p-5 border border-theme-border shadow-sm mb-6 overflow-hidden">
 
             <form method="POST" action="{% url 'q_trail:dashboard' %}" class="space-y-4" @submit.prevent="submitWithDelay($event)">
                 {% csrf_token %}
@@ -207,16 +207,16 @@
                         </p>
                     </div>
 
-                <div class="flex flex-wrap items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2 max-w-full">
                     <!-- Audit Scope Switcher & Inline Audit Selector Dropdown -->
-                    <div class="relative inline-flex items-center p-0.5 rounded-lg bg-theme-subtle border border-theme-border text-xs"
+                    <div class="relative flex flex-wrap sm:inline-flex items-center p-0.5 rounded-lg bg-theme-subtle border border-theme-border text-xs max-w-full"
                          x-data="{ auditMenuOpen: false }">
                         {% if active_audit %}
                         <a href="?scope=audit"
                            class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope != 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}"
                            title="Show only profiles in {{ active_audit.name }}">
                             <i class="fa-solid fa-folder-tree text-[10px]"></i>
-                            <span>Audit: {{ active_audit.name }} ({{ audit_profiles_count }})</span>
+                            <span class="truncate max-w-[130px] sm:max-w-none">Audit: {{ active_audit.name }} ({{ audit_profiles_count }})</span>
                         </a>
                         <button type="button" @click="auditMenuOpen = !auditMenuOpen"
                             class="px-1.5 py-1 rounded-md transition text-theme-muted hover:text-theme-text cursor-pointer hover:bg-theme-surface"
@@ -227,7 +227,7 @@
                            class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope == 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}"
                            title="Show all profiles across all audits">
                             <i class="fa-solid fa-globe text-[10px]"></i>
-                            <span>All Profiles ({{ all_profiles_count }})</span>
+                            <span class="truncate max-w-[120px] sm:max-w-none">All Profiles ({{ all_profiles_count }})</span>
                         </a>
                         {% else %}
                         <button type="button" @click="auditMenuOpen = !auditMenuOpen"
@@ -240,7 +240,7 @@
                            class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 bg-amber-500 text-zinc-950 font-bold shadow-xs"
                            title="Show all profiles across all audits">
                             <i class="fa-solid fa-globe text-[10px]"></i>
-                            <span>All Profiles ({{ all_profiles_count }})</span>
+                            <span class="truncate max-w-[120px] sm:max-w-none">All Profiles ({{ all_profiles_count }})</span>
                         </a>
                         {% endif %}
 
@@ -358,15 +358,15 @@
 
             <!-- Parameters & Run Bar -->
             <div
-                class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-zinc-800">
-                <div class="flex flex-wrap items-center gap-4">
-                    <div class="flex items-center gap-2">
+                class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-3 border-t border-slate-100 dark:border-zinc-800 min-w-0 w-full">
+                <div class="flex flex-col sm:flex-row flex-wrap sm:items-center gap-3 sm:gap-4 min-w-0 w-full lg:w-auto">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 min-w-0 w-full sm:w-auto">
                         <label for="time_window_days"
-                            class="text-xs font-semibold text-theme-text whitespace-nowrap">
+                            class="text-xs font-semibold text-theme-text shrink-0">
                             <i class="fa-regular fa-clock text-amber-500 mr-1"></i>Time Gap Between Transfers:
                         </label>
                         <select id="time_window_days" name="time_window_days"
-                            class="rounded-lg border border-theme-border bg-theme-surface text-xs font-semibold py-1.5 px-3 text-theme-text focus:ring-amber-500 focus:border-amber-500 cursor-pointer">
+                            class="w-full sm:w-auto min-w-0 max-w-full rounded-lg border border-theme-border bg-theme-surface text-xs font-semibold py-1.5 px-3 text-theme-text focus:ring-amber-500 focus:border-amber-500 cursor-pointer">
                             <option value="0" {% if time_window_days == 0 %}selected{% endif %}>No Time Limit (Search All Dates)</option>
                             <option value="1" {% if time_window_days == 1 %}selected{% endif %}>Within 1 Day (Quick Hand-off)</option>
                             <option value="3" {% if time_window_days == 3 %}selected{% endif %}>Within 3 Days</option>
@@ -378,17 +378,17 @@
                         </select>
                     </div>
 
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2 min-w-0 w-full sm:w-auto">
                         <label for="min_amount"
-                            class="text-xs font-semibold text-theme-text whitespace-nowrap">
+                            class="text-xs font-semibold text-theme-text shrink-0">
                             <i class="fa-solid fa-filter-circle-dollar text-amber-500 mr-1"></i>Min Amount <span class="text-[11px] font-normal text-amber-500/90">(Min: ₹1,000)</span>:
                         </label>
-                        <div class="relative">
+                        <div class="relative w-full sm:w-28">
                             <span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-xs text-theme-muted font-mono">₹</span>
                             <input type="number" id="min_amount" name="min_amount" min="1000" step="100"
                                 value="{{ min_amount|default:1000|floatformat:0 }}"
                                 @change="if (Number($event.target.value) < 1000) $event.target.value = 1000"
-                                class="w-24 pl-5 pr-2 rounded-lg border border-theme-border bg-theme-surface text-xs font-semibold py-1.5 text-theme-text focus:ring-amber-500 focus:border-amber-500 cursor-pointer"
+                                class="w-full pl-5 pr-2 rounded-lg border border-theme-border bg-theme-surface text-xs font-semibold py-1.5 text-theme-text focus:ring-amber-500 focus:border-amber-500 cursor-pointer"
                                 title="Exclude transactions below this threshold (minimum: ₹1,000)">
                         </div>
                     </div>
@@ -402,9 +402,9 @@
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 w-full lg:w-auto">
                     <button type="submit"
-                        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all transform hover:-translate-y-0.5 cursor-pointer">
+                        class="w-full sm:w-auto justify-center inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition-all transform hover:-translate-y-0.5 cursor-pointer">
                         <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
                         <span>Trace Money Trail</span>
                     </button>
@@ -630,7 +630,9 @@
                     </span>
                 </div>
 
-                <div id="table-direct-transfers" class="w-full"></div>
+                <div class="w-full overflow-x-auto">
+                    <div id="table-direct-transfers" class="w-full min-w-full"></div>
+                </div>
             </div>
         </div>
 
@@ -659,7 +661,9 @@
                     </span>
                 </div>
 
-                <div id="table-intermediate-transfers" class="w-full"></div>
+                <div class="w-full overflow-x-auto">
+                    <div id="table-intermediate-transfers" class="w-full min-w-full"></div>
+                </div>
             </div>
         </div>
     </div>
