@@ -18,6 +18,167 @@
         }
     </style>
 
+    <div x-data="{
+        isLoading: true,
+        loadingProgress: 0,
+        currentStepIndex: 0,
+        loadingSteps: [
+            { title: 'Scanning Entities', desc: 'Aggregating auditees, vendors, bank vaults & evidentiary records...' },
+            { title: 'Correlating Edges', desc: 'Analyzing transaction histories, communications & shared metadata...' },
+            { title: 'Resolving Clusters', desc: 'Detecting conflict networks, covert conduits & risk synergies...' },
+            { title: 'Compiling Graph', desc: 'Rendering neural topology canvas and forensic dossier...' }
+        ],
+        stepTimer: null,
+        progressTimer: null,
+        getRandomDuration() {
+            // Random duration strictly between 3000ms (3.0s) and 6000ms (6.0s)
+            return Math.floor(Math.random() * 3001) + 3000;
+        },
+        runSequentialLoading(durationMs, onComplete) {
+            this.isLoading = true;
+            this.loadingProgress = 0;
+            this.currentStepIndex = 0;
+            if (this.progressTimer) clearInterval(this.progressTimer);
+            if (this.stepTimer) clearInterval(this.stepTimer);
+
+            const totalDurationMs = durationMs || this.getRandomDuration();
+            const intervalMs = 40;
+            const progressIncrement = (intervalMs / totalDurationMs) * 100;
+
+            this.progressTimer = setInterval(() => {
+                this.loadingProgress = Math.min(100, this.loadingProgress + progressIncrement);
+            }, intervalMs);
+
+            const stepDurationMs = totalDurationMs / 4;
+            this.stepTimer = setInterval(() => {
+                if (this.currentStepIndex < this.loadingSteps.length - 1) {
+                    this.currentStepIndex++;
+                }
+            }, stepDurationMs);
+
+            setTimeout(() => {
+                clearInterval(this.progressTimer);
+                clearInterval(this.stepTimer);
+                this.loadingProgress = 100;
+                this.currentStepIndex = this.loadingSteps.length - 1;
+                this.isLoading = false;
+                if (onComplete) {
+                    onComplete();
+                }
+                if (typeof resetGraphView === 'function') {
+                    resetGraphView();
+                }
+            }, totalDurationMs);
+        },
+        navigateWithDelay(url) {
+            const randomDuration = this.getRandomDuration();
+            this.runSequentialLoading(randomDuration, () => {
+                window.location.href = url;
+            });
+        },
+        init() {
+            window.qLinkApp = this;
+            // Display loading screen every time Q-Link app is opened with random 3-6 seconds duration
+            const randomDuration = this.getRandomDuration();
+            this.runSequentialLoading(randomDuration, () => {
+                this.isLoading = false;
+                if (typeof resetGraphView === 'function') {
+                    resetGraphView();
+                }
+            });
+        }
+    }">
+
+        <!-- LLM-Style Interactive AI Loading Screen (Matching Q-Trail) -->
+        <div x-show="isLoading"
+            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100"
+            x-transition:leave="transition ease-in duration-200"
+            x-transition:leave-start="opacity-100"
+            x-transition:leave-end="opacity-0"
+            class="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-theme-app/90 dark:bg-zinc-950/85 backdrop-blur-xl select-none">
+
+            <!-- Glowing Animation & Reasoning Thoughts -->
+            <div class="relative flex flex-col items-center max-w-lg px-6 text-center space-y-6">
+                <!-- Glowing Pulsing Orb -->
+                <div class="relative flex items-center justify-center">
+                    <div class="absolute w-36 h-36 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-500 blur-2xl opacity-50 animate-pulse"
+                         style="animation-duration: 2.5s;"></div>
+                    <div class="w-28 h-28 rounded-full border-2 border-dashed border-amber-500/40 animate-spin"
+                         style="animation-duration: 8s;"></div>
+                    <div class="absolute w-20 h-20 rounded-full bg-theme-surface dark:bg-zinc-900/90 border border-amber-500/50 shadow-2xl flex items-center justify-center">
+                        <i class="fa-solid fa-diagram-project text-2xl text-amber-400 animate-bounce"
+                           style="animation-duration: 1.8s;"></i>
+                    </div>
+                </div>
+
+                <!-- Thinking Headline -->
+                <div class="space-y-1.5">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-semibold bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/30 shadow-xs">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+                        <span>AI Reasoning Engine</span>
+                        <span class="text-theme-muted">•</span>
+                        <span>Step <span x-text="currentStepIndex + 1"></span> of 4</span>
+                    </div>
+                    <h3 class="text-xl sm:text-2xl font-black tracking-tight text-theme-text">
+                        Synthesizing Intelligence Graph...
+                    </h3>
+                    <p class="text-xs text-theme-muted">
+                        Correlating multi-source entities, transactions, and evidence trails across modules
+                    </p>
+                </div>
+
+                <!-- Active Step Card -->
+                <div class="w-full bg-theme-surface border border-theme-border rounded-2xl p-4 shadow-xl min-h-[76px] flex items-center justify-center">
+                    <div class="flex items-center gap-3 text-left">
+                        <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                            <i class="fa-solid fa-brain text-sm animate-pulse"></i>
+                        </div>
+                        <div>
+                            <div class="text-xs font-bold text-amber-500 dark:text-amber-400 uppercase tracking-wider"
+                                 x-text="loadingSteps[currentStepIndex].title"></div>
+                            <p class="text-sm font-medium text-theme-text transition-all duration-300"
+                               x-text="loadingSteps[currentStepIndex].desc"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Smooth Progress Bar & Steps -->
+                <div class="w-full max-w-sm space-y-2.5">
+                    <div class="h-2 w-full bg-theme-subtle rounded-full overflow-hidden relative border border-theme-border">
+                        <div class="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 rounded-full transition-all duration-100 ease-out"
+                             :style="`width: ${loadingProgress}%`"></div>
+                    </div>
+                    <!-- 4 Steps Indicators -->
+                    <div class="grid grid-cols-4 gap-1 text-[11px] font-mono">
+                        <template x-for="(step, idx) in loadingSteps" :key="idx">
+                            <div class="flex flex-col items-center gap-1 transition-colors"
+                                 :class="currentStepIndex > idx ? 'text-emerald-500 font-bold' : (currentStepIndex === idx ? 'text-amber-500 font-bold' : 'text-theme-muted opacity-60')">
+                                <span class="flex items-center gap-1">
+                                    <template x-if="currentStepIndex > idx">
+                                        <i class="fa-solid fa-circle-check text-[10px]"></i>
+                                    </template>
+                                    <template x-if="currentStepIndex === idx">
+                                        <i class="fa-solid fa-spinner fa-spin text-[10px]"></i>
+                                    </template>
+                                    <template x-if="currentStepIndex < idx">
+                                        <i class="fa-regular fa-circle text-[10px]"></i>
+                                    </template>
+                                    <span class="truncate" x-text="step.title"></span>
+                                </span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Note -->
+                <p class="text-[11px] text-zinc-500 italic">
+                    Please wait a moment while the multi-tool intelligence graph is synthesized.
+                </p>
+            </div>
+        </div>
+
     <!-- Page Header -->
     <c-page_header title="Q-Link"
         subtitle="Autonomous multi-tool correlation graph and evidence intelligence engine."
@@ -48,11 +209,13 @@
                 <!-- Audit vs All Profiles Toggle Switch -->
                 <div class="inline-flex p-0.5 rounded-xl bg-theme-surface border border-theme-border text-xs shadow-xs">
                     <a href="?mode={{ mode }}&scope=audit{% if keyword %}&keyword={{ keyword }}{% endif %}"
+                       @click.prevent="navigateWithDelay($event.currentTarget.href)"
                        class="px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 {% if scope != 'all' %}bg-theme-border text-theme-text font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}">
                         <i class="fa-solid fa-folder-tree text-[10px]"></i>
                         <span>Audit: {{ active_audit.name }} ({{ audit_profiles_count }})</span>
                     </a>
                     <a href="?mode={{ mode }}&scope=all{% if keyword %}&keyword={{ keyword }}{% endif %}"
+                       @click.prevent="navigateWithDelay($event.currentTarget.href)"
                        class="px-2.5 py-1.5 rounded-lg font-semibold transition flex items-center gap-1.5 {% if scope == 'all' %}bg-theme-border text-theme-text font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}">
                         <i class="fa-solid fa-globe text-[10px]"></i>
                         <span>All ({{ total_entities }})</span>
@@ -1618,6 +1781,11 @@
                 kwInput.focus();
             }
 
+            if (window.qLinkApp && typeof window.qLinkApp.runSequentialLoading === 'function') {
+                const duration = window.qLinkApp.getRandomDuration();
+                window.qLinkApp.runSequentialLoading(duration);
+            }
+
             loadGraphData(newMode, kw);
 
             const url = new URL(window.location.href);
@@ -2049,5 +2217,5 @@
             refreshGraphTheme();
         });
     </script>
-
+    </div>
 </c-base>
