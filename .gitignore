@@ -28,4 +28,5 @@ apps/q_ledger/cache/
 # Prototypes and scratch mockups
 *Interactive Prototype*.html
 scratch/
-*.pst
+*.pst
+screenshots/
