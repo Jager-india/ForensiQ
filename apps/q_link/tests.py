@@ -912,8 +912,17 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
         # Check modern card-node canvas & dot grid matrix
         self.assertIn('id="qlink-canvas"', content)
         self.assertIn("radial-gradient", content)
-        # Check floating "Signal & Entity Types" legend card
-        self.assertIn("Signal & Entity Types", content)
+        # Check no split-screen layout (no 12-col screen split)
+        self.assertNotIn("lg:grid-cols-12", content)
+        # Check off-canvas workstation slide-over drawer
+        self.assertIn('id="workstation-drawer"', content)
+        self.assertIn("openWorkstationDrawer", content)
+        # Check floating Image 2 Signal legend card
+        self.assertIn("Signal", content)
+        self.assertIn("Healthy (Verified)", content)
+        self.assertIn("Degraded (Risk)", content)
+        self.assertIn("Failing (Layering)", content)
+        self.assertIn("Request path", content)
         # Check Archivus-style evidence reader drawer
         self.assertIn('id="evidence-reader-drawer"', content)
         self.assertIn('id="reader-spotlight-box"', content)

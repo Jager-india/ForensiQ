@@ -86,314 +86,365 @@
             color="rose" subtitle="High-Risk Synergies" />
     </div>
 
-    <!-- Main Workspace Grid: Interactive Canvas + Tabbed Intelligence Panel -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <!-- Main Workspace Container: Full-Width Network Canvas (No Screen Split - Matching Reference Design) -->
+    <div class="space-y-4 w-full">
 
-        <!-- Left/Center: Knowledge Graph Canvas (8 Cols) -->
-        <div class="lg:col-span-8 space-y-4">
-            <div class="bg-theme-surface border border-theme-border rounded-2xl shadow-xl overflow-hidden relative">
-                
-                <!-- Canvas Top Bar Controls -->
-                <div class="p-3.5 bg-theme-subtle border-b border-theme-border flex flex-wrap items-center justify-between gap-3">
-                    <div class="flex flex-wrap items-center gap-2.5">
-                        <!-- Active Mode Badge -->
-                        <span id="active-mode-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-mono font-bold">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                            <span id="active-mode-label">{% if mode == 'keyword' %}1. KEYWORD INTERLINKS{% elif mode == 'global' %}3. GLOBAL VAULT{% else %}2. AUDIT TOPOLOGY{% endif %}</span>
-                        </span>
+        <!-- Knowledge Graph Canvas Container (Full Width Edge-to-Edge) -->
+        <div class="bg-theme-surface border border-theme-border rounded-2xl shadow-xl overflow-hidden relative">
+            
+            <!-- Canvas Top Bar Controls -->
+            <div class="p-3.5 bg-theme-subtle border-b border-theme-border flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <!-- Active Mode Badge -->
+                    <span id="active-mode-badge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-mono font-bold">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                        <span id="active-mode-label">{% if mode == 'keyword' %}1. KEYWORD INTERLINKS{% elif mode == 'global' %}3. GLOBAL VAULT{% else %}2. AUDIT TOPOLOGY{% endif %}</span>
+                    </span>
 
-                        <!-- Mode 1 / General Keyword Search Input -->
-                        <div class="relative flex items-center" id="keyword-search-container">
-                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-theme-muted"></i>
-                            <input type="text" id="mode1-keyword-search" value="{{ keyword }}" placeholder="Search keyword (e.g. Metec, Palani)..."
-                                onkeydown="if(event.key==='Enter'){ executeKeywordSearch(); }"
-                                class="bg-theme-surface border border-theme-border text-xs text-theme-text pl-8 pr-16 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-52 sm:w-64" />
-                            <button type="button" onclick="executeKeywordSearch()"
-                                class="absolute right-1 top-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold transition cursor-pointer">
-                                Search
-                            </button>
-                        </div>
-
-                        <!-- Canvas In-View Quick Filter -->
-                        <div class="relative hidden xl:block">
-                            <i class="fa-solid fa-filter absolute left-2.5 top-2.5 text-xs text-theme-muted"></i>
-                            <input type="text" id="entity-search-input" placeholder="Find node..."
-                                oninput="filterGraphNodes(this.value)"
-                                class="bg-theme-surface border border-theme-border text-xs text-theme-text pl-7 pr-2.5 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-32" />
-                        </div>
+                    <!-- Mode 1 / General Keyword Search Input -->
+                    <div class="relative flex items-center" id="keyword-search-container">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-theme-muted"></i>
+                        <input type="text" id="mode1-keyword-search" value="{{ keyword }}" placeholder="Search keyword (e.g. Metec, Palani)..."
+                            onkeydown="if(event.key==='Enter'){ executeKeywordSearch(); }"
+                            class="bg-theme-surface border border-theme-border text-xs text-theme-text pl-8 pr-16 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-52 sm:w-64" />
+                        <button type="button" onclick="executeKeywordSearch()"
+                            class="absolute right-1 top-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold transition cursor-pointer">
+                            Search
+                        </button>
                     </div>
 
-                    <!-- Canvas Quick Filters -->
-                    <div class="flex items-center gap-1.5 text-xs">
+                    <!-- Canvas In-View Quick Filter -->
+                    <div class="relative hidden xl:block">
+                        <i class="fa-solid fa-filter absolute left-2.5 top-2.5 text-xs text-theme-muted"></i>
+                        <input type="text" id="entity-search-input" placeholder="Find node..."
+                            oninput="filterGraphNodes(this.value)"
+                            class="bg-theme-surface border border-theme-border text-xs text-theme-text pl-7 pr-2.5 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-32" />
+                    </div>
+                </div>
+
+                <!-- Canvas Quick Filters & Off-Canvas Workstation Triggers -->
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <div class="flex items-center gap-1.5">
                         <button type="button" onclick="setEntityFilter('ALL', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold transition">All</button>
-                        <button type="button" onclick="setEntityFilter('EMPLOYEE', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-subtle text-theme-muted hover:text-theme-text transition">Employees</button>
-                        <button type="button" onclick="setEntityFilter('VENDOR', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-subtle text-theme-muted hover:text-theme-text transition">Vendors</button>
-                        <button type="button" onclick="setEntityFilter('BANK_ACCOUNT', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-subtle text-theme-muted hover:text-theme-text transition">Accounts</button>
-                        <button type="button" onclick="setEntityFilter('DOCUMENT', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-subtle text-theme-muted hover:text-theme-text transition">Documents</button>
-                        <button type="button" onclick="togglePhysics()" id="btn-physics" class="px-2.5 py-1 rounded-lg bg-theme-subtle text-theme-muted hover:text-theme-text border border-theme-border transition" title="Toggle Graph Physics">
+                        <button type="button" onclick="setEntityFilter('EMPLOYEE', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-surface text-theme-muted hover:text-theme-text transition">Employees</button>
+                        <button type="button" onclick="setEntityFilter('VENDOR', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-surface text-theme-muted hover:text-theme-text transition">Vendors</button>
+                        <button type="button" onclick="setEntityFilter('BANK_ACCOUNT', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-surface text-theme-muted hover:text-theme-text transition">Accounts</button>
+                        <button type="button" onclick="setEntityFilter('DOCUMENT', this)" class="filter-chip px-2.5 py-1 rounded-lg bg-theme-surface text-theme-muted hover:text-theme-text transition">Documents</button>
+                        <button type="button" onclick="togglePhysics()" id="btn-physics" class="px-2.5 py-1 rounded-lg bg-theme-surface text-theme-muted hover:text-theme-text border border-theme-border transition" title="Toggle Graph Physics">
                             <i class="fa-solid fa-atom mr-1 text-cyan-400"></i><span id="text-physics">Freeze</span>
                         </button>
                     </div>
-                </div>
 
-                <!-- Active Mode Information & Interlinks Status Banner -->
-                <div id="mode-status-banner" class="px-3.5 py-2 bg-theme-subtle border-b border-theme-border flex flex-wrap items-center justify-between text-xs text-theme-text gap-2">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-link text-amber-600 dark:text-amber-400 text-xs" id="mode-status-icon"></i>
-                        <span class="font-bold text-amber-700 dark:text-amber-400 font-mono tracking-wide" id="mode-status-title">Keyword Interlinks</span>
-                        <span class="text-theme-muted hidden sm:inline">•</span>
-                        <span class="text-theme-muted text-[11px] hidden sm:inline" id="mode-status-desc">Correlating cross-module entities sharing active audit keywords</span>
-                    </div>
-                    <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-theme-surface text-theme-muted border border-theme-border" id="mode-status-count">
-                        Discovering Interlinks...
-                    </span>
-                </div>
+                    <div class="h-4 w-px bg-theme-border hidden sm:block"></div>
 
-                <!-- Vis.js Graph Rendering Container with Matrix Dot Grid -->
-                <div id="qlink-canvas" class="w-full h-[620px] bg-theme-surface relative transition-colors duration-200"></div>
-
-                <!-- Floating "Signal & Entity Types" Legend Card (Matching Image 3) -->
-                <div class="absolute top-16 right-4 z-20 bg-theme-surface/90 dark:bg-slate-900/90 backdrop-blur-md border border-theme-border rounded-2xl p-3.5 shadow-xl text-xs space-y-3 pointer-events-auto max-w-[240px]">
-                    <div class="flex items-center justify-between border-b border-theme-border pb-2">
-                        <span class="font-bold text-[11px] text-theme-text uppercase tracking-wider flex items-center gap-1.5">
-                            <i class="fa-solid fa-layer-group text-amber-500"></i> Signal & Entity Types
-                        </span>
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    </div>
-                    <div class="space-y-1.5 text-[11px]">
-                        <div class="flex items-center gap-2 text-theme-text">
-                            <span class="w-5 h-5 rounded-lg bg-[#0ea5e9]/20 border border-[#0ea5e9]/40 flex items-center justify-center text-[#0ea5e9] text-[10px]"><i class="fa-solid fa-user"></i></span>
-                            <span>Employee / Auditee</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-theme-text">
-                            <span class="w-5 h-5 rounded-lg bg-[#f59e0b]/20 border border-[#f59e0b]/40 flex items-center justify-center text-[#f59e0b] text-[10px]"><i class="fa-solid fa-user-tie"></i></span>
-                            <span>Vendor Person</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-theme-text">
-                            <span class="w-5 h-5 rounded-lg bg-[#f97316]/20 border border-[#f97316]/40 flex items-center justify-center text-[#f97316] text-[10px]"><i class="fa-solid fa-building"></i></span>
-                            <span>Vendor Company</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-theme-text">
-                            <span class="w-5 h-5 rounded-lg bg-[#10b981]/20 border border-[#10b981]/40 flex items-center justify-center text-[#10b981] text-[10px]"><i class="fa-solid fa-building-columns"></i></span>
-                            <span>Bank Account</span>
-                        </div>
-                        <div class="flex items-center gap-2 text-theme-text">
-                            <span class="w-5 h-5 rounded-lg bg-[#f43f5e]/20 border border-[#f43f5e]/40 flex items-center justify-center text-[#f43f5e] text-[10px]"><i class="fa-solid fa-file-lines"></i></span>
-                            <span>Document / File</span>
-                        </div>
-                    </div>
-                    <div class="pt-2 border-t border-theme-border space-y-1 text-[10px] text-theme-muted font-mono">
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> <span>Substantiated Lead</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-amber-500"></span> <span>Flagged / High Risk</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span> <span>Rapid Layering Hop</span>
-                        </div>
+                    <!-- Workstation Panel Slide-over Trigger Buttons -->
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" onclick="openWorkstationDrawer('copilot')"
+                            class="px-2.5 py-1 rounded-lg bg-theme-surface hover:bg-theme-border text-theme-text border border-theme-border flex items-center gap-1.5 font-semibold transition cursor-pointer shadow-xs">
+                            <i class="fa-solid fa-robot text-amber-500"></i>
+                            <span>Copilot</span>
+                        </button>
+                        <button type="button" onclick="openWorkstationDrawer('inspector')"
+                            class="px-2.5 py-1 rounded-lg bg-theme-surface hover:bg-theme-border text-theme-text border border-theme-border flex items-center gap-1.5 font-semibold transition cursor-pointer shadow-xs">
+                            <i class="fa-solid fa-address-card text-cyan-500"></i>
+                            <span>Inspector</span>
+                        </button>
+                        <button type="button" onclick="openWorkstationDrawer('alerts')"
+                            class="px-2.5 py-1 rounded-lg bg-theme-surface hover:bg-theme-border text-theme-text border border-theme-border flex items-center gap-1.5 font-semibold transition cursor-pointer shadow-xs relative">
+                            <i class="fa-solid fa-bell text-rose-500"></i>
+                            <span>Alerts</span>
+                            {% if unack_alerts > 0 %}
+                                <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                            {% endif %}
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Bottom: Reconstructed Timeline Rail -->
-            <div class="bg-theme-surface border border-theme-border rounded-2xl p-4">
-                <div class="flex items-center justify-between mb-3 border-b border-theme-border pb-2.5">
-                    <div class="flex items-center gap-2">
-                        <i class="fa-solid fa-timeline text-amber-400 text-sm"></i>
-                        <h4 class="font-bold text-sm text-theme-text">Reconstructed Timeline Sequence</h4>
-                    </div>
-                    <span class="text-xs text-theme-muted font-mono" id="timeline-count-badge">Select a node or view recent</span>
+            <!-- Active Mode Information & Interlinks Status Banner -->
+            <div id="mode-status-banner" class="px-3.5 py-2 bg-theme-subtle border-b border-theme-border flex flex-wrap items-center justify-between text-xs text-theme-text gap-2">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-link text-amber-600 dark:text-amber-400 text-xs" id="mode-status-icon"></i>
+                    <span class="font-bold text-amber-700 dark:text-amber-400 font-mono tracking-wide" id="mode-status-title">Keyword Interlinks</span>
+                    <span class="text-theme-muted hidden sm:inline">•</span>
+                    <span class="text-theme-muted text-[11px] hidden sm:inline" id="mode-status-desc">Correlating cross-module entities sharing active audit keywords</span>
                 </div>
-                <div id="timeline-stream-container" class="space-y-2 max-h-44 overflow-y-auto pr-2 text-xs">
-                    <div class="text-theme-muted italic py-3 text-center">Click on any entity or run a query in Copilot to inspect the event timeline.</div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-theme-surface text-theme-muted border border-theme-border" id="mode-status-count">
+                    Discovering Interlinks...
+                </span>
+            </div>
+
+            <!-- Vis.js Graph Rendering Container with Matrix Dot Grid (Full Width & Expansive Height) -->
+            <div id="qlink-canvas" class="w-full h-[740px] bg-theme-surface relative transition-colors duration-200"></div>
+
+            <!-- Floating "Signal" Legend Card (Matching Image 2 Reference) -->
+            <div class="absolute top-16 right-4 z-20 bg-theme-surface/95 dark:bg-slate-900/95 backdrop-blur-md border border-theme-border rounded-2xl p-4 shadow-xl text-xs space-y-3 pointer-events-auto min-w-[185px]">
+                <div class="flex items-center justify-between border-b border-theme-border pb-2">
+                    <span class="font-bold text-xs text-theme-text flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Signal
+                    </span>
+                    <span class="text-[10px] text-theme-muted font-mono">Signal & Entity Types</span>
+                </div>
+                
+                <!-- 5 Status Dots from Image 2 Reference -->
+                <div class="space-y-1.5 text-[11px] font-medium text-theme-text">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <span>Healthy (Verified)</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                        <span>Degraded (Risk)</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                        <span>Failing (Layering)</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                        <span>Idle (External)</span>
+                    </div>
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
+                        <span>Request path</span>
+                    </div>
+                </div>
+
+                <!-- Quick Entity Types Reference -->
+                <div class="pt-2 border-t border-theme-border space-y-1 text-[10px] text-theme-muted font-mono">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-user text-cyan-500 text-[10px]"></i> <span>Employee / Auditee</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-building text-amber-500 text-[10px]"></i> <span>Vendor Partner</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-building-columns text-emerald-500 text-[10px]"></i> <span>Bank Account</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-file-lines text-rose-500 text-[10px]"></i> <span>Document / PO</span>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Right: Intelligence Workstation Panel (4 Cols) -->
-        <div class="lg:col-span-4 space-y-4">
-            
-            <div class="bg-theme-surface border border-theme-border rounded-2xl overflow-hidden shadow-xl"
-                x-data="{ activeTab: 'copilot' }"
-                @switch-panel-tab.window="activeTab = $event.detail">
-                
-                <!-- Panel Tab Navigation -->
-                <div class="flex border-b border-theme-border bg-theme-subtle p-1.5 text-xs font-semibold">
-                    <button type="button" @click="activeTab = 'copilot'"
-                        :class="activeTab === 'copilot' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
-                        class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-robot text-xs"></i>
-                        <span>Copilot Agent</span>
-                    </button>
-                    <button type="button" @click="activeTab = 'inspector'"
-                        :class="activeTab === 'inspector' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
-                        class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
-                        <i class="fa-solid fa-address-card text-xs"></i>
-                        <span>Inspector</span>
-                    </button>
-                    <button type="button" @click="activeTab = 'alerts'"
-                        :class="activeTab === 'alerts' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
-                        class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative">
-                        <i class="fa-solid fa-bell text-xs"></i>
-                        <span>Alerts</span>
-                        {% if unack_alerts > 0 %}
-                            <span class="w-2 h-2 rounded-full bg-rose-500 ml-1"></span>
-                        {% endif %}
-                    </button>
+        <!-- Bottom: Reconstructed Timeline Rail (Full Width) -->
+        <div class="bg-theme-surface border border-theme-border rounded-2xl p-4 shadow-md">
+            <div class="flex items-center justify-between mb-3 border-b border-theme-border pb-2.5">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-timeline text-amber-400 text-sm"></i>
+                    <h4 class="font-bold text-sm text-theme-text">Reconstructed Timeline Sequence</h4>
                 </div>
-
-                <!-- Tab 1: Forensic Copilot (Agentic Tool-Calling) -->
-                <div x-show="activeTab === 'copilot'" class="p-4 space-y-4">
-                    <div class="flex items-center justify-between text-xs text-theme-muted pb-2 border-b border-theme-border">
-                        <span class="flex items-center gap-1.5 text-cyan-500 font-mono">
-                            <i class="fa-solid fa-microchip"></i> Tool Calling Engine
-                        </span>
-                        <span class="text-[11px] text-theme-muted">Autonomous Multi-Tool Agent</span>
-                    </div>
-
-                    <!-- Chat Message Stream -->
-                    <div id="copilot-stream" class="space-y-3 max-h-[460px] overflow-y-auto pr-1 text-xs">
-                        <!-- Welcome Message -->
-                        <div class="bg-theme-subtle border border-theme-border rounded-xl p-3 text-theme-text space-y-2">
-                            <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-xs">
-                                <i class="fa-solid fa-shield-halved"></i> ForensiQ Copilot Ready
-                            </div>
-                            <p class="text-theme-muted leading-relaxed text-[11px]">
-                                I autonomously connect evidence across Q-Bank, Q-Ledger, Q-Mail, Q-Trail, and Q-Verify using structured tool calls.
-                            </p>
-                            <div class="pt-1.5 border-t border-theme-border">
-                                <span class="text-[10px] uppercase font-mono text-theme-muted tracking-wider">Suggested Queries:</span>
-                                <div class="flex flex-col gap-1.5 mt-1.5">
-                                    <button type="button" onclick="sendCopilotPrompt('Investigate Arun Kumar and detect all connected entities and fund flows.')"
-                                        class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
-                                        👉 Investigate Arun Kumar's network & fund flows
-                                    </button>
-                                    <button type="button" onclick="sendCopilotPrompt('Detect conflicts of interest and vendor connections for active auditees.')"
-                                        class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
-                                        👉 Detect employee-vendor nexus & PO transactions
-                                    </button>
-                                    <button type="button" onclick="sendCopilotPrompt('Identify any documents with PDF tampering or altered metadata.')"
-                                        class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
-                                        👉 Trace tampered PDF documents and associated auditees
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Agent Input Box -->
-                    <form onsubmit="handleCopilotSubmit(event)" class="relative pt-2">
-                        <input type="text" id="copilot-input" placeholder="Ask Copilot (e.g. 'Trace Vendor ABC hops')..."
-                            class="w-full bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2.5 text-xs text-theme-text placeholder-theme-muted focus:outline-none focus:border-amber-400 pr-10" />
-                        <button type="submit" id="btn-copilot-send"
-                            class="absolute right-2 top-4 p-1.5 text-amber-400 hover:text-amber-300 rounded-lg transition cursor-pointer">
-                            <i class="fa-solid fa-paper-plane text-xs"></i>
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Tab 2: Entity Inspector & Traceability Drawer -->
-                <div x-show="activeTab === 'inspector'" class="p-4 space-y-4">
-                    <div id="inspector-placeholder" class="text-center py-12 text-theme-muted space-y-2">
-                        <i class="fa-solid fa-crosshairs text-2xl text-theme-muted"></i>
-                        <p class="text-xs">Click on any node in the canvas to inspect its complete forensic dossier and original evidence pointers.</p>
-                    </div>
-
-                    <div id="inspector-content" class="hidden space-y-4 text-xs">
-                        <!-- Entity Header -->
-                        <div class="bg-theme-subtle border border-theme-border rounded-xl p-3.5">
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <span id="inspect-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"></span>
-                                    <h3 id="inspect-name" class="font-bold text-sm text-theme-text mt-1"></h3>
-                                    <p id="inspect-identifier" class="text-[11px] text-theme-muted font-mono mt-0.5"></p>
-                                </div>
-                                <div class="text-right">
-                                    <span class="text-[10px] text-theme-muted uppercase font-mono block">Risk Rating</span>
-                                    <span id="inspect-risk" class="text-base font-extrabold text-amber-600 dark:text-amber-400 font-mono"></span>
-                                </div>
-                            </div>
-
-                            <div id="inspect-aliases-box" class="mt-2.5 pt-2 border-t border-theme-border text-[11px]">
-                                <span class="text-theme-muted font-semibold">Aliases / Variants:</span>
-                                <div id="inspect-aliases" class="flex flex-wrap gap-1 mt-1"></div>
-                            </div>
-
-                            <div id="inspect-tags-box" class="mt-2 pt-2 border-t border-theme-border text-[11px]">
-                                <span class="text-theme-muted font-semibold block mb-1">Forensic Flags & Tags:</span>
-                                <div id="inspect-tags-list" class="flex flex-wrap gap-1 mt-1"></div>
-                            </div>
-                        </div>
-
-                        <!-- Direct Connections -->
-                        <div class="space-y-1.5">
-                            <span class="font-bold text-theme-text text-xs flex items-center gap-1.5">
-                                <i class="fa-solid fa-diagram-next text-amber-500 dark:text-amber-400"></i> Direct Relationships
-                            </span>
-                            <div id="inspect-relations-list" class="space-y-1.5 max-h-40 overflow-y-auto pr-1"></div>
-                        </div>
-
-                        <!-- Underlying Evidence Citations -->
-                        <div class="space-y-1.5">
-                            <span class="font-bold text-theme-text text-xs flex items-center gap-1.5">
-                                <i class="fa-solid fa-file-shield text-emerald-500 dark:text-emerald-400"></i> Evidence Pointers (1-Click Drill Down)
-                            </span>
-                            <div id="inspect-evidence-list" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tab 3: Alerts & Notification Center -->
-                <div x-show="activeTab === 'alerts'" class="p-4 space-y-3">
-                    <div class="flex items-center justify-between text-xs text-theme-muted pb-2 border-b border-theme-border">
-                        <span class="font-bold text-theme-text">Continuous Monitoring Alerts</span>
-                        <span class="text-[11px] text-theme-muted">{{ alerts.count }} Triggered</span>
-                    </div>
-
-                    <div class="space-y-2.5 max-h-[480px] overflow-y-auto pr-1 text-xs">
-                        {% for alert in alerts %}
-                            <div class="bg-theme-subtle border {% if alert.alert_level == 'CRITICAL' %}border-rose-500/40{% elif alert.alert_level == 'HIGH' %}border-amber-500/40{% else %}border-theme-border{% endif %} rounded-xl p-3 space-y-2"
-                                id="alert-card-{{ alert.id }}">
-                                <div class="flex items-start justify-between gap-2">
-                                    <span class="font-bold text-xs {% if alert.alert_level == 'CRITICAL' %}text-rose-400{% else %}text-amber-400{% endif %}">
-                                        {{ alert.title }}
-                                    </span>
-                                    <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-theme-surface border border-theme-border text-theme-text">
-                                        Risk {{ alert.risk_score }}
-                                    </span>
-                                </div>
-                                <p class="text-[11px] text-theme-text leading-snug">{{ alert.trigger_reason }}</p>
-                                {% if alert.ai_summary %}
-                                    <p class="text-[11px] text-theme-muted bg-theme-surface p-2 rounded border border-theme-border italic">
-                                        "{{ alert.ai_summary }}"
-                                    </p>
-                                {% endif %}
-                                <div class="flex items-center justify-between pt-1 border-t border-theme-border text-[10px] text-theme-muted">
-                                    <span>{{ alert.created_at|date:"M d, Y H:i" }}</span>
-                                    {% if not alert.is_acknowledged %}
-                                        <button type="button" onclick="acknowledgeAlert('{{ alert.id }}')"
-                                            class="text-amber-400 hover:text-amber-300 font-semibold cursor-pointer">
-                                            Acknowledge →
-                                        </button>
-                                    {% else %}
-                                        <span class="text-emerald-400">Acknowledged</span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        {% empty %}
-                            <div class="text-center py-10 text-theme-muted text-xs">
-                                <i class="fa-solid fa-circle-check text-xl text-theme-muted mb-1"></i>
-                                <p>No active critical alerts. No suspicious items found.</p>
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-
+                <span class="text-xs text-theme-muted font-mono" id="timeline-count-badge">Select a node or view recent</span>
+            </div>
+            <div id="timeline-stream-container" class="space-y-2 max-h-48 overflow-y-auto pr-2 text-xs">
+                <div class="text-theme-muted italic py-3 text-center">Click on any entity or run a query in Copilot to inspect the event timeline.</div>
             </div>
         </div>
 
     </div>
+
+    <!-- Slide-out Side Drawer: Intelligence Workstation (Copilot Agent, Entity Inspector, Continuous Alerts) -->
+    <div id="workstation-drawer"
+        x-data="{ activeTab: 'copilot', isOpen: false }"
+        @open-workstation.window="isOpen = true; if($event.detail) activeTab = $event.detail;"
+        @close-workstation.window="isOpen = false"
+        @switch-panel-tab.window="isOpen = true; if($event.detail) activeTab = $event.detail;"
+        :class="isOpen ? 'translate-x-0' : 'translate-x-full'"
+        class="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] md:w-[520px] bg-theme-surface border-l border-theme-border shadow-2xl transform transition-transform duration-300 ease-in-out flex flex-col">
+        
+        <!-- Workstation Drawer Header -->
+        <div class="p-3.5 border-b border-theme-border flex items-center justify-between bg-theme-subtle">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-microchip text-amber-500"></i>
+                <h3 class="font-bold text-sm text-theme-text">Forensic Intelligence Workstation</h3>
+            </div>
+            <button type="button" onclick="closeWorkstationDrawer()"
+                class="p-1.5 rounded-lg text-theme-muted hover:text-theme-text hover:bg-theme-surface transition cursor-pointer" title="Close Drawer (Esc)">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+
+        <!-- Panel Tab Navigation -->
+        <div class="flex border-b border-theme-border bg-theme-subtle p-1.5 text-xs font-semibold">
+            <button type="button" @click="activeTab = 'copilot'"
+                :class="activeTab === 'copilot' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
+                class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-robot text-xs"></i>
+                <span>Copilot Agent</span>
+            </button>
+            <button type="button" @click="activeTab = 'inspector'"
+                :class="activeTab === 'inspector' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
+                class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-address-card text-xs"></i>
+                <span>Inspector</span>
+            </button>
+            <button type="button" @click="activeTab = 'alerts'"
+                :class="activeTab === 'alerts' ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20' : 'text-theme-muted hover:text-theme-text'"
+                class="flex-1 py-2 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer relative">
+                <i class="fa-solid fa-bell text-xs"></i>
+                <span>Alerts</span>
+                {% if unack_alerts > 0 %}
+                    <span class="w-2 h-2 rounded-full bg-rose-500 ml-1"></span>
+                {% endif %}
+            </button>
+        </div>
+
+        <!-- Tab Body Content -->
+        <div class="flex-1 overflow-y-auto">
+            <!-- Tab 1: Forensic Copilot (Agentic Tool-Calling) -->
+            <div x-show="activeTab === 'copilot'" class="p-4 space-y-4">
+                <div class="flex items-center justify-between text-xs text-theme-muted pb-2 border-b border-theme-border">
+                    <span class="flex items-center gap-1.5 text-cyan-500 font-mono">
+                        <i class="fa-solid fa-microchip"></i> Tool Calling Engine
+                    </span>
+                    <span class="text-[11px] text-theme-muted">Autonomous Multi-Tool Agent</span>
+                </div>
+
+                <!-- Chat Message Stream -->
+                <div id="copilot-stream" class="space-y-3 max-h-[460px] overflow-y-auto pr-1 text-xs">
+                    <!-- Welcome Message -->
+                    <div class="bg-theme-subtle border border-theme-border rounded-xl p-3 text-theme-text space-y-2">
+                        <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-xs">
+                            <i class="fa-solid fa-shield-halved"></i> ForensiQ Copilot Ready
+                        </div>
+                        <p class="text-theme-muted leading-relaxed text-[11px]">
+                            I autonomously connect evidence across Q-Bank, Q-Ledger, Q-Mail, Q-Trail, and Q-Verify using structured tool calls.
+                        </p>
+                        <div class="pt-1.5 border-t border-theme-border">
+                            <span class="text-[10px] uppercase font-mono text-theme-muted tracking-wider">Suggested Queries:</span>
+                            <div class="flex flex-col gap-1.5 mt-1.5">
+                                <button type="button" onclick="sendCopilotPrompt('Investigate Arun Kumar and detect all connected entities and fund flows.')"
+                                    class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
+                                    👉 Investigate Arun Kumar's network & fund flows
+                                </button>
+                                <button type="button" onclick="sendCopilotPrompt('Detect conflicts of interest and vendor connections for active auditees.')"
+                                    class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
+                                    👉 Detect employee-vendor nexus & PO transactions
+                                </button>
+                                <button type="button" onclick="sendCopilotPrompt('Identify any documents with PDF tampering or altered metadata.')"
+                                    class="text-left px-2 py-1 rounded bg-theme-surface hover:bg-theme-subtle text-amber-600 dark:text-amber-300 text-[11px] border border-theme-border transition">
+                                    👉 Trace tampered PDF documents and associated auditees
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agent Input Box -->
+                <form onsubmit="handleCopilotSubmit(event)" class="relative pt-2">
+                    <input type="text" id="copilot-input" placeholder="Ask Copilot (e.g. 'Trace Vendor ABC hops')..."
+                        class="w-full bg-theme-surface border border-theme-border rounded-xl px-3.5 py-2.5 text-xs text-theme-text placeholder-theme-muted focus:outline-none focus:border-amber-400 pr-10" />
+                    <button type="submit" id="btn-copilot-send"
+                        class="absolute right-2 top-4 p-1.5 text-amber-400 hover:text-amber-300 rounded-lg transition cursor-pointer">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Tab 2: Entity Inspector & Traceability Drawer -->
+            <div x-show="activeTab === 'inspector'" class="p-4 space-y-4">
+                <div id="inspector-placeholder" class="text-center py-12 text-theme-muted space-y-2">
+                    <i class="fa-solid fa-crosshairs text-2xl text-theme-muted"></i>
+                    <p class="text-xs">Click on any node in the canvas to inspect its complete forensic dossier and original evidence pointers.</p>
+                </div>
+
+                <div id="inspector-content" class="hidden space-y-4 text-xs">
+                    <!-- Entity Header -->
+                    <div class="bg-theme-subtle border border-theme-border rounded-xl p-3.5">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <span id="inspect-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20"></span>
+                                <h3 id="inspect-name" class="font-bold text-sm text-theme-text mt-1"></h3>
+                                <p id="inspect-identifier" class="text-[11px] text-theme-muted font-mono mt-0.5"></p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] text-theme-muted uppercase font-mono block">Risk Rating</span>
+                                <span id="inspect-risk" class="text-base font-extrabold text-amber-600 dark:text-amber-400 font-mono"></span>
+                            </div>
+                        </div>
+
+                        <div id="inspect-aliases-box" class="mt-2.5 pt-2 border-t border-theme-border text-[11px]">
+                            <span class="text-theme-muted font-semibold">Aliases / Variants:</span>
+                            <div id="inspect-aliases" class="flex flex-wrap gap-1 mt-1"></div>
+                        </div>
+
+                        <div id="inspect-tags-box" class="mt-2 pt-2 border-t border-theme-border text-[11px]">
+                            <span class="text-theme-muted font-semibold block mb-1">Forensic Flags & Tags:</span>
+                            <div id="inspect-tags-list" class="flex flex-wrap gap-1 mt-1"></div>
+                        </div>
+                    </div>
+
+                    <!-- Direct Connections -->
+                    <div class="space-y-1.5">
+                        <span class="font-bold text-theme-text text-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-diagram-next text-amber-500 dark:text-amber-400"></i> Direct Relationships
+                        </span>
+                        <div id="inspect-relations-list" class="space-y-1.5 max-h-40 overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <!-- Underlying Evidence Citations -->
+                    <div class="space-y-1.5">
+                        <span class="font-bold text-theme-text text-xs flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-shield text-emerald-500 dark:text-emerald-400"></i> Evidence Pointers (1-Click Drill Down)
+                        </span>
+                        <div id="inspect-evidence-list" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Alerts & Notification Center -->
+            <div x-show="activeTab === 'alerts'" class="p-4 space-y-3">
+                <div class="flex items-center justify-between text-xs text-theme-muted pb-2 border-b border-theme-border">
+                    <span class="font-bold text-theme-text">Continuous Monitoring Alerts</span>
+                    <span class="text-[11px] text-theme-muted">{{ alerts.count }} Triggered</span>
+                </div>
+
+                <div class="space-y-2.5 max-h-[480px] overflow-y-auto pr-1 text-xs">
+                    {% for alert in alerts %}
+                        <div class="bg-theme-subtle border {% if alert.alert_level == 'CRITICAL' %}border-rose-500/40{% elif alert.alert_level == 'HIGH' %}border-amber-500/40{% else %}border-theme-border{% endif %} rounded-xl p-3 space-y-2"
+                            id="alert-card-{{ alert.id }}">
+                            <div class="flex items-start justify-between gap-2">
+                                <span class="font-bold text-xs {% if alert.alert_level == 'CRITICAL' %}text-rose-400{% else %}text-amber-400{% endif %}">
+                                    {{ alert.title }}
+                                </span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-theme-surface border border-theme-border text-theme-text">
+                                    Risk {{ alert.risk_score }}
+                                </span>
+                            </div>
+                            <p class="text-[11px] text-theme-text leading-snug">{{ alert.trigger_reason }}</p>
+                            {% if alert.ai_summary %}
+                                <p class="text-[11px] text-theme-muted bg-theme-surface p-2 rounded border border-theme-border italic">
+                                    "{{ alert.ai_summary }}"
+                                </p>
+                            {% endif %}
+                            <div class="flex items-center justify-between pt-1 border-t border-theme-border text-[10px] text-theme-muted">
+                                <span>{{ alert.created_at|date:"M d, Y H:i" }}</span>
+                                {% if not alert.is_acknowledged %}
+                                    <button type="button" onclick="acknowledgeAlert('{{ alert.id }}')"
+                                        class="text-amber-400 hover:text-amber-300 font-semibold cursor-pointer">
+                                        Acknowledge →
+                                    </button>
+                                {% else %}
+                                    <span class="text-emerald-400">Acknowledged</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="text-center py-10 text-theme-muted text-xs">
+                            <i class="fa-solid fa-circle-check text-xl text-theme-muted mb-1"></i>
+                            <p>No active critical alerts. No suspicious items found.</p>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Backdrop for Workstation Drawer -->
+    <div id="workstation-backdrop" onclick="closeWorkstationDrawer()"
+        class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xs z-40 hidden transition-opacity"></div>
 
     <!-- Slide-out Side Drawer: Audit Evidence Trail -->
     <div id="evidence-trail-drawer"
@@ -596,7 +647,7 @@
                 .replace(/'/g, '&apos;');
         }
 
-        // Generate Modern Card Node SVG (Matching Image 3)
+        // Generate Modern Card Node SVG (Matching Image 2 Reference)
         function generateNodeSvg(n, state = "normal") {
             const dark = isDarkMode();
             
@@ -624,101 +675,126 @@
             const isExternal = Boolean(n.is_external);
             const riskRating = Number(n.risk || 0);
 
-            // Squircle Badge Background and Icon Type
-            let badgeBg = "#0ea5e9"; // Sky Blue
+            // Subtitle text (compact metadata matching Image 2, e.g. "primary", "v4.2.0", "p99 84ms")
+            let roleText = isTarget ? "Auditee" : "Employee";
             let iconType = "user";
-            let roleText = isTarget ? "Auditee (Target)" : "Employee";
 
             if (profCat === "VENDOR_EMPLOYEE" || nType === "VENDOR_EMPLOYEE") {
-                badgeBg = "#f59e0b"; // Amber
                 iconType = "user-tie";
                 roleText = "Vendor Person";
             } else if (profCat === "VENDOR_COMPANY" || profCat === "VENDOR" || nType === "VENDOR" || nType === "SUPPLIER" || nType === "COMPANY") {
-                badgeBg = "#f97316"; // Orange
                 iconType = "building";
-                roleText = "Vendor Company";
+                roleText = "Vendor Co.";
             } else if (nType === "BANK_ACCOUNT" || nType === "ACCOUNT") {
-                badgeBg = "#10b981"; // Emerald
                 iconType = "bank";
-                roleText = "Bank Account";
+                const accNum = (n.metadata && n.metadata.account_no) ? String(n.metadata.account_no) : "";
+                roleText = accNum ? `A/C • ${accNum.slice(-4)}` : "Bank Vault";
             } else if (nType === "DOCUMENT" || nType === "FILE") {
-                badgeBg = "#f43f5e"; // Rose
                 iconType = "document";
-                roleText = "Document / File";
+                roleText = "Document File";
             } else if (nType === "PO" || nType === "INVOICE") {
-                badgeBg = "#a855f7"; // Purple
                 iconType = "receipt";
                 roleText = "Purchase Order";
             } else if (nType === "CONDUIT") {
-                badgeBg = "#64748b"; // Slate
                 iconType = "exchange";
                 roleText = "Conduit Node";
             }
 
             if (isSubstantiated) {
-                roleText = "✓ Substantiated Lead";
+                roleText = "✓ Verified Lead";
+            } else if (isExternal) {
+                roleText = "External Vault";
             }
 
-            // Status Signal Dot
-            let signalColor = "#22c55e"; // Green: Verified
-            if (isSubstantiated) signalColor = "#10b981"; // Emerald
-            if (riskRating >= 50) signalColor = "#f59e0b"; // Amber: Flagged
-            if (riskRating >= 80) signalColor = "#ef4444"; // Red: High risk / Layering
-            if (isExternal) signalColor = "#64748b"; // Neutral
+            // Status Signal Dot on Left (Image 2)
+            // Green: Healthy/Verified, Amber: Degraded/Risk, Red: Failing/Layering, Slate: Idle/External
+            let signalColor = "#10b981"; // Healthy / Substantiated
+            if (riskRating >= 50 && riskRating < 80) signalColor = "#f59e0b"; // Degraded / Risk
+            if (riskRating >= 80 || (n.metadata && n.metadata.is_rapid_layering)) signalColor = "#ef4444"; // Failing / Rapid Layering
+            if (isExternal) signalColor = "#94a3b8"; // Idle / External
 
-            // Card Colors & Styling
+            // Card dimensions matching Image 2
+            const cardW = 176;
+            const cardH = 52;
+            const cardRx = 15;
+
             let cardBg = dark ? "#0f172a" : "#ffffff";
             let cardBorder = dark ? "#334155" : "#e2e8f0";
-            let borderWidth = 1.5;
+            let borderWidth = 1.2;
             let nameColor = dark ? "#f8fafc" : "#0f172a";
             let subColor = dark ? "#94a3b8" : "#64748b";
             let opacity = 1.0;
+            let haloGlow = "";
+
+            // Squircle icon badge styling
+            let badgeBg = dark ? "#1e293b" : "#f1f5f9";
+            let badgeBorder = dark ? "#334155" : "#e2e8f0";
+            let iconStroke = dark ? "#cbd5e1" : "#475569";
 
             if (isTarget) {
                 cardBorder = "#0ea5e9";
-                borderWidth = 2.5;
+                borderWidth = 1.8;
             }
 
             if (state === "selected") {
                 cardBorder = "#f59e0b";
-                borderWidth = 3;
-                cardBg = dark ? "#1e293b" : "#fffbeb";
+                borderWidth = 2.0;
+                cardBg = dark ? "#1e293b" : "#ffffff";
+                haloGlow = `<circle cx="88" cy="26" r="68" fill="url(#radialGlow)" opacity="0.5" />`;
             } else if (state === "dimmed") {
-                opacity = 0.25;
-                cardBg = dark ? "rgba(15, 23, 42, 0.4)" : "rgba(255, 255, 255, 0.4)";
+                opacity = 0.22;
+                cardBg = dark ? "rgba(15, 23, 42, 0.3)" : "rgba(255, 255, 255, 0.4)";
                 cardBorder = dark ? "rgba(51, 65, 85, 0.2)" : "rgba(226, 232, 240, 0.3)";
             }
 
             let displayName = label;
-            if (displayName.length > 21) {
-                displayName = displayName.substring(0, 20) + "…";
+            if (displayName.length > 15) {
+                displayName = displayName.substring(0, 14) + "…";
             }
 
-            // Embedded vector icons
+            // Embedded minimalist stroke icons inside squircle badge (size 28x28 at x=26, y=12)
             let iconSvg = "";
             if (iconType === "user" || iconType === "user-tie") {
-                iconSvg = `<circle cx="35" cy="30" r="7" fill="#ffffff"/><path d="M23 48c0-6.6 5.4-12 12-12s12 5.4 12 12" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>`;
+                iconSvg = `<circle cx="40" cy="22" r="3.5" fill="none" stroke="${iconStroke}" stroke-width="1.8"/><path d="M33 33c0-3.8 3.1-6.8 7-6.8s7 3 7 6.8" fill="none" stroke="${iconStroke}" stroke-width="1.8" stroke-linecap="round"/>`;
             } else if (iconType === "building") {
-                iconSvg = `<rect x="25" y="24" width="20" height="26" rx="2" fill="none" stroke="#ffffff" stroke-width="2.5"/><path d="M29 30h2m4 0h2m-8 6h2m4 0h2m-8 6h2m4 0h2" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>`;
+                iconSvg = `<rect x="34" y="19" width="12" height="14" rx="1.5" fill="none" stroke="${iconStroke}" stroke-width="1.8"/><path d="M37 23h2m2 0h2m-4 4h2m2 0h2" stroke="${iconStroke}" stroke-width="1.5" stroke-linecap="round"/>`;
             } else if (iconType === "bank") {
-                iconSvg = `<path d="M23 29l12-7 12 7v2H23z" fill="#ffffff"/><path d="M25 33v10m6-10v10m8-10v10m6-10v10M22 47h26" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>`;
+                iconSvg = `<path d="M33 22l7-4 7 4v2H33z" fill="${iconStroke}"/><path d="M35 25v6m5-6v6m5-6v6M32 33h16" stroke="${iconStroke}" stroke-width="1.6" stroke-linecap="round"/>`;
             } else if (iconType === "document" || iconType === "receipt") {
-                iconSvg = `<path d="M26 23h12l7 7v17a2 2 0 0 1-2 2H26a2 2 0 0 1-2-2V25a2 2 0 0 1 2-2z" fill="none" stroke="#ffffff" stroke-width="2.5"/><path d="M38 23v7h7m-15 4h10m-10 6h12" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>`;
+                iconSvg = `<path d="M35 18h7l5 5v10a1.5 1.5 0 0 1-1.5 1.5H35a1.5 1.5 0 0 1-1.5-1.5V19.5A1.5 1.5 0 0 1 35 18z" fill="none" stroke="${iconStroke}" stroke-width="1.8"/><path d="M42 18v5h5m-8 3h6m-6 3h4" stroke="${iconStroke}" stroke-width="1.5" stroke-linecap="round"/>`;
             } else {
-                iconSvg = `<circle cx="28" cy="37" r="4" fill="#ffffff"/><circle cx="42" cy="37" r="4" fill="#ffffff"/><path d="M28 37h14" stroke="#ffffff" stroke-width="2.5"/>`;
+                iconSvg = `<circle cx="36" cy="26" r="2.5" fill="${iconStroke}"/><circle cx="44" cy="26" r="2.5" fill="${iconStroke}"/><path d="M36 26h8" stroke="${iconStroke}" stroke-width="1.8"/>`;
             }
 
-            const dashedAttr = isExternal ? 'stroke-dasharray="5,4"' : '';
+            const dashedAttr = isExternal ? 'stroke-dasharray="4,3"' : '';
 
             const svg = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="240" height="74" viewBox="0 0 240 74" opacity="${opacity}">
-                <rect x="2" y="2" width="236" height="70" rx="14" fill="${cardBg}" stroke="${cardBorder}" stroke-width="${borderWidth}" ${dashedAttr} />
-                <rect x="12" y="14" width="46" height="46" rx="11" fill="${badgeBg}" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="${cardW}" height="${cardH}" viewBox="0 0 ${cardW} ${cardH}" opacity="${opacity}">
+                <defs>
+                    <radialGradient id="radialGlow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.8"/>
+                        <stop offset="50%" stop-color="#f59e0b" stop-opacity="0.25"/>
+                        <stop offset="100%" stop-color="#f59e0b" stop-opacity="0"/>
+                    </radialGradient>
+                </defs>
+                ${haloGlow}
+                <rect x="1.5" y="1.5" width="173" height="49" rx="${cardRx}" fill="${cardBg}" stroke="${cardBorder}" stroke-width="${borderWidth}" ${dashedAttr} />
+                
+                <!-- Status Signal Dot on Left (Image 2) -->
+                <circle cx="15" cy="26" r="3.5" fill="${signalColor}" />
+                ${(state === "selected" || isSubstantiated || riskRating >= 70) ? `<circle cx="15" cy="26" r="6.5" fill="none" stroke="${signalColor}" stroke-width="1" opacity="0.5"/>` : ''}
+                
+                <!-- Squircle Icon Badge (Image 2) -->
+                <rect x="26" y="12" width="28" height="28" rx="8" fill="${badgeBg}" stroke="${badgeBorder}" stroke-width="0.8" />
                 ${iconSvg}
-                <text x="68" y="34" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="13" font-weight="700" fill="${nameColor}">${escapeXml(displayName)}</text>
-                <text x="68" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11" font-weight="500" fill="${subColor}">${escapeXml(roleText)}</text>
-                <circle cx="220" cy="18" r="4.5" fill="${signalColor}" />
-                ${(isSubstantiated || riskRating >= 60) ? `<circle cx="220" cy="18" r="8" fill="none" stroke="${signalColor}" stroke-width="1.2" opacity="0.6"/>` : ''}
+                
+                <!-- Stacked Typography (Image 2) -->
+                <text x="61" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="11.5" font-weight="700" fill="${nameColor}">${escapeXml(displayName)}</text>
+                <text x="61" y="38" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="9" font-weight="500" fill="${subColor}">${escapeXml(roleText)}</text>
+                
+                <!-- Edge Connection Port Dots (Image 2) -->
+                <circle cx="1.5" cy="26" r="2.2" fill="#d97706" opacity="0.8" />
+                <circle cx="174.5" cy="26" r="2.2" fill="#d97706" opacity="0.8" />
             </svg>`.trim();
 
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -735,7 +811,7 @@
                     id: n.id,
                     shape: "image",
                     image: defaultImage,
-                    size: 38,
+                    size: 26,
                     title: `${n.label || 'Entity'}\nType: ${n.type || 'Entity'}\nRisk: ${n.risk || 0}/100`,
                     raw: n,
                     defaultImage: defaultImage,
@@ -868,7 +944,7 @@
             updateModeBanner(data);
 
             // Click Events:
-            // - Node click: Highlight 1st and 2nd degree path, dim unrelated nodes, open Inspector
+            // - Node click: Highlight 1st and 2nd degree path, dim unrelated nodes, open Inspector drawer
             // - Edge click: Open Audit Evidence Trail drawer
             // - Blank canvas click: Reset dimming and restore graph
             networkInstance.on("click", function(params) {
@@ -876,7 +952,7 @@
                     const nodeId = params.nodes[0];
                     highlightNodeNetwork(nodeId);
                     inspectEntity(nodeId);
-                    window.dispatchEvent(new CustomEvent('switch-panel-tab', { detail: 'inspector' }));
+                    openWorkstationDrawer('inspector');
                 } else if (params.edges.length > 0) {
                     const edgeId = params.edges[0];
                     inspectEdge(edgeId);
@@ -1016,6 +1092,20 @@
                 });
             });
             graphEdges.update(edgeUpdates);
+        }
+
+        // Open Workstation Slide-over Drawer
+        function openWorkstationDrawer(tab = 'copilot') {
+            window.dispatchEvent(new CustomEvent('open-workstation', { detail: tab }));
+            const backdrop = document.getElementById("workstation-backdrop");
+            if (backdrop) backdrop.classList.remove("hidden");
+        }
+
+        // Close Workstation Slide-over Drawer
+        function closeWorkstationDrawer() {
+            window.dispatchEvent(new CustomEvent('close-workstation'));
+            const backdrop = document.getElementById("workstation-backdrop");
+            if (backdrop) backdrop.classList.add("hidden");
         }
 
         // Open Evidence Drawer
@@ -1489,7 +1579,12 @@
                     closeEvidenceReaderDrawer();
                     return;
                 }
-                closeEvidenceDrawer();
+                const evidenceDrawer = document.getElementById("evidence-trail-drawer");
+                if (evidenceDrawer && !evidenceDrawer.classList.contains("translate-x-full")) {
+                    closeEvidenceDrawer();
+                    return;
+                }
+                closeWorkstationDrawer();
             }
         });
 
@@ -1586,7 +1681,7 @@
                 networkInstance.focus(matching[0].id, { scale: 1.2, animation: true });
                 highlightNodeNetwork(matching[0].id);
                 inspectEntity(matching[0].id);
-                window.dispatchEvent(new CustomEvent('switch-panel-tab', { detail: 'inspector' }));
+                openWorkstationDrawer('inspector');
             }
         }
 
