@@ -951,6 +951,32 @@ class QTrailViewTests(TestCase):
         data = res.json()
         self.assertGreaterEqual(data["metrics"]["min_amount_threshold"], 1000.0)
 
+    def test_dashboard_summary_matrix_single_profile_guard(self):
+        """Verifies summary table shows 'Requires ≥ 2 People' and no 1x1 matrix when 1 profile selected."""
+        url = reverse("q_trail:dashboard")
+        res = self.client.get(
+            url,
+            {"profile_ids": str(self.person_a.id)},
+        )
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+        self.assertIn("Requires ≥ 2 People", content)
+        self.assertNotIn("1 × 1 Matrix", content)
+        self.assertIn("Comparison Matrix Requires 2 or More People", content)
+        self.assertEqual(res.context["pairwise_matrix"], [])
+
+    def test_dashboard_summary_matrix_multi_profile_renders(self):
+        """Verifies summary table renders NxN matrix when 2+ profiles selected."""
+        url = reverse("q_trail:dashboard")
+        res = self.client.get(
+            url,
+            {"profile_ids": f"{self.person_a.id},{self.person_b.id}"},
+        )
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+        self.assertIn("2 × 2 Matrix", content)
+        self.assertNotIn("Requires ≥ 2 People", content)
+
     def test_analyze_api_view_form_data_and_invalid_payload(self):
         url = reverse("q_trail:analyze_api")
         # Form-encoded POST

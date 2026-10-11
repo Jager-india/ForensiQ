@@ -219,6 +219,21 @@
                 </div>
             </div>
 
+            {% if scope == 'audit' and active_audit and available_profiles|length < 2 %}
+            <div class="p-3 mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-800 dark:text-amber-200 text-xs flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-amber-500 text-sm"></i>
+                    <span>
+                        Active audit <strong>{{ active_audit.name }}</strong> only has {{ available_profiles|length }} profile. Tracing money requires 2 or more people.
+                    </span>
+                </div>
+                <a href="?scope=all" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs">
+                    <i class="fa-solid fa-globe text-[11px]"></i>
+                    <span>Switch to All Profiles ({{ all_profiles_count }})</span>
+                </a>
+            </div>
+            {% endif %}
+
             <!-- Profile Cards Grid -->
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {% for prof in available_profiles %}
@@ -595,9 +610,15 @@
                 <div>
                     <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
                         <span>Who Paid Whom Summary Table</span>
+                        {% if profile_names|length >= 2 %}
                         <span class="text-xs bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-mono font-normal">
                             {{ profile_names|length }} × {{ profile_names|length }} Matrix
                         </span>
+                        {% else %}
+                        <span class="text-xs bg-theme-subtle text-theme-muted border border-theme-border px-2 py-0.5 rounded-full font-mono font-normal">
+                            Requires ≥ 2 People
+                        </span>
+                        {% endif %}
                     </h3>
                     <p class="text-xs text-theme-muted mt-0.5">
                         Total money moved between selected people (Direct payments + money passed through middlemen).
@@ -614,6 +635,7 @@
 
         <!-- Collapsible Content Body -->
         <div x-show="isExpanded" x-cloak class="p-5 pt-0 border-t border-theme-border space-y-4">
+            {% if profile_names|length >= 2 and pairwise_matrix %}
             <div class="overflow-x-auto pt-4">
                 <table class="w-full text-xs text-left border-collapse">
                     <thead>
@@ -656,16 +678,21 @@
                             </td>
                             {% endfor %}
                         </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="100%" class="p-4 text-center text-slate-400 dark:text-zinc-500">
-                                Select 2 or more profiles to generate the cross-profile comparison matrix.
-                            </td>
-                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+            {% else %}
+            <div class="py-8 px-4 text-center text-xs text-theme-muted flex flex-col items-center justify-center gap-2.5">
+                <div class="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-sm"></i>
+                </div>
+                <p class="font-bold text-theme-text text-sm">Comparison Matrix Requires 2 or More People</p>
+                <p class="text-theme-muted max-w-md text-xs leading-relaxed">
+                    You currently have {{ profile_names|length|default:"0" }} person selected. Please select at least two people above{% if active_audit and scope != 'all' %} (or switch to <em>All Profiles</em>){% endif %} to calculate the pairwise transfer matrix.
+                </p>
+            </div>
+            {% endif %}
         </div>
     </div>
 

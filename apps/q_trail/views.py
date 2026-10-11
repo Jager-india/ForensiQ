@@ -47,19 +47,23 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     direct transfers, 1-hop conduit intermediaries, and circular fund loops.
     """
     active_audit = get_active_audit(request)
-    scope = request.GET.get("scope") or request.POST.get("scope")
-    if not scope:
-        scope = "audit" if active_audit else "all"
-
     all_profiles = get_available_profiles_for_trail(audit_id=None)
     audit_profiles = (
         get_available_profiles_for_trail(audit_id=active_audit.id) if active_audit else []
     )
 
+    scope = request.GET.get("scope") or request.POST.get("scope")
+    if not scope:
+        if active_audit and len(audit_profiles) >= 2:
+            scope = "audit"
+        else:
+            scope = "all"
+
     if scope == "audit" and active_audit:
         available_profiles = audit_profiles
     else:
         available_profiles = all_profiles
+        scope = "all"
 
     compare_all = (
         request.GET.get("compare_all") == "1" or request.POST.get("action") == "compare_all"
@@ -68,6 +72,11 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     # Parse profile IDs and parameters from POST or GET
     if compare_all:
         profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
+        if len(profiles_with_data) < 2 and len(all_profiles) >= 2:
+            available_profiles = all_profiles
+            scope = "all"
+            profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
+
         profile_ids = (
             profiles_with_data if profiles_with_data else [p["id"] for p in available_profiles]
         )
@@ -115,6 +124,16 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
             profile_ids = profiles_with_data
         elif len(available_profiles) >= 2:
             profile_ids = [available_profiles[0]["id"], available_profiles[1]["id"]]
+        elif len(all_profiles) >= 2:
+            all_with_data = [p["id"] for p in all_profiles if p.get("has_data")]
+            if len(all_with_data) >= 2:
+                available_profiles = all_profiles
+                scope = "all"
+                profile_ids = all_with_data
+            else:
+                available_profiles = all_profiles
+                scope = "all"
+                profile_ids = [all_profiles[0]["id"], all_profiles[1]["id"]]
         elif available_profiles:
             profile_ids = [available_profiles[0]["id"]]
 
@@ -156,28 +175,29 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     profile_names = [p["name"] for p in analyzed_profiles]
 
     formatted_matrix = []
-    for name_a in profile_names:
-        row_targets = []
-        for name_b in profile_names:
-            cell = pairwise_matrix.get(name_a, {}).get(name_b, {})
-            tot = cell.get("total_volume", 0.0)
-            row_targets.append(
-                {
-                    "target_name": name_b,
-                    "is_self": cell.get("is_self", False),
-                    "has_flow": cell.get("has_flow", False),
-                    "direct_count": cell.get("direct_count", 0),
-                    "direct_volume": cell.get("direct_volume", 0.0),
-                    "direct_formatted": _format_inr(cell.get("direct_volume", 0.0)),
-                    "intermediate_count": cell.get("intermediate_count", 0),
-                    "intermediate_volume": cell.get("intermediate_volume", 0.0),
-                    "intermediate_formatted": _format_inr(cell.get("intermediate_volume", 0.0)),
-                    "total_volume": tot,
-                    "total_formatted": _format_inr(tot),
-                    "intermediaries": cell.get("intermediaries", []),
-                }
-            )
-        formatted_matrix.append({"source_name": name_a, "targets": row_targets})
+    if len(profile_names) >= 2:
+        for name_a in profile_names:
+            row_targets = []
+            for name_b in profile_names:
+                cell = pairwise_matrix.get(name_a, {}).get(name_b, {})
+                tot = cell.get("total_volume", 0.0)
+                row_targets.append(
+                    {
+                        "target_name": name_b,
+                        "is_self": cell.get("is_self", False),
+                        "has_flow": cell.get("has_flow", False),
+                        "direct_count": cell.get("direct_count", 0),
+                        "direct_volume": cell.get("direct_volume", 0.0),
+                        "direct_formatted": _format_inr(cell.get("direct_volume", 0.0)),
+                        "intermediate_count": cell.get("intermediate_count", 0),
+                        "intermediate_volume": cell.get("intermediate_volume", 0.0),
+                        "intermediate_formatted": _format_inr(cell.get("intermediate_volume", 0.0)),
+                        "total_volume": tot,
+                        "total_formatted": _format_inr(tot),
+                        "intermediaries": cell.get("intermediaries", []),
+                    }
+                )
+            formatted_matrix.append({"source_name": name_a, "targets": row_targets})
 
     # Format metrics for presentation
     formatted_metrics = {
