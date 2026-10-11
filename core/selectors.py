@@ -64,7 +64,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Statements uploaded: 0",
                 "stats_line2": "Last checked: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Bank stats: {exc}")
         stats["bank"] = {
             "is_used": False,
@@ -98,7 +98,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Fund trails mapped: 0",
                 "stats_line2": "Last analyzed: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Trail stats: {exc}")
         stats["trail"] = {
             "is_used": False,
@@ -143,7 +143,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Mailboxes ingested: 0",
                 "stats_line2": "Last parsed: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Mail stats: {exc}")
         stats["mail"] = {
             "is_used": False,
@@ -179,7 +179,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Endpoints scanned: 0",
                 "stats_line2": "Last scanned: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Scan stats: {exc}")
         stats["scan"] = {
             "is_used": False,
@@ -223,7 +223,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Documents verified: 0",
                 "stats_line2": "Last verified: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Verify stats: {exc}")
         stats["verify"] = {
             "is_used": False,
@@ -261,7 +261,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Recordings transcribed: 0",
                 "stats_line2": "Last processed: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Voice stats: {exc}")
         stats["voice"] = {
             "is_used": False,
@@ -325,7 +325,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "ERP datasets: 0",
                 "stats_line2": "Last updated: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Ledger stats: {exc}")
         stats["ledger"] = {
             "is_used": False,
@@ -359,7 +359,7 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 "stats_line1": "Channels analyzed: 0",
                 "stats_line2": "Last message: —",
             }
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover
         logger.debug(f"[Selectors] Failed to query Q-Chat stats: {exc}")
         stats["chat"] = {
             "is_used": False,

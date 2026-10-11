@@ -1733,6 +1733,108 @@ class CoreAuditTests(TestCase):
         )
         self.assertEqual(res_404.status_code, 404)
 
+    def test_upload_profile_document_view(self):
+        url = reverse("upload_profile_document", kwargs={"profile_id": self.profile1.id})
+        # 1. Successful upload
+        doc_file = SimpleUploadedFile(
+            "contract.txt",
+            b"Counterparty: Acme Corp. Signed by Arun Kumar.",
+            content_type="text/plain",
+        )
+        res = self.client.post(url, {"file": doc_file, "description": "Vendor Contract"})
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["document"]["filename"], "contract.txt")
+
+        # 2. Missing file
+        res_no_file = self.client.post(url, {})
+        self.assertEqual(res_no_file.status_code, 400)
+
+        # 3. Non-existent profile
+        bad_url = reverse("upload_profile_document", kwargs={"profile_id": uuid.uuid4()})
+        res_bad = self.client.post(
+            bad_url, {"file": SimpleUploadedFile("doc.txt", b"content", content_type="text/plain")}
+        )
+        self.assertEqual(res_bad.status_code, 404)
+
+    def test_create_audit_view_form_post_and_csv_profiles(self):
+        url = reverse("create_audit")
+        # 1. Form POST with JSON array in profile_ids string
+        res = self.client.post(
+            url,
+            {
+                "title": "Form Created Audit 1",
+                "profile_ids": f"[{self.profile1.id}]",
+                "next": "/",
+            },
+        )
+        self.assertEqual(res.status_code, 302)
+
+        # 2. Form POST with comma-separated profile_ids
+        res2 = self.client.post(
+            url,
+            {
+                "title": "Form Created Audit 2",
+                "profile_ids": f"{self.profile1.id},{self.profile2.id}",
+                "next": "/",
+            },
+        )
+        self.assertEqual(res2.status_code, 302)
+
+        # 3. Duplicate name integrity error triggers error response (JSON & Form)
+        create_audit(name="DUP-AUDIT-001", title="Existing Audit")
+        res_err = self.client.post(
+            url,
+            data=json.dumps({"name": "DUP-AUDIT-001", "title": "Another Audit"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_err.status_code, 400)
+
+        res_form_err = self.client.post(
+            url,
+            data={"name": "DUP-AUDIT-001", "title": "Another Audit", "next": "/"},
+        )
+        self.assertEqual(res_form_err.status_code, 302)
+
+    def test_map_audit_profiles_view_string_payload(self):
+        audit = create_audit(title="Mapping String Payload Test")
+        url = reverse("map_audit_profiles", kwargs={"audit_id": audit.id})
+
+        # 1. JSON string of profile IDs
+        res = self.client.post(
+            url,
+            data=json.dumps({"profile_ids": json.dumps([str(self.profile1.id)])}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        # 2. Comma-separated string of profile IDs
+        res2 = self.client.post(
+            url,
+            data=json.dumps({"profile_ids": f"{self.profile1.id}, {self.profile2.id}"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res2.status_code, 200)
+
+        # 3. Malformed JSON body falls back to empty payload
+        res_malformed = self.client.post(
+            url,
+            data=b"invalid json bytes",
+            content_type="application/json",
+        )
+        self.assertEqual(res_malformed.status_code, 200)
+
+    def test_set_active_audit_view_malformed_json_fallback(self):
+        # Sending non-JSON bytes to set_active_audit_view falls back gracefully
+        res = self.client.post(
+            reverse("set_active_audit"),
+            data=b"invalid json body",
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()["status"], "success")
+
     def test_core_profiles_extract_keywords_from_excel_and_helpers(self):
         import openpyxl
 
@@ -2204,3 +2306,64 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertContains(response, "landing-active-audit-pill")
         self.assertContains(response, "No Active Audit")
         self.assertContains(response, "SELECT")
+
+    def test_landing_page_audit_cards_render_selection_action(self):
+        # When viewing the landing page, the audits modal template should contain
+        # the Select Audit action button and selectActiveAudit handler.
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select Audit")
+        self.assertContains(response, "selectActiveAudit")
+        self.assertContains(response, "Deselect")
+
+    def test_set_active_audit_cycle_via_api_and_landing_pill(self):
+        # 1. Initially no active audit
+        res0 = self.client.get(reverse("landing"))
+        self.assertContains(res0, "No Active Audit")
+
+        # 2. Select audit via POST /audits/active/
+        res_post = self.client.post(
+            reverse("set_active_audit"),
+            data=json.dumps({"audit_id": str(self.audit.id)}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_post.status_code, 200)
+        self.assertEqual(res_post.json()["status"], "success")
+        self.assertEqual(res_post.json()["active_audit"]["id"], str(self.audit.id))
+
+        # 3. Landing page now renders active audit pill
+        res_active = self.client.get(reverse("landing"))
+        self.assertEqual(res_active.status_code, 200)
+        self.assertContains(res_active, "landing-active-audit-pill")
+        self.assertContains(res_active, self.audit.name)
+        self.assertContains(res_active, "ACTIVE")
+
+        # 4. Deselect audit via POST /audits/active/ with empty ID
+        res_deselect = self.client.post(
+            reverse("set_active_audit"),
+            data=json.dumps({"audit_id": ""}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_deselect.status_code, 200)
+        self.assertEqual(res_deselect.json()["status"], "success")
+        self.assertIsNone(res_deselect.json()["active_audit"])
+
+        # 5. Landing page resets to "No Active Audit"
+        res_cleared = self.client.get(reverse("landing"))
+        self.assertEqual(res_cleared.status_code, 200)
+        self.assertContains(res_cleared, "No Active Audit")
+        self.assertContains(res_cleared, "SELECT")
+
+    def test_ledger_dataset_stats_when_no_pos(self):
+        from django.apps import apps
+
+        LedgerDataset = apps.get_model("q_ledger", "LedgerDataset")
+        LedgerDataset.objects.create(
+            title=f"General Ledger for {self.audit.name}",
+            file_name="ledger_2026.csv",
+            row_count=500,
+            is_active=True,
+        )
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertTrue(stats["ledger"]["is_used"])
+        self.assertIn("Datasets loaded", stats["ledger"]["stats_line1"])
