@@ -168,7 +168,7 @@ def create_profile_view(request: HttpRequest) -> HttpResponse:
         phone=str(payload.get("phone") or "").strip(),
         is_substantiated=is_substantiated,
         notes=str(payload.get("notes") or "").strip(),
-        avatar_color=str(payload.get("avatar_color") or "indigo").strip() or "indigo",
+        avatar_color=str(payload.get("avatar_color") or "").strip(),
         keywords=keywords_input,
     )
 

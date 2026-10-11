@@ -633,15 +633,28 @@ def sync_all_modules() -> dict[str, int]:
         from core.models import InvestigationProfile, ProfileDocument
 
         for prof in InvestigationProfile.objects.all():
+            if (
+                prof.category == InvestigationProfile.Category.VENDOR_COMPANY
+                or getattr(prof, "category", "") == "VENDOR"
+            ):
+                entity_type = ForensicEntity.EntityType.COMPANY
+            elif prof.category == InvestigationProfile.Category.VENDOR_EMPLOYEE:
+                entity_type = ForensicEntity.EntityType.VENDOR
+            else:
+                entity_type = ForensicEntity.EntityType.EMPLOYEE
+
             p_entity, _ = emit_forensic_finding(
                 source_module="core",
                 event_type="INVESTIGATION_PROFILE_REGISTERED",
                 primary_entity_data={
                     "name": prof.full_name,
-                    "type": ForensicEntity.EntityType.EMPLOYEE,
+                    "type": entity_type,
                     "raw_id": prof.employee_id or prof.full_name,
                     "is_target": True,
                     "metadata": {
+                        "category": prof.category,
+                        "category_display": prof.get_category_display(),
+                        "category_color": prof.category_color,
                         "employee_id": prof.employee_id,
                         "department": prof.department,
                         "designation": prof.designation,
@@ -765,19 +778,31 @@ def sync_all_modules() -> dict[str, int]:
                         cat_a = getattr(prof_a, "category", "EMPLOYEE")
                         cat_b = getattr(prof_b, "category", "EMPLOYEE")
                         type_a = (
-                            ForensicEntity.EntityType.VENDOR
-                            if cat_a == "VENDOR"
-                            else ForensicEntity.EntityType.EMPLOYEE
+                            ForensicEntity.EntityType.COMPANY
+                            if cat_a in ("VENDOR_COMPANY", "VENDOR")
+                            else (
+                                ForensicEntity.EntityType.VENDOR
+                                if cat_a == "VENDOR_EMPLOYEE"
+                                else ForensicEntity.EntityType.EMPLOYEE
+                            )
                         )
                         type_b = (
-                            ForensicEntity.EntityType.VENDOR
-                            if cat_b == "VENDOR"
-                            else ForensicEntity.EntityType.EMPLOYEE
+                            ForensicEntity.EntityType.COMPANY
+                            if cat_b in ("VENDOR_COMPANY", "VENDOR")
+                            else (
+                                ForensicEntity.EntityType.VENDOR
+                                if cat_b == "VENDOR_EMPLOYEE"
+                                else ForensicEntity.EntityType.EMPLOYEE
+                            )
                         )
                         if cat_a == "RELATIVE_OF_EMPLOYEE" or cat_b == "RELATIVE_OF_EMPLOYEE":
                             rel_type = "RELATIVE_NEXUS"
-                        elif (cat_a == "VENDOR" and cat_b == "EMPLOYEE") or (
-                            cat_a == "EMPLOYEE" and cat_b == "VENDOR"
+                        elif (
+                            cat_a in ("VENDOR", "VENDOR_COMPANY", "VENDOR_EMPLOYEE")
+                            and cat_b == "EMPLOYEE"
+                        ) or (
+                            cat_a == "EMPLOYEE"
+                            and cat_b in ("VENDOR", "VENDOR_COMPANY", "VENDOR_EMPLOYEE")
                         ):
                             rel_type = "EMPLOYEE_VENDOR_NEXUS"
                         else:

@@ -272,11 +272,13 @@
                                                     <div class="flex items-center gap-2.5">
                                                         <input type="checkbox" :value="p.id" x-model="editingAuditSelectedProfiles"
                                                                class="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer">
-                                                        <span class="w-5 h-5 rounded bg-amber-500/15 text-amber-500 flex items-center justify-center text-[10px] font-mono font-bold" x-text="p.initials || 'Q'"></span>
+                                                        <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-mono font-bold"
+                                                              :class="p.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400' : (p.category === 'OTHER' ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400' : 'bg-sky-500/15 text-sky-600 dark:text-sky-400')))"
+                                                              x-text="p.initials || 'Q'"></span>
                                                         <span class="font-semibold text-theme-text dark:text-white" x-text="p.full_name"></span>
                                                         <span class="text-[9px] px-1.5 py-0.2 rounded font-medium"
-                                                              :class="p.category === 'VENDOR' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : (p.category === 'OTHER' ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'))"
-                                                              x-text="p.category === 'VENDOR' ? 'Vendor' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'Relative' : (p.category === 'OTHER' ? 'Other' : 'Employee'))"></span>
+                                                              :class="p.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25' : (p.category === 'OTHER' ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25')))"
+                                                              x-text="p.category === 'VENDOR_EMPLOYEE' ? 'Vendor Emp' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'Vendor Co' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'Relative' : (p.category === 'OTHER' ? 'Other' : 'Employee')))"></span>
                                                         <span class="text-[10px] text-slate-400 dark:text-zinc-500" x-show="p.department" x-text="'• ' + p.department"></span>
                                                     </div>
                                                     <span class="text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase tracking-wider"
@@ -419,13 +421,15 @@
                                         <div class="flex items-center gap-2.5 min-w-0">
                                             <input type="checkbox" :value="p.id" x-model="newAuditSelectedProfiles"
                                                    class="rounded border-slate-300 text-amber-500 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer shrink-0">
-                                            <span class="w-6 h-6 rounded-md bg-amber-500/15 text-amber-500 flex items-center justify-center text-[10px] font-mono font-bold shrink-0" x-text="p.initials || 'Q'"></span>
+                                            <span class="w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-mono font-bold shrink-0"
+                                                  :class="p.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400' : (p.category === 'OTHER' ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400' : 'bg-sky-500/15 text-sky-600 dark:text-sky-400')))"
+                                                  x-text="p.initials || 'Q'"></span>
                                             <div class="min-w-0">
                                                 <div class="flex items-center gap-1.5 flex-wrap">
                                                     <span class="font-bold text-theme-text dark:text-white truncate" x-text="p.full_name"></span>
                                                     <span class="text-[9px] px-1.5 py-0.2 rounded font-medium shrink-0"
-                                                          :class="p.category === 'VENDOR' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : (p.category === 'OTHER' ? 'bg-slate-500/10 text-slate-400 border border-slate-500/20' : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'))"
-                                                          x-text="p.category === 'VENDOR' ? 'Vendor' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'Relative' : (p.category === 'OTHER' ? 'Other' : 'Employee'))"></span>
+                                                          :class="p.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25' : (p.category === 'OTHER' ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25' : 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25')))"
+                                                          x-text="p.category === 'VENDOR_EMPLOYEE' ? 'Vendor Emp' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'Vendor Co' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'Relative' : (p.category === 'OTHER' ? 'Other' : 'Employee')))"></span>
                                                     <span class="text-[10px] font-mono text-slate-400" x-show="p.employee_id" x-text="'#' + p.employee_id"></span>
                                                 </div>
                                                 <span class="text-[10px] text-slate-500 dark:text-zinc-400 truncate block" x-text="p.department || 'General Audit'"></span>
@@ -485,7 +489,8 @@
                                 <!-- Profile Top Info -->
                                 <div class="flex items-start justify-between gap-3 mb-2">
                                     <div class="flex items-center gap-2.5 min-w-0">
-                                        <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center justify-center text-xs font-bold font-mono shrink-0"
+                                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold font-mono shrink-0"
+                                             :class="prof.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30' : (prof.category === 'VENDOR_COMPANY' || prof.category === 'VENDOR' ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30' : (prof.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30' : (prof.category === 'OTHER' ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border border-slate-500/30' : 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30')))"
                                              x-text="prof.initials || 'Q'"></div>
                                         <div class="min-w-0">
                                             <div class="flex items-center gap-2 flex-wrap">
@@ -503,10 +508,16 @@
                                     <!-- Badges -->
                                     <div class="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
                                         <!-- Category Classification Badge -->
-                                        <template x-if="prof.category === 'VENDOR'">
+                                        <template x-if="prof.category === 'VENDOR_EMPLOYEE'">
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
-                                                <i class="fa-solid fa-industry text-[9px]"></i>
-                                                <span>Vendor</span>
+                                                <i class="fa-solid fa-user-tag text-[9px]"></i>
+                                                <span>Vendor Employee</span>
+                                            </span>
+                                        </template>
+                                        <template x-if="prof.category === 'VENDOR_COMPANY' || prof.category === 'VENDOR'">
+                                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25">
+                                                <i class="fa-solid fa-building-shield text-[9px]"></i>
+                                                <span>Vendor Company</span>
                                             </span>
                                         </template>
                                         <template x-if="prof.category === 'RELATIVE_OF_EMPLOYEE'">
@@ -517,13 +528,13 @@
                                         </template>
                                         <template x-if="prof.category === 'OTHER'">
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25">
-                                                <i class="fa-solid fa-globe text-[9px]"></i>
+                                                <i class="fa-solid fa-shapes text-[9px]"></i>
                                                 <span>Third Party</span>
                                             </span>
                                         </template>
                                         <template x-if="!prof.category || prof.category === 'EMPLOYEE'">
                                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25">
-                                                <i class="fa-solid fa-id-badge text-[9px]"></i>
+                                                <i class="fa-solid fa-user-tie text-[9px]"></i>
                                                 <span>Employee</span>
                                             </span>
                                         </template>
@@ -662,10 +673,11 @@
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
                                     <i class="fa-solid fa-id-badge text-amber-500 mr-1"></i>Profile Category / Classification <span class="text-rose-500">*</span>
                                 </label>
-                                <select name="category" x-model="newCategory"
+                                <select name="category" x-model="newCategory" @change="onCategoryChange($event.target.value)"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 cursor-pointer">
                                     <option value="EMPLOYEE">🏢 Employee</option>
-                                    <option value="VENDOR">🏭 Vendor</option>
+                                    <option value="VENDOR_EMPLOYEE">🏷️ Vendor Employee</option>
+                                    <option value="VENDOR_COMPANY">🏭 Vendor Company</option>
                                     <option value="RELATIVE_OF_EMPLOYEE">👥 Relative of Employee</option>
                                     <option value="OTHER">🌐 Other / Third Party</option>
                                 </select>
@@ -693,7 +705,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
-                                    <span x-text="newCategory === 'VENDOR' ? 'Vendor ID / Code' : (newCategory === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref')"></span>
+                                    <span x-text="newCategory === 'VENDOR_EMPLOYEE' ? 'Vendor Employee ID / Ref' : ((newCategory === 'VENDOR_COMPANY' || newCategory === 'VENDOR') ? 'Vendor Company Code / Tax ID' : (newCategory === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref'))"></span>
                                 </label>
                                 <input type="text" name="employee_id" placeholder="e.g. EMP-9042"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 font-mono">
@@ -726,13 +738,16 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">UI Accent Color</label>
-                                <select name="avatar_color"
+                                <select name="avatar_color" x-model="newAvatarColor"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 cursor-pointer">
-                                    <option value="indigo" selected>Indigo</option>
-                                    <option value="orange">Orange</option>
+                                    <option value="sky">Sky Blue (Employee)</option>
+                                    <option value="amber">Amber (Vendor Employee)</option>
+                                    <option value="orange">Orange (Vendor Company)</option>
+                                    <option value="purple">Purple (Relative)</option>
+                                    <option value="slate">Slate (Other / Third Party)</option>
                                     <option value="rose">Rose</option>
                                     <option value="emerald">Emerald</option>
-                                    <option value="amber">Amber</option>
+                                    <option value="indigo">Indigo</option>
                                 </select>
                             </div>
                         </div>
@@ -830,10 +845,11 @@
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
                                     <i class="fa-solid fa-id-badge text-amber-500 mr-1"></i>Profile Category / Classification <span class="text-rose-500">*</span>
                                 </label>
-                                <select x-model="editingProfile.category"
+                                <select x-model="editingProfile.category" @change="onEditCategoryChange($event.target.value)"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 cursor-pointer">
                                     <option value="EMPLOYEE">🏢 Employee</option>
-                                    <option value="VENDOR">🏭 Vendor</option>
+                                    <option value="VENDOR_EMPLOYEE">🏷️ Vendor Employee</option>
+                                    <option value="VENDOR_COMPANY">🏭 Vendor Company</option>
                                     <option value="RELATIVE_OF_EMPLOYEE">👥 Relative of Employee</option>
                                     <option value="OTHER">🌐 Other / Third Party</option>
                                 </select>
@@ -861,7 +877,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
-                                    <span x-text="editingProfile && editingProfile.category === 'VENDOR' ? 'Vendor ID / Code' : (editingProfile && editingProfile.category === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref')"></span>
+                                    <span x-text="editingProfile && editingProfile.category === 'VENDOR_EMPLOYEE' ? 'Vendor Employee ID / Ref' : (editingProfile && (editingProfile.category === 'VENDOR_COMPANY' || editingProfile.category === 'VENDOR') ? 'Vendor Company Code / Tax ID' : (editingProfile && editingProfile.category === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref'))"></span>
                                 </label>
                                 <input type="text" x-model="editingProfile.employee_id" placeholder="e.g. EMP-9042"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 font-mono">
@@ -901,11 +917,14 @@
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">UI Accent Color</label>
                                 <select x-model="editingProfile.avatar_color"
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 cursor-pointer">
-                                    <option value="indigo">Indigo</option>
-                                    <option value="orange">Orange</option>
+                                    <option value="sky">Sky Blue (Employee)</option>
+                                    <option value="amber">Amber (Vendor Employee)</option>
+                                    <option value="orange">Orange (Vendor Company)</option>
+                                    <option value="purple">Purple (Relative)</option>
+                                    <option value="slate">Slate (Other / Third Party)</option>
                                     <option value="rose">Rose</option>
                                     <option value="emerald">Emerald</option>
-                                    <option value="amber">Amber</option>
+                                    <option value="indigo">Indigo</option>
                                 </select>
                             </div>
                         </div>
@@ -1295,6 +1314,7 @@
                 // Profiles State
                 profilesList: {{ profiles_json|safe }},
                 newCategory: 'EMPLOYEE',
+                newAvatarColor: 'sky',
                 newRelatedEmployee: '',
                 newKeywords: [],
                 keywordInput: '',
@@ -1685,9 +1705,35 @@
                 isSubmittingEditProfile: false,
                 isParsingEditProfileFile: false,
 
+                getCategoryDefaultColor(cat) {
+                    const colorMap = {
+                        'EMPLOYEE': 'sky',
+                        'VENDOR_EMPLOYEE': 'amber',
+                        'VENDOR_COMPANY': 'orange',
+                        'VENDOR': 'orange',
+                        'RELATIVE_OF_EMPLOYEE': 'purple',
+                        'OTHER': 'slate'
+                    };
+                    return colorMap[cat] || 'sky';
+                },
+
+                onCategoryChange(cat) {
+                    this.newCategory = cat;
+                    this.newAvatarColor = this.getCategoryDefaultColor(cat);
+                },
+
+                onEditCategoryChange(cat) {
+                    if (!this.editingProfile) return;
+                    this.editingProfile.category = cat;
+                    this.editingProfile.avatar_color = this.getCategoryDefaultColor(cat);
+                },
+
                 startEditProfile(prof) {
                     this.editingProfile = JSON.parse(JSON.stringify(prof));
                     if (!this.editingProfile.category) this.editingProfile.category = 'EMPLOYEE';
+                    if (!this.editingProfile.avatar_color) {
+                        this.editingProfile.avatar_color = this.getCategoryDefaultColor(this.editingProfile.category);
+                    }
                     if (!this.editingProfile.related_employee) this.editingProfile.related_employee = '';
                     if (!this.editingProfile.keywords) this.editingProfile.keywords = [];
                     this.editKeywordInput = '';

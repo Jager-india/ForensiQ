@@ -53,6 +53,9 @@
                 name: '{{ prof.full_name|escapejs }}',
                 dept: '{{ prof.department|escapejs }}',
                 role: '{{ prof.designation|escapejs }}',
+                category: '{{ prof.category|escapejs }}',
+                category_label: '{{ prof.category_meta.short_label|escapejs }}',
+                category_badge_class: '{{ prof.category_badge_class|escapejs }}',
                 is_substantiated: {{ prof.is_substantiated|yesno:"true,false" }},
                 initials: '{{ prof.initials|escapejs }}'
             }{% if not forloop.last %},{% endif %}
@@ -156,7 +159,12 @@
                             <span class="w-6 h-6 rounded-md bg-theme-app border border-theme-border flex items-center justify-center text-[10px] font-mono font-bold flex-shrink-0"
                                 x-text="p.initials"></span>
                             <div class="truncate">
-                                <div class="truncate" x-text="p.name"></div>
+                                <div class="flex items-center gap-1.5 truncate">
+                                    <span class="truncate font-medium" x-text="p.name"></span>
+                                    <span class="text-[9px] px-1 py-0.2 rounded font-medium shrink-0"
+                                          :class="p.category_badge_class || (p.category === 'VENDOR_EMPLOYEE' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/25' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'bg-orange-500/10 text-orange-500 border border-orange-500/25' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/25' : (p.category === 'OTHER' ? 'bg-slate-500/10 text-slate-400 border border-slate-500/25' : 'bg-sky-500/10 text-sky-400 border border-sky-500/25'))))"
+                                          x-text="p.category_label || (p.category === 'VENDOR_EMPLOYEE' ? 'Vendor Emp' : (p.category === 'VENDOR_COMPANY' || p.category === 'VENDOR' ? 'Vendor Co' : (p.category === 'RELATIVE_OF_EMPLOYEE' ? 'Relative' : (p.category === 'OTHER' ? 'Other' : 'Employee'))))"></span>
+                                </div>
                                 <div class="text-[10px] text-theme-muted truncate" x-show="p.dept" x-text="p.dept + (p.role ? ' • ' + p.role : '')"></div>
                             </div>
                         </div>

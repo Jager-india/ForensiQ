@@ -337,17 +337,47 @@ class CoreInvestigationProfilesTests(TestCase):
     def test_create_investigation_profile_categories(self):
         from core.profiles import create_investigation_profile
 
-        # Vendor
-        v = create_investigation_profile(
+        # Vendor Employee
+        ve = create_investigation_profile(
+            full_name="Rajesh Koothrappali",
+            category="VENDOR_EMPLOYEE",
+            department="Operations",
+        )
+        self.assertEqual(ve.category, "VENDOR_EMPLOYEE")
+        self.assertEqual(ve.get_category_display(), "Vendor Employee")
+        self.assertEqual(ve.category_color, "amber")
+        self.assertEqual(ve.category_hex, "#f59e0b")
+        self.assertIn("amber", ve.category_badge_class)
+        self.assertEqual(ve.avatar_color, "amber")
+        d_ve = ve.to_dict()
+        self.assertEqual(d_ve["category"], "VENDOR_EMPLOYEE")
+        self.assertEqual(d_ve["category_color"], "amber")
+        self.assertEqual(d_ve["category_hex"], "#f59e0b")
+
+        # Vendor Company
+        vc = create_investigation_profile(
             full_name="Apex Logistics Inc",
-            category="VENDOR",
+            category="VENDOR_COMPANY",
             department="Transport",
         )
-        self.assertEqual(v.category, "VENDOR")
-        self.assertEqual(v.get_category_display(), "Vendor")
-        d_v = v.to_dict()
-        self.assertEqual(d_v["category"], "VENDOR")
-        self.assertEqual(d_v["category_display"], "Vendor")
+        self.assertEqual(vc.category, "VENDOR_COMPANY")
+        self.assertEqual(vc.get_category_display(), "Vendor Company")
+        self.assertEqual(vc.category_color, "orange")
+        self.assertEqual(vc.category_hex, "#f97316")
+        self.assertIn("orange", vc.category_badge_class)
+        self.assertEqual(vc.avatar_color, "orange")
+        d_vc = vc.to_dict()
+        self.assertEqual(d_vc["category"], "VENDOR_COMPANY")
+        self.assertEqual(d_vc["category_color"], "orange")
+        self.assertEqual(d_vc["category_hex"], "#f97316")
+
+        # Legacy "VENDOR" input mapping to VENDOR_COMPANY
+        v_legacy = create_investigation_profile(
+            full_name="Legacy Transport Corp",
+            category="VENDOR",
+        )
+        self.assertEqual(v_legacy.category, "VENDOR_COMPANY")
+        self.assertEqual(v_legacy.avatar_color, "orange")
 
         # Relative of Employee with details
         rel = create_investigation_profile(
@@ -357,9 +387,13 @@ class CoreInvestigationProfilesTests(TestCase):
         )
         self.assertEqual(rel.category, "RELATIVE_OF_EMPLOYEE")
         self.assertEqual(rel.related_employee, "Spouse of Rajesh Sharma (EMP-102)")
+        self.assertEqual(rel.category_color, "purple")
+        self.assertEqual(rel.category_hex, "#a855f7")
+        self.assertEqual(rel.avatar_color, "purple")
         d_rel = rel.to_dict()
         self.assertEqual(d_rel["category"], "RELATIVE_OF_EMPLOYEE")
         self.assertEqual(d_rel["related_employee"], "Spouse of Rajesh Sharma (EMP-102)")
+        self.assertEqual(d_rel["category_color"], "purple")
 
         # Fallback invalid category to EMPLOYEE
         other = create_investigation_profile(
@@ -367,6 +401,8 @@ class CoreInvestigationProfilesTests(TestCase):
             category="INVALID_TYPE",
         )
         self.assertEqual(other.category, "EMPLOYEE")
+        self.assertEqual(other.category_color, "sky")
+        self.assertEqual(other.avatar_color, "sky")
 
     def test_update_investigation_profile_categories(self):
         from core.profiles import update_investigation_profile
@@ -379,9 +415,29 @@ class CoreInvestigationProfilesTests(TestCase):
         )
         self.assertEqual(updated.category, "RELATIVE_OF_EMPLOYEE")
         self.assertEqual(updated.related_employee, "Brother of VP Procurement")
+        self.assertEqual(updated.avatar_color, "purple")
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.category, "RELATIVE_OF_EMPLOYEE")
         self.assertEqual(self.profile.related_employee, "Brother of VP Procurement")
+        self.assertEqual(self.profile.avatar_color, "purple")
+
+        # Update to VENDOR_EMPLOYEE
+        updated_ve = update_investigation_profile(
+            self.profile.id,
+            full_name="Target Custodian A",
+            category="VENDOR_EMPLOYEE",
+        )
+        self.assertEqual(updated_ve.category, "VENDOR_EMPLOYEE")
+        self.assertEqual(updated_ve.avatar_color, "amber")
+
+        # Update to VENDOR_COMPANY
+        updated_vc = update_investigation_profile(
+            self.profile.id,
+            full_name="Target Custodian A",
+            category="VENDOR_COMPANY",
+        )
+        self.assertEqual(updated_vc.category, "VENDOR_COMPANY")
+        self.assertEqual(updated_vc.avatar_color, "orange")
 
     def test_resolve_or_create_profile_from_request(self):
         from core.profiles import resolve_or_create_profile_from_request, set_active_profile
@@ -514,7 +570,7 @@ class CoreProfileViewsTests(TestCase):
             data=json.dumps(
                 {
                     "full_name": "Vendor Profile Alpha",
-                    "category": "VENDOR",
+                    "category": "VENDOR_EMPLOYEE",
                     "department": "Supply Chain",
                 }
             ),
@@ -523,8 +579,28 @@ class CoreProfileViewsTests(TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["status"], "success")
-        self.assertEqual(data["profile"]["category"], "VENDOR")
-        self.assertEqual(data["profile"]["category_display"], "Vendor")
+        self.assertEqual(data["profile"]["category"], "VENDOR_EMPLOYEE")
+        self.assertEqual(data["profile"]["category_display"], "Vendor Employee")
+        self.assertEqual(data["profile"]["avatar_color"], "amber")
+
+        # Vendor Company
+        res_vc = self.client.post(
+            reverse("create_profile"),
+            data=json.dumps(
+                {
+                    "full_name": "Vendor Corp Beta",
+                    "category": "VENDOR_COMPANY",
+                    "department": "Logistics",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(res_vc.status_code, 200)
+        data_vc = res_vc.json()
+        self.assertEqual(data_vc["status"], "success")
+        self.assertEqual(data_vc["profile"]["category"], "VENDOR_COMPANY")
+        self.assertEqual(data_vc["profile"]["category_display"], "Vendor Company")
+        self.assertEqual(data_vc["profile"]["avatar_color"], "orange")
 
     def test_create_profile_view_with_relative_category_form(self):
         res = self.client.post(
@@ -891,7 +967,7 @@ class CoreProfileViewsTests(TestCase):
             url,
             data={
                 "full_name": "Form Edited Target",
-                "category": "VENDOR",
+                "category": "VENDOR_EMPLOYEE",
                 "department": "Finance",
                 "designation": "CFO",
                 "is_substantiated": "true",
@@ -902,7 +978,8 @@ class CoreProfileViewsTests(TestCase):
         self.assertEqual(res.status_code, 302)
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.full_name, "Form Edited Target")
-        self.assertEqual(self.profile.category, "VENDOR")
+        self.assertEqual(self.profile.category, "VENDOR_EMPLOYEE")
+        self.assertEqual(self.profile.avatar_color, "amber")
         self.assertTrue(self.profile.is_substantiated)
         self.assertEqual(self.profile.keywords, ["bribe", "hawala"])
 

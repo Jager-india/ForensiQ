@@ -52,9 +52,58 @@ class InvestigationProfile(ForensicBaseModel):
 
     class Category(models.TextChoices):
         EMPLOYEE = "EMPLOYEE", "Employee"
-        VENDOR = "VENDOR", "Vendor"
+        VENDOR_EMPLOYEE = "VENDOR_EMPLOYEE", "Vendor Employee"
+        VENDOR_COMPANY = "VENDOR_COMPANY", "Vendor Company"
         RELATIVE_OF_EMPLOYEE = "RELATIVE_OF_EMPLOYEE", "Relative of Employee"
         OTHER = "OTHER", "Other / Third Party"
+
+    CATEGORY_COLORS = {
+        "EMPLOYEE": {
+            "name": "sky",
+            "badge_class": "bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25",
+            "border_color": "border-sky-500",
+            "hex": "#0ea5e9",
+            "icon": "fa-solid fa-id-badge",
+            "label": "Employee",
+            "short_label": "Employee",
+        },
+        "VENDOR_EMPLOYEE": {
+            "name": "amber",
+            "badge_class": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25",
+            "border_color": "border-amber-500",
+            "hex": "#f59e0b",
+            "icon": "fa-solid fa-user-gear",
+            "label": "Vendor Employee",
+            "short_label": "Vendor Emp",
+        },
+        "VENDOR_COMPANY": {
+            "name": "orange",
+            "badge_class": "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/25",
+            "border_color": "border-orange-500",
+            "hex": "#f97316",
+            "icon": "fa-solid fa-building",
+            "label": "Vendor Company",
+            "short_label": "Vendor Co",
+        },
+        "RELATIVE_OF_EMPLOYEE": {
+            "name": "purple",
+            "badge_class": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/25",
+            "border_color": "border-purple-500",
+            "hex": "#a855f7",
+            "icon": "fa-solid fa-people-arrows",
+            "label": "Relative of Employee",
+            "short_label": "Relative",
+        },
+        "OTHER": {
+            "name": "slate",
+            "badge_class": "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/25",
+            "border_color": "border-slate-500",
+            "hex": "#64748b",
+            "icon": "fa-solid fa-globe",
+            "label": "Other / Third Party",
+            "short_label": "Other",
+        },
+    }
 
     full_name = models.CharField(
         max_length=255, db_index=True, help_text="Target / Auditee Full Name"
@@ -105,7 +154,7 @@ class InvestigationProfile(ForensicBaseModel):
     )
     avatar_color = models.CharField(
         max_length=32,
-        default="indigo",
+        default="sky",
         help_text="UI Accent color tag",
     )
     keywords = models.JSONField(
@@ -139,6 +188,28 @@ class InvestigationProfile(ForensicBaseModel):
             return parts[0][:2].upper()
         return f"{parts[0][0]}{parts[-1][0]}".upper()
 
+    @property
+    def category_meta(self) -> dict[str, str]:
+        # Handle backward compatibility for legacy VENDOR key
+        cat = "VENDOR_COMPANY" if self.category == "VENDOR" else self.category
+        return self.CATEGORY_COLORS.get(cat, self.CATEGORY_COLORS["EMPLOYEE"])
+
+    @property
+    def category_color(self) -> str:
+        return self.category_meta["name"]
+
+    @property
+    def category_badge_class(self) -> str:
+        return self.category_meta["badge_class"]
+
+    @property
+    def category_hex(self) -> str:
+        return self.category_meta["hex"]
+
+    @property
+    def category_icon(self) -> str:
+        return self.category_meta["icon"]
+
     def to_dict(self) -> dict[str, object]:
         audits_info = []
         if self.pk:
@@ -155,6 +226,12 @@ class InvestigationProfile(ForensicBaseModel):
             "full_name": self.full_name,
             "category": self.category,
             "category_display": self.get_category_display(),
+            "category_color": self.category_color,
+            "category_badge_class": self.category_badge_class,
+            "category_hex": self.category_hex,
+            "category_icon": self.category_icon,
+            "category_label": self.category_meta["label"],
+            "category_short_label": self.category_meta["short_label"],
             "related_employee": self.related_employee,
             "employee_id": self.employee_id,
             "department": self.department,

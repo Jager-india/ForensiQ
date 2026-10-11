@@ -362,6 +362,15 @@ def get_profile_keywords(
     return []
 
 
+CATEGORY_DEFAULT_COLORS: dict[str, str] = {
+    "EMPLOYEE": "sky",
+    "VENDOR_EMPLOYEE": "amber",
+    "VENDOR_COMPANY": "orange",
+    "RELATIVE_OF_EMPLOYEE": "purple",
+    "OTHER": "slate",
+}
+
+
 def create_investigation_profile(
     *,
     full_name: str,
@@ -375,7 +384,7 @@ def create_investigation_profile(
     is_substantiated: bool = False,
     status: str = "ACTIVE",
     notes: str = "",
-    avatar_color: str = "indigo",
+    avatar_color: str = "",
     keywords: list[str] | str | None = None,
 ) -> InvestigationProfile:
     """
@@ -387,8 +396,14 @@ def create_investigation_profile(
 
     keywords_list = _normalize_keywords(keywords)
     category_clean = (category or "EMPLOYEE").strip().upper()
+    if category_clean == "VENDOR":
+        category_clean = "VENDOR_COMPANY"
     if category_clean not in dict(InvestigationProfile.Category.choices):
         category_clean = "EMPLOYEE"
+
+    clean_avatar_color = (avatar_color or "").strip()
+    if not clean_avatar_color or clean_avatar_color == "indigo":
+        clean_avatar_color = CATEGORY_DEFAULT_COLORS.get(category_clean, "sky")
 
     profile = InvestigationProfile.objects.create(
         full_name=clean_name,
@@ -402,7 +417,7 @@ def create_investigation_profile(
         is_substantiated=bool(is_substantiated),
         status=status if status in dict(InvestigationProfile.Status.choices) else "ACTIVE",
         notes=notes.strip(),
-        avatar_color=avatar_color.strip() or "indigo",
+        avatar_color=clean_avatar_color,
         keywords=keywords_list,
     )
 
@@ -459,8 +474,12 @@ def update_investigation_profile(
     profile.full_name = clean_name
     if category is not None:
         cat_clean = category.strip().upper()
+        if cat_clean == "VENDOR":
+            cat_clean = "VENDOR_COMPANY"
         if cat_clean in dict(InvestigationProfile.Category.choices):
             profile.category = cat_clean
+            if not avatar_color:
+                profile.avatar_color = CATEGORY_DEFAULT_COLORS.get(cat_clean, "sky")
     if related_employee is not None:
         profile.related_employee = related_employee.strip()
 

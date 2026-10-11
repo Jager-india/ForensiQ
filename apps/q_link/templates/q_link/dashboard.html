@@ -142,10 +142,10 @@
 
                 <!-- Floating Canvas Legend -->
                 <div class="absolute bottom-3 left-3 bg-theme-surface/90 backdrop-blur border border-theme-border rounded-xl px-3 py-2 text-[11px] text-theme-muted flex flex-wrap items-center gap-3 pointer-events-none">
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#38bdf8]"></span> Employee</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rotate-45 border border-theme-text bg-[#38bdf8]"></span> Target</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></span> Vendor</span>
-                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#6366f1]"></span> Company</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#0ea5e9]"></span> Employee</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rotate-45 border border-theme-text bg-[#0ea5e9]"></span> Target</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f59e0b]"></span> Vendor Employee</span>
+                    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f97316]"></span> Vendor Company</span>
                     <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#10b981]"></span> Bank Account</span>
                     <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#f43f5e]"></span> Document</span>
                     <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rotate-45 bg-[#10b981] border border-emerald-300"></span> Substantiated</span>
@@ -429,7 +429,7 @@
         function formatNodes(nodes) {
             const tc = getThemeColors();
             return nodes.map(n => {
-                let colorBg = "#38bdf8"; // Default cyan/blue for employees
+                let colorBg = "#0ea5e9"; // Sky Blue for Employee
                 let borderCol = "#0284c7";
                 let isSubstantiated = false;
                 let isExternal = Boolean(n.is_external);
@@ -472,7 +472,23 @@
                     }
                 }
 
-                if (nType === "VENDOR" || nType === "SUPPLIER") {
+                const profCat = n.metadata && (n.metadata.category || n.metadata.category_code);
+                if (profCat === "VENDOR_EMPLOYEE") {
+                    colorBg = "#f59e0b"; // Amber (Vendor Employee)
+                    borderCol = "#d97706";
+                } else if (profCat === "VENDOR_COMPANY" || profCat === "VENDOR") {
+                    colorBg = "#f97316"; // Orange (Vendor Company)
+                    borderCol = "#ea580c";
+                } else if (profCat === "RELATIVE_OF_EMPLOYEE") {
+                    colorBg = "#a855f7"; // Purple (Relative)
+                    borderCol = "#9333ea";
+                } else if (profCat === "OTHER") {
+                    colorBg = "#64748b"; // Slate (Third Party)
+                    borderCol = "#475569";
+                } else if (profCat === "EMPLOYEE") {
+                    colorBg = "#0ea5e9"; // Sky Blue (Employee)
+                    borderCol = "#0284c7";
+                } else if (nType === "VENDOR" || nType === "SUPPLIER") {
                     colorBg = "#f59e0b"; // Amber
                     borderCol = "#d97706";
                 } else if (nType === "DOCUMENT" || nType === "FILE") {
@@ -485,8 +501,8 @@
                     colorBg = "#10b981"; // Emerald
                     borderCol = "#059669";
                 } else if (nType === "COMPANY" || nType === "CORPORATE") {
-                    colorBg = "#6366f1"; // Indigo
-                    borderCol = "#4f46e5";
+                    colorBg = "#f97316"; // Orange (Vendor Company)
+                    borderCol = "#ea580c";
                 } else if (nType === "CONDUIT") {
                     colorBg = "#64748b"; // Neutral Slate for conduits
                     borderCol = "#475569";
