@@ -542,6 +542,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "audio_timestamp": meta.get("audio_timestamp", "00:00"),
                 "transcript_snippet": meta.get("snippet") or ptr.summary_snippet,
                 "audio_url": meta.get("audio_url", ""),
+                "metadata": meta,
             }
             evidence_items.append(item)
 
@@ -639,6 +640,8 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                         "amount": meta.get("amount") or 0.0,
                         "file_name": meta.get("file_name", ""),
                         "page_number": meta.get("page_number", 1),
+                        "evidence_url": p.evidence_url,
+                        "metadata": meta,
                     }
                 )
         except Exception as exc:

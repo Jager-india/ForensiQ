@@ -168,7 +168,7 @@ def api_entity_detail(request: HttpRequest, entity_id: str) -> JsonResponse:
     ]
 
     # Underlying Evidence Pointers
-    evidence = get_entity_evidence(entity_id, limit=20)
+    evidence = get_entity_evidence(entity_id, limit=30)
     evidence_data = [
         {
             "id": str(e.id),
@@ -177,7 +177,8 @@ def api_entity_detail(request: HttpRequest, entity_id: str) -> JsonResponse:
             "record_id": e.source_record_id,
             "url": e.evidence_url,
             "summary": e.summary_snippet,
-            "date": e.occurred_at.strftime("%Y-%m-%d") if e.occurred_at else "N/A",
+            "date": e.occurred_at.strftime("%Y-%m-%d %H:%M") if e.occurred_at else "N/A",
+            "metadata": e.metadata or {},
         }
         for e in evidence
     ]

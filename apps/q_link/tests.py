@@ -878,3 +878,44 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
         self.assertEqual(data["edge"]["source_name"], "Mr. V")
         self.assertEqual(data["edge"]["target_name"], "Palani")
         self.assertTrue(data["edge"]["is_rapid_layering"])
+
+    def test_api_entity_detail_evidence_metadata(self):
+        from django.urls import reverse
+
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        url = reverse("q_link:api_entity_detail", kwargs={"entity_id": str(self.e1.id)})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["entity"]["name"], "Mr. V")
+        self.assertGreaterEqual(len(data["evidence"]), 1)
+        ev_item = data["evidence"][0]
+        self.assertIn("metadata", ev_item)
+        self.assertEqual(ev_item["metadata"].get("turnaround"), "3h 45m (< 24h)")
+        self.assertTrue(ev_item["metadata"].get("is_rapid_layering"))
+
+    def test_dashboard_ui_revamp_elements(self):
+        from django.urls import reverse
+
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        url = reverse("q_link:dashboard")
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+        # Check modern card-node canvas & dot grid matrix
+        self.assertIn('id="qlink-canvas"', content)
+        self.assertIn("radial-gradient", content)
+        # Check floating "Signal & Entity Types" legend card
+        self.assertIn("Signal & Entity Types", content)
+        # Check Archivus-style evidence reader drawer
+        self.assertIn('id="evidence-reader-drawer"', content)
+        self.assertIn('id="reader-spotlight-box"', content)
+        self.assertIn("Flagged Evidence Excerpt", content)
+        self.assertIn("openEvidenceReaderDrawer", content)
