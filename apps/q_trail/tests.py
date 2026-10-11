@@ -1256,6 +1256,10 @@ class QTrailAuditScopingTests(TestCase):
             profile_ids=[str(self.prof1.id), str(self.prof2.id)],
         )
 
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
     def test_get_available_profiles_scoped_by_audit_id(self):
         all_profiles = get_available_profiles_for_trail(audit_id=None)
         self.assertGreaterEqual(len(all_profiles), 3)
@@ -1286,6 +1290,74 @@ class QTrailAuditScopingTests(TestCase):
         self.assertEqual(res_all.status_code, 200)
         self.assertEqual(res_all.context["scope"], "all")
         self.assertGreaterEqual(len(res_all.context["available_profiles"]), 3)
+
+    def test_dashboard_view_single_profile_audit_retains_audit_scope(self):
+        from core.audits import create_audit
+
+        single_audit = create_audit(
+            title="Single Target Audit",
+            profile_ids=[str(self.prof1.id)],
+        )
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session["active_audit_id"] = str(single_audit.id)
+        session["active_audit_name"] = single_audit.name
+        session.save()
+
+        # When audit has only 1 profile, scope=audit MUST be preserved
+        res = self.client.get(reverse("q_trail:dashboard") + "?scope=audit")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["scope"], "audit")
+        self.assertEqual(len(res.context["available_profiles"]), 1)
+        self.assertEqual(res.context["audit_profiles_count"], 1)
+        self.assertContains(res, "only has 1 profile")
+
+        # Default visit without scope param also defaults to active audit
+        res_default = self.client.get(reverse("q_trail:dashboard"))
+        self.assertEqual(res_default.status_code, 200)
+        self.assertEqual(res_default.context["scope"], "audit")
+
+    def test_dashboard_view_switch_audit_via_get_param(self):
+        from core.audits import create_audit
+
+        other_audit = create_audit(
+            title="Other Audit",
+            profile_ids=[str(self.prof3.id)],
+        )
+        # Calling with ?audit_id=<id>&scope=audit sets the active audit in session and view
+        res = self.client.get(
+            reverse("q_trail:dashboard") + f"?audit_id={other_audit.id}&scope=audit"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["active_audit"].id, other_audit.id)
+        self.assertEqual(res.context["scope"], "audit")
+        self.assertEqual(len(res.context["available_profiles"]), 1)
+
+    def test_dashboard_view_compare_all_under_audit_scope(self):
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session["active_audit_id"] = str(self.audit.id)
+        session["active_audit_name"] = self.audit.name
+        session.save()
+
+        res = self.client.get(reverse("q_trail:dashboard") + "?compare_all=1&scope=audit")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.context["scope"], "audit")
+        self.assertEqual(len(res.context["available_profiles"]), 2)
+
+    def test_dashboard_loading_page_and_audit_dropdown_in_template(self):
+        res = self.client.get(reverse("q_trail:dashboard"))
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+        # Verify random 3-6s duration logic
+        self.assertIn("getRandomDuration()", content)
+        self.assertIn("Math.random() * 3001) + 3000", content)
+        self.assertIn("runSequentialLoading", content)
+        # Verify outer overlay is visible by default without x-cloak
+        self.assertIn('x-show="isLoading"', content)
+        self.assertNotIn('x-show="isLoading" x-cloak', content)
+        # Verify inline audit dropdown is rendered
+        self.assertIn("Switch Active Audit", content)
 
 
 class QTrailMinimumThresholdTests(TestCase):

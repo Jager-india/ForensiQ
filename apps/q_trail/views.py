@@ -17,7 +17,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_http_methods, require_POST
 from loguru import logger
 
-from core.audits import get_active_audit
+from core.audits import get_active_audit, set_active_audit
 
 from .selectors import (
     generate_trail_sankey_chart,
@@ -46,7 +46,12 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     Enables investigators to select multiple auditee profiles and trace
     direct transfers, 1-hop conduit intermediaries, and circular fund loops.
     """
-    active_audit = get_active_audit(request)
+    audit_id_param = request.GET.get("audit_id")
+    if audit_id_param is not None:
+        active_audit = set_active_audit(request, audit_id_param if audit_id_param.strip() else None)
+    else:
+        active_audit = get_active_audit(request)
+
     all_profiles = get_available_profiles_for_trail(audit_id=None)
     audit_profiles = (
         get_available_profiles_for_trail(audit_id=active_audit.id) if active_audit else []
@@ -54,7 +59,7 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
 
     scope = request.GET.get("scope") or request.POST.get("scope")
     if not scope:
-        if active_audit and len(audit_profiles) >= 2:
+        if active_audit:
             scope = "audit"
         else:
             scope = "all"
@@ -72,11 +77,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     # Parse profile IDs and parameters from POST or GET
     if compare_all:
         profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
-        if len(profiles_with_data) < 2 and len(all_profiles) >= 2:
-            available_profiles = all_profiles
-            scope = "all"
-            profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
-
         profile_ids = (
             profiles_with_data if profiles_with_data else [p["id"] for p in available_profiles]
         )
@@ -117,25 +117,17 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     except (ValueError, TypeError):
         min_amount = 1000.0
 
-    # Default auto-selection heuristic: select all profiles with available data
+    # Default auto-selection heuristic: select profiles with available data within the current scope
     if not profile_ids:
         profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
         if len(profiles_with_data) >= 2:
             profile_ids = profiles_with_data
         elif len(available_profiles) >= 2:
             profile_ids = [available_profiles[0]["id"], available_profiles[1]["id"]]
-        elif len(all_profiles) >= 2:
-            all_with_data = [p["id"] for p in all_profiles if p.get("has_data")]
-            if len(all_with_data) >= 2:
-                available_profiles = all_profiles
-                scope = "all"
-                profile_ids = all_with_data
-            else:
-                available_profiles = all_profiles
-                scope = "all"
-                profile_ids = [all_profiles[0]["id"], all_profiles[1]["id"]]
         elif available_profiles:
             profile_ids = [available_profiles[0]["id"]]
+        else:
+            profile_ids = []
 
     # Execute money trail reconciliation
     analysis = analyze_profiles_money_trail(

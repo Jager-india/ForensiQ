@@ -7,7 +7,7 @@
             checkboxes.forEach(cb => cb.checked = !this.selectAll);
             this.selectAll = !this.selectAll;
         },
-        isLoading: false,
+        isLoading: true,
         loadingProgress: 0,
         currentStepIndex: 0,
         loadingSteps: [
@@ -18,15 +18,19 @@
         ],
         stepTimer: null,
         progressTimer: null,
-        runSequentialLoading(onComplete) {
+        getRandomDuration() {
+            // Random duration strictly between 3000ms (3.0s) and 6000ms (6.0s)
+            return Math.floor(Math.random() * 3001) + 3000;
+        },
+        runSequentialLoading(durationMs, onComplete) {
             this.isLoading = true;
             this.loadingProgress = 0;
             this.currentStepIndex = 0;
             if (this.progressTimer) clearInterval(this.progressTimer);
             if (this.stepTimer) clearInterval(this.stepTimer);
 
-            const totalDurationMs = 5500;
-            const intervalMs = 50;
+            const totalDurationMs = durationMs || this.getRandomDuration();
+            const intervalMs = 40;
             const progressIncrement = (intervalMs / totalDurationMs) * 100;
 
             this.progressTimer = setInterval(() => {
@@ -50,21 +54,30 @@
                 }
             }, totalDurationMs);
         },
+        init() {
+            // Display loading screen every time Q-Trail app is opened with random 3-6 seconds duration
+            const randomDuration = this.getRandomDuration();
+            this.runSequentialLoading(randomDuration, () => {
+                this.isLoading = false;
+            });
+        },
         submitWithDelay(event) {
             const form = event.target;
-            this.runSequentialLoading(() => {
+            const randomDuration = this.getRandomDuration();
+            this.runSequentialLoading(randomDuration, () => {
                 form.submit();
             });
         },
         compareAllWithDelay(url) {
-            this.runSequentialLoading(() => {
+            const randomDuration = this.getRandomDuration();
+            this.runSequentialLoading(randomDuration, () => {
                 window.location.href = url;
             });
         }
     }">
 
         <!-- LLM-Style Interactive AI Loading Screen -->
-        <div x-show="isLoading" x-cloak
+        <div x-show="isLoading"
             x-transition:enter="transition ease-out duration-300"
             x-transition:enter-start="opacity-0"
             x-transition:enter-end="opacity-100"
@@ -195,21 +208,79 @@
                     </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    {% if active_audit %}
-                    <!-- Audit Profiles vs All Profiles Segmented Switcher -->
-                    <div class="inline-flex p-0.5 rounded-lg bg-theme-subtle border border-theme-border text-xs">
+                    <!-- Audit Scope Switcher & Inline Audit Selector Dropdown -->
+                    <div class="relative inline-flex items-center p-0.5 rounded-lg bg-theme-subtle border border-theme-border text-xs"
+                         x-data="{ auditMenuOpen: false }">
+                        {% if active_audit %}
                         <a href="?scope=audit"
-                           class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope != 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}">
+                           class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope != 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}"
+                           title="Show only profiles in {{ active_audit.name }}">
                             <i class="fa-solid fa-folder-tree text-[10px]"></i>
                             <span>Audit: {{ active_audit.name }} ({{ audit_profiles_count }})</span>
                         </a>
+                        <button type="button" @click="auditMenuOpen = !auditMenuOpen"
+                            class="px-1.5 py-1 rounded-md transition text-theme-muted hover:text-theme-text cursor-pointer hover:bg-theme-surface"
+                            title="Switch Audit">
+                            <i class="fa-solid fa-chevron-down text-[9px]"></i>
+                        </button>
                         <a href="?scope=all"
-                           class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope == 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}">
+                           class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 {% if scope == 'all' %}bg-amber-500 text-zinc-950 font-bold shadow-xs{% else %}text-theme-muted hover:text-theme-text{% endif %}"
+                           title="Show all profiles across all audits">
                             <i class="fa-solid fa-globe text-[10px]"></i>
                             <span>All Profiles ({{ all_profiles_count }})</span>
                         </a>
+                        {% else %}
+                        <button type="button" @click="auditMenuOpen = !auditMenuOpen"
+                            class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 text-theme-muted hover:text-theme-text cursor-pointer">
+                            <i class="fa-solid fa-folder-tree text-[10px] text-amber-500"></i>
+                            <span>Select Audit</span>
+                            <i class="fa-solid fa-chevron-down text-[9px] text-theme-muted ml-0.5"></i>
+                        </button>
+                        <a href="?scope=all"
+                           class="px-2.5 py-1 rounded-md font-semibold transition flex items-center gap-1.5 bg-amber-500 text-zinc-950 font-bold shadow-xs"
+                           title="Show all profiles across all audits">
+                            <i class="fa-solid fa-globe text-[10px]"></i>
+                            <span>All Profiles ({{ all_profiles_count }})</span>
+                        </a>
+                        {% endif %}
+
+                        <!-- Audit Selection Dropdown Menu -->
+                        <div x-show="auditMenuOpen" @click.outside="auditMenuOpen = false" x-cloak
+                             class="absolute right-0 sm:left-0 top-full mt-1.5 z-50 w-72 max-h-80 overflow-y-auto bg-theme-surface border border-theme-border rounded-xl shadow-2xl p-2 space-y-1">
+                            <div class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-theme-muted border-b border-theme-border mb-1 flex items-center justify-between">
+                                <span>Switch Active Audit</span>
+                                <span class="text-amber-500 font-mono">{{ all_audits|length }} available</span>
+                            </div>
+                            {% for a in all_audits %}
+                            <a href="?audit_id={{ a.id }}&scope=audit"
+                               class="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-theme-subtle transition {% if active_audit and active_audit.id == a.id %}bg-amber-500/10 text-amber-500 font-bold{% else %}text-theme-text{% endif %}">
+                                <div class="min-w-0 pr-2">
+                                    <div class="font-mono text-xs font-semibold flex items-center gap-1.5">
+                                        <span>{{ a.name }}</span>
+                                        {% if active_audit and active_audit.id == a.id %}
+                                        <i class="fa-solid fa-check text-[10px] text-amber-500"></i>
+                                        {% endif %}
+                                    </div>
+                                    {% if a.title %}
+                                    <div class="text-[10px] text-theme-muted truncate">{{ a.title }}</div>
+                                    {% endif %}
+                                </div>
+                                <span class="px-1.5 py-0.5 rounded-full text-[10px] bg-theme-subtle font-mono text-theme-muted border border-theme-border shrink-0">
+                                    {{ a.profiles.count }}
+                                </span>
+                            </a>
+                            {% empty %}
+                            <div class="px-2 py-3 text-center text-[11px] text-theme-muted">
+                                No audits found.
+                            </div>
+                            {% endfor %}
+                            <div class="pt-1 border-t border-theme-border flex items-center justify-between">
+                                <a href="?scope=all" class="text-[11px] text-amber-500 hover:underline px-2 py-1">
+                                    Clear Filter (All Profiles)
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                    {% endif %}
 
                     <button type="button" @click="toggleAll()"
                         class="px-2.5 py-1 text-xs rounded-lg border border-theme-border text-theme-muted hover:text-theme-text hover:bg-theme-subtle transition cursor-pointer">
