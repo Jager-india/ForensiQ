@@ -22,6 +22,8 @@ from .backend import (
     OfficeInspector,
     ParsedMetadata,
     PDFInspector,
+    extract_proper_nouns_and_entities,
+    extract_proper_nouns_and_entities_from_file,
 )
 from .models import VerificationCase, VerifiedDocument
 from .services import create_verification_case, ingest_and_verify_document
@@ -692,3 +694,171 @@ class DocumentSearchTests(TestCase):
         ):
             res = search_keywords_in_file("test.jpg", "image/jpeg", ["fraud"])
             self.assertEqual(res.get("fraud"), 1)
+
+    def test_ner_extractor_proper_nouns(self):
+        sample_legal_text = """
+        THIS DEED OF PARTNERSHIP executed on 01.04.2023 between:
+        1. Mr. S. Maharajan, aged 45 years, residing at No. 12, Anna Nagar, Chennai.
+        2. Mr. Dhanasekaran, S/o Mr. Dhasarathan, residing at Salem (hereinafter called the Second Partner).
+        3. Mrs. Thangapandiammal, W/o Mr. S Maharajan.
+        4. Mr. Venkatesan C, Partner of M/s Sri Mirra Engineers.
+        5. Mrs. Vani D, wife of Mr. Dhanasekaran.
+        6. Mr. Cengalvarayan, residing at Vellore.
+        WHEREAS the partners shall carry on business under the firm name and style of Sri Mirra Engineers.
+        """
+        entities = extract_proper_nouns_and_entities(sample_legal_text)
+        names = [e["name"] for e in entities]
+        self.assertIn("Maharajan", names)
+        self.assertIn("Dhanasekaran", names)
+        self.assertIn("Thangapandiammal", names)
+        self.assertIn("Venkatesan C", names)
+        self.assertIn("Sri Mirra Engineers", names)
+        self.assertIn("Vani D", names)
+
+        # Check entity classifications
+        ent_by_name = {e["name"]: e for e in entities}
+        self.assertIn(
+            ent_by_name["Sri Mirra Engineers"]["entity_type"], ["ORGANIZATION", "COMPANY"]
+        )
+        self.assertEqual(ent_by_name["Dhanasekaran"]["entity_type"], "PARTNER")
+        self.assertIn(ent_by_name["Thangapandiammal"]["entity_type"], ["RELATED_PARTY", "PARTNER"])
+
+    def test_ner_extractor_from_file(self):
+        # Create a simple 2-page PDF in memory
+        writer = pypdf.PdfWriter()
+        page1 = pypdf.PageObject.create_blank_page(width=200, height=200)
+        page2 = pypdf.PageObject.create_blank_page(width=200, height=200)
+        writer.add_page(page1)
+        writer.add_page(page2)
+
+        buf = io.BytesIO()
+        writer.write(buf)
+        buf.seek(0)
+
+        # Mock page text extraction
+        with patch("pypdf.PdfReader") as mock_reader_cls:
+            mock_reader = MagicMock()
+            p1_mock = MagicMock()
+            p1_mock.extract_text.return_value = (
+                "Mr. Dhanasekaran and Mr. Venkatesan C entered into agreement."
+            )
+            p2_mock = MagicMock()
+            p2_mock.extract_text.return_value = (
+                "Signed by Mrs. Thangapandiammal for Sri Mirra Engineers."
+            )
+            mock_reader.pages = [p1_mock, p2_mock]
+            mock_reader_cls.return_value = mock_reader
+
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                tmp.write(buf.getvalue())
+                tmp_path = tmp.name
+
+            try:
+                entities = extract_proper_nouns_and_entities_from_file(tmp_path)
+                names = [e["name"] for e in entities]
+                self.assertIn("Dhanasekaran", names)
+                self.assertIn("Venkatesan C", names)
+                self.assertIn("Thangapandiammal", names)
+                self.assertIn("Sri Mirra Engineers", names)
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+    def test_ingest_and_verify_document_with_ner_and_profile_sync(self):
+        case = create_verification_case(
+            case_ref="CASE-NER-001",
+            case_title="NER Verification Audit",
+            custodian_name="Maharajan",
+        )
+        # Create corresponding InvestigationProfile to test auto-keyword propagation
+        from core.models import InvestigationProfile
+
+        profile = InvestigationProfile.objects.create(
+            full_name="Maharajan",
+            employee_id="9901",
+            keywords=["existing_kw"],
+        )
+
+        with patch(
+            "q_verify.services.extract_proper_nouns_and_entities_from_file",
+            return_value=[
+                {
+                    "name": "Dhanasekaran",
+                    "entity_type": "PARTNER",
+                    "count": 3,
+                    "pages": [1, 2],
+                    "role": "Partner",
+                },
+                {
+                    "name": "Sri Mirra Engineers",
+                    "entity_type": "ORGANIZATION",
+                    "count": 2,
+                    "pages": [1],
+                    "role": "Firm",
+                },
+            ],
+        ):
+            doc = ingest_and_verify_document(
+                file_bytes=b"%PDF-1.4 Mock",
+                filename="Partnership_Deed_Test.pdf",
+                case=case,
+            )
+            self.assertIn("ner_entities", doc.raw_metadata)
+            ner_ents = doc.raw_metadata["ner_entities"]
+            self.assertEqual(len(ner_ents), 2)
+            self.assertEqual(ner_ents[0]["name"], "Dhanasekaran")
+            self.assertIn("Dhanasekaran", doc.matched_keywords)
+
+            # Profile keywords should be updated
+            profile.refresh_from_db()
+            self.assertIn("Dhanasekaran", profile.keywords)
+            self.assertIn("Sri Mirra Engineers", profile.keywords)
+
+    def test_document_detail_and_search_api_views_ner(self):
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        case = create_verification_case(
+            case_ref="CASE-NER-002",
+            case_title="NER API Verification",
+            custodian_name="Maharajan",
+        )
+        with patch(
+            "q_verify.services.extract_proper_nouns_and_entities_from_file",
+            return_value=[
+                {
+                    "name": "Dhanasekaran",
+                    "entity_type": "PARTNER",
+                    "count": 2,
+                    "pages": [1],
+                    "role": "Partner",
+                },
+            ],
+        ):
+            doc = ingest_and_verify_document(
+                file_bytes=b"%PDF-1.4 Sample",
+                filename="contract_ner.pdf",
+                case=case,
+            )
+
+        # 1. Detail API
+        url_detail = reverse("q_verify:document_detail", args=[doc.id])
+        resp_detail = self.client.get(url_detail)
+        self.assertEqual(resp_detail.status_code, 200)
+        data_detail = resp_detail.json()
+        self.assertIn("ner_entities", data_detail)
+        self.assertEqual(data_detail["ner_entities"][0]["name"], "Dhanasekaran")
+
+        # 2. Search API
+        import json
+
+        url_search = reverse("q_verify:document_search", args=[doc.id])
+        resp_search = self.client.post(
+            url_search,
+            data=json.dumps({"custom_keywords": ["Dhanasekaran"]}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp_search.status_code, 200)
+        data_search = resp_search.json()
+        self.assertIn("ner_entities", data_search)
+        self.assertEqual(data_search["ner_entities"][0]["name"], "Dhanasekaran")

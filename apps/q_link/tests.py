@@ -717,6 +717,88 @@ class QLinkThreeOperationalModesTests(TestCase):
         self.assertIn("source", first_edge)
         self.assertIn("target", first_edge)
 
+    def test_2_hop_document_nexus_mode1_and_mode2(self):
+        from .selectors import get_mode1_keyword_graph, get_mode2_audit_graph
+
+        # 1. Setup Document intermediary node
+        doc_ent, _ = resolve_or_create_entity(
+            "Partnership_Deed.pdf", ForensicEntity.EntityType.DOCUMENT
+        )
+        cp_partner, _ = resolve_or_create_entity("Venkatesan C", ForensicEntity.EntityType.EMPLOYEE)
+
+        # Hop 1: Auditee (Maharajan) -> Document
+        rel_hop1, _ = create_or_update_relationship(
+            self.ent_a,
+            doc_ent,
+            relation_type="DOCUMENT_ATTACHED",
+            source_module="q_verify",
+        )
+        EvidencePointer.objects.create(
+            relationship=rel_hop1,
+            source_module="q_verify",
+            source_model="VerifiedDocument",
+            source_record_id="DOC-99",
+            summary_snippet="Partnership_Deed.pdf attached to Maharajan",
+        )
+
+        # Hop 2: Document -> Partner (Venkatesan C)
+        rel_hop2, _ = create_or_update_relationship(
+            doc_ent,
+            cp_partner,
+            relation_type="PARTNER",
+            source_module="q_verify",
+        )
+        EvidencePointer.objects.create(
+            relationship=rel_hop2,
+            source_module="q_verify",
+            source_model="VerifiedDocument",
+            source_record_id="DOC-99",
+            summary_snippet="Partnership_Deed.pdf establishes partnership for Venkatesan C",
+        )
+
+        # Test Mode 1 without keyword: star topology with document bridge
+        g1_star = get_mode1_keyword_graph(audit_id=str(self.audit.id), keyword="")
+        labels1 = {n["label"] for n in g1_star["nodes"]}
+        self.assertIn("Maharajan", labels1)
+        self.assertIn("Partnership_Deed.pdf", labels1)
+        self.assertIn("Venkatesan C", labels1)
+
+        edges1 = [(e["source"], e["target"]) for e in g1_star["edges"]]
+        self.assertIn((str(self.ent_a.id), str(doc_ent.id)), edges1)
+        self.assertIn((str(doc_ent.id), str(cp_partner.id)), edges1)
+
+        # Test Mode 1 with keyword search for counterparty name
+        g1_kw = get_mode1_keyword_graph(audit_id=str(self.audit.id), keyword="Venkatesan C")
+        labels_kw = {n["label"] for n in g1_kw["nodes"]}
+        self.assertIn("Maharajan", labels_kw)
+        self.assertIn("Partnership_Deed.pdf", labels_kw)
+        self.assertIn("Venkatesan C", labels_kw)
+        edges_kw = [(e["source"], e["target"]) for e in g1_kw["edges"]]
+        self.assertIn((str(self.ent_a.id), str(doc_ent.id)), edges_kw)
+        self.assertIn((str(doc_ent.id), str(cp_partner.id)), edges_kw)
+
+        # Test Mode 2: Full Audit Topology includes 2-hop document nexus
+        g2 = get_mode2_audit_graph(audit_id=str(self.audit.id))
+        labels2 = {n["label"] for n in g2["nodes"]}
+        self.assertIn("Maharajan", labels2)
+        self.assertIn("Partnership_Deed.pdf", labels2)
+        self.assertIn("Venkatesan C", labels2)
+        edges2 = [(e["source"], e["target"]) for e in g2["edges"]]
+        self.assertTrue(
+            any(
+                (e[0] == str(self.ent_a.id) and e[1] == str(doc_ent.id))
+                or (e[1] == str(self.ent_a.id) and e[0] == str(doc_ent.id))
+                for e in edges2
+            )
+        )
+        self.assertTrue(
+            any(
+                (e[0] == str(doc_ent.id) and e[1] == str(cp_partner.id))
+                or (e[1] == str(doc_ent.id) and e[0] == str(cp_partner.id))
+                for e in edges2
+            )
+        )
+
     def test_mode3_global_graph(self):
         from .selectors import get_mode3_global_graph
 

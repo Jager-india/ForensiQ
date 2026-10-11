@@ -94,11 +94,23 @@ def resolve_or_create_entity(
     """
     canonical_id = normalize_identifier(raw_identifier or display_name, entity_type)
 
-    # 1. Exact canonical identifier or exact display name lookup
-    exact_entity = (
-        ForensicEntity.objects.filter(identifier=canonical_id).first()
-        or ForensicEntity.objects.filter(display_name__iexact=display_name.strip()).first()
-    )
+    # 1. Exact display name or canonical identifier lookup
+    exact_entity = ForensicEntity.objects.filter(display_name__iexact=display_name.strip()).first()
+    if not exact_entity and canonical_id:
+        cand_by_id = ForensicEntity.objects.filter(identifier=canonical_id).first()
+        if cand_by_id:
+            # Check if name is compatible before merging on identifier
+            name_sim = fuzz.token_set_ratio(
+                clean_entity_name(display_name), clean_entity_name(cand_by_id.display_name)
+            )
+            if (
+                entity_type != ForensicEntity.EntityType.EMPLOYEE
+                or name_sim >= 65
+                or cand_by_id.identifier.startswith("PAN:")
+                or cand_by_id.identifier.startswith("EMAIL:")
+            ):
+                exact_entity = cand_by_id
+
     if exact_entity:
         updated_fields = []
         if (
@@ -118,22 +130,30 @@ def resolve_or_create_entity(
         if updated_fields:
             updated_fields.append("updated_at")
             exact_entity.save(update_fields=updated_fields)
-        # Record variant as alias if display names differ
+        # Record variant as alias if display names differ and name similarity is high
         if exact_entity.display_name.lower().strip() != display_name.lower().strip():
-            EntityAlias.objects.get_or_create(
-                entity=exact_entity,
-                alias_name=display_name.strip(),
-                defaults={
-                    "match_source": EntityAlias.MatchSource.EXACT,
-                    "confidence": 1.0,
-                },
+            name_sim = fuzz.token_set_ratio(
+                clean_entity_name(display_name), clean_entity_name(exact_entity.display_name)
             )
+            if entity_type != ForensicEntity.EntityType.EMPLOYEE or name_sim >= 65:
+                EntityAlias.objects.get_or_create(
+                    entity=exact_entity,
+                    alias_name=display_name.strip(),
+                    defaults={
+                        "match_source": EntityAlias.MatchSource.EXACT,
+                        "confidence": 1.0,
+                    },
+                )
         return exact_entity, False
 
     # 2. Exact alias lookup
     exact_alias = EntityAlias.objects.filter(alias_name__iexact=display_name.strip()).first()
     if exact_alias:
-        return exact_alias.entity, False
+        name_sim = fuzz.token_set_ratio(
+            clean_entity_name(display_name), clean_entity_name(exact_alias.entity.display_name)
+        )
+        if entity_type != ForensicEntity.EntityType.EMPLOYEE or name_sim >= 65:
+            return exact_alias.entity, False
 
     # 3. RapidFuzz token matching within compatible entity types
     compatible_types = {entity_type}

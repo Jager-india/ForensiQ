@@ -9,6 +9,10 @@ from pathlib import Path
 from .discrepancy_analyzer import DiscrepancyAnalyzer
 from .image_inspector import ImageInspector
 from .models_data import AnomalyFlag, ParsedMetadata, VerificationResult
+from .ner_extractor import (
+    extract_proper_nouns_and_entities,
+    extract_proper_nouns_and_entities_from_file,
+)
 from .office_inspector import OfficeInspector
 from .pdf_inspector import PDFInspector
 
@@ -45,5 +49,7 @@ __all__ = [
     "PDFInspector",
     "ParsedMetadata",
     "VerificationResult",
+    "extract_proper_nouns_and_entities",
+    "extract_proper_nouns_and_entities_from_file",
     "inspect_document",
 ]

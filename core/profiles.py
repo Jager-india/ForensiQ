@@ -721,6 +721,7 @@ def attach_document_to_profile(
                 )
 
         if secondaries:
+            # Hop 1: Auditee -> Document
             emit_forensic_finding(
                 source_module="core_profiles",
                 event_type="PROFILE_DOCUMENT_ATTACHED",
@@ -733,18 +734,48 @@ def attach_document_to_profile(
                         "department": profile.department,
                     },
                 },
+                secondary_entities_data=[
+                    {
+                        "name": fname,
+                        "type": ForensicEntity.EntityType.DOCUMENT,
+                        "relation_type": "DOCUMENT_ATTACHED",
+                        "direction": "out",
+                    }
+                ],
+                evidence_data={
+                    "source_module": "core_profiles",
+                    "source_model": "ProfileDocument",
+                    "source_record_id": str(doc.id),
+                    "evidence_url": "/#directory",
+                    "summary_snippet": f"Document: {fname} attached to {profile.full_name}.",
+                    "occurred_at": doc.created_at,
+                },
+                occurred_at=doc.created_at,
+                timeline_title=f"Legal Document Attached: {fname}",
+                timeline_description=f"Attached to {profile.full_name}",
+                severity="INFO",
+            )
+
+            # Hop 2: Document -> Counterparties
+            emit_forensic_finding(
+                source_module="core_profiles",
+                event_type="PROFILE_DOCUMENT_LEGAL_NEXUS",
+                primary_entity_data={
+                    "name": fname,
+                    "type": ForensicEntity.EntityType.DOCUMENT,
+                },
                 secondary_entities_data=secondaries,
                 evidence_data={
                     "source_module": "core_profiles",
                     "source_model": "ProfileDocument",
                     "source_record_id": str(doc.id),
                     "evidence_url": "/#directory",
-                    "summary_snippet": f"Document: {fname} attached to {profile.full_name}. Identified {len(entities)} counterparties.",
+                    "summary_snippet": f"Document: {fname} established nexus with {', '.join([s['name'] for s in secondaries])}.",
                     "occurred_at": doc.created_at,
                 },
                 occurred_at=doc.created_at,
                 timeline_title=f"Legal Document: {fname}",
-                timeline_description=f"Attached to {profile.full_name}. Extracted: {', '.join([e['name'] for e in entities[:3]])}",
+                timeline_description=f"Identified {len(secondaries)} parties in {fname}: {', '.join([s['name'] for s in secondaries])}",
                 severity="WARNING" if profile.is_substantiated else "INFO",
             )
     except Exception as exc:

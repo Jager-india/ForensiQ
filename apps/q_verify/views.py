@@ -234,6 +234,7 @@ def document_search_api_view(request: HttpRequest, doc_id: str) -> JsonResponse:
             {
                 "success": True,
                 "matched_keywords": doc.matched_keywords,
+                "ner_entities": (doc.raw_metadata or {}).get("ner_entities", []),
                 "keyword_pages": (doc.raw_metadata or {}).get("keyword_pages", {}),
             }
         )
@@ -294,6 +295,19 @@ def document_detail_api_view(request: HttpRequest, doc_id: str) -> JsonResponse:
         if profile and profile.keywords:
             profile_keywords = profile.keywords
 
+    raw_meta = dict(doc.raw_metadata or {})
+    ner_entities = raw_meta.get("ner_entities")
+    if ner_entities is None and doc.storage_path and Path(doc.storage_path).exists():
+        from .backend.ner_extractor import extract_proper_nouns_and_entities_from_file
+
+        custodian_name = doc.case.custodian_name if doc.case else ""
+        ner_entities = extract_proper_nouns_and_entities_from_file(
+            doc.storage_path, doc.mime_type, custodian_name=custodian_name
+        )
+        raw_meta["ner_entities"] = ner_entities
+        doc.raw_metadata = raw_meta
+        doc.save(update_fields=["raw_metadata"])
+
     return JsonResponse(
         {
             "id": str(doc.id),
@@ -339,6 +353,7 @@ def document_detail_api_view(request: HttpRequest, doc_id: str) -> JsonResponse:
             "raw_metadata": doc.raw_metadata,
             "summary": doc.summary,
             "profile_keywords": profile_keywords,
+            "ner_entities": ner_entities or [],
             "matched_keywords": doc.matched_keywords or {},
             "keyword_pages": (doc.raw_metadata or {}).get("keyword_pages", {}),
             "has_file": bool(doc.storage_path and Path(doc.storage_path).exists()),

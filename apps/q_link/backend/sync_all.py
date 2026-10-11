@@ -497,30 +497,33 @@ def sync_all_modules() -> dict[str, int]:
         except Exception as err:
             logger.warning(f"Error syncing Q-Trail: {err}")
 
-    # 5. Ingest Q-Verify (Document Alterations)
+    # 5. Ingest Q-Verify (Document Alterations & Legal Intermediary Nexus)
     if apps.is_installed("q_verify"):
         try:
             VerifiedDocument = apps.get_model("q_verify", "VerifiedDocument")
 
             for vdoc in VerifiedDocument.objects.select_related("case")[:100]:
                 custodian = vdoc.case.custodian_name if vdoc.case else "Investigative Subject"
+
+                # Hop 1: Auditee / Custodian -> Document
                 emit_forensic_finding(
                     source_module="q_verify",
                     event_type="DOCUMENT_ALTERATION_DETECTED",
                     primary_entity_data={
-                        "name": vdoc.filename or "Altered Document",
-                        "type": ForensicEntity.EntityType.DOCUMENT,
-                        "metadata": {
-                            "risk_level": vdoc.risk_level,
-                            "score": vdoc.authenticity_score,
-                        },
+                        "name": custodian,
+                        "type": ForensicEntity.EntityType.EMPLOYEE,
+                        "is_target": True,
                     },
                     secondary_entities_data=[
                         {
-                            "name": custodian,
-                            "type": ForensicEntity.EntityType.EMPLOYEE,
-                            "relation_type": "MENTIONED_IN",
-                            "direction": "in",
+                            "name": vdoc.filename or "Altered Document",
+                            "type": ForensicEntity.EntityType.DOCUMENT,
+                            "relation_type": "DOCUMENT_ATTACHED",
+                            "direction": "out",
+                            "metadata": {
+                                "risk_level": vdoc.risk_level,
+                                "score": vdoc.authenticity_score,
+                            },
                         }
                     ],
                     evidence_data={
@@ -541,6 +544,87 @@ def sync_all_modules() -> dict[str, int]:
                     else "INFO",
                 )
                 stats["q_verify"] += 1
+
+                # Hop 2: Document -> Counterparties / Partners
+                ner_entities = (vdoc.raw_metadata or {}).get("ner_entities", [])
+                if not ner_entities and vdoc.storage_path:
+                    try:
+                        from q_verify.backend.ner_extractor import (
+                            extract_proper_nouns_and_entities_from_file,
+                        )
+
+                        ner_entities = extract_proper_nouns_and_entities_from_file(
+                            vdoc.storage_path, vdoc.mime_type, custodian_name=custodian
+                        )
+                        if ner_entities:
+                            raw_meta = dict(vdoc.raw_metadata or {})
+                            raw_meta["ner_entities"] = ner_entities
+                            vdoc.raw_metadata = raw_meta
+                            vdoc.save(update_fields=["raw_metadata"])
+                    except Exception as ex_ner:
+                        logger.debug(f"On-the-fly NER sync skipped: {ex_ner}")
+
+                sec_entities = []
+                for ent in ner_entities:
+                    ent_name = ent.get("name")
+                    if not ent_name or ent_name.lower() == custodian.lower():
+                        continue
+                    ent_type = (
+                        ForensicEntity.EntityType.COMPANY
+                        if ent.get("entity_type") == "ORGANIZATION"
+                        else ForensicEntity.EntityType.EMPLOYEE
+                    )
+                    rel_type = (
+                        "PARTNER"
+                        if ent.get("entity_type") == "PARTNER"
+                        else (
+                            "DIRECTOR_OF"
+                            if ent.get("entity_type") == "ORGANIZATION"
+                            else "ASSOCIATE"
+                        )
+                    )
+                    sec_entities.append(
+                        {
+                            "name": ent_name,
+                            "type": ent_type,
+                            "relation_type": rel_type,
+                            "direction": "out",
+                            "weight": float(ent.get("count", 1)),
+                            "metadata": {
+                                "source_document": vdoc.filename,
+                                "pages": ent.get("pages", []),
+                            },
+                        }
+                    )
+
+                if sec_entities:
+                    emit_forensic_finding(
+                        source_module="q_verify",
+                        event_type="DOCUMENT_NER_LEGAL_NEXUS",
+                        primary_entity_data={
+                            "name": vdoc.filename or "Altered Document",
+                            "type": ForensicEntity.EntityType.DOCUMENT,
+                            "metadata": {
+                                "risk_level": vdoc.risk_level,
+                                "score": vdoc.authenticity_score,
+                            },
+                        },
+                        secondary_entities_data=sec_entities,
+                        evidence_data={
+                            "source_module": "q_verify",
+                            "source_model": "VerifiedDocument",
+                            "source_record_id": str(vdoc.id),
+                            "evidence_url": f"/verify/case/{vdoc.case.id}/"
+                            if vdoc.case
+                            else "/verify/",
+                            "summary_snippet": f"Legal document {vdoc.filename} established nexus with {', '.join([s['name'] for s in sec_entities])}",
+                            "occurred_at": vdoc.created_at,
+                        },
+                        occurred_at=vdoc.created_at,
+                        timeline_title=f"Legal Document Nexus: {vdoc.filename}",
+                        timeline_description=f"Identified {len(sec_entities)} parties in {vdoc.filename}: {', '.join([s['name'] for s in sec_entities])}",
+                        severity="WARNING",
+                    )
         except Exception as err:
             logger.warning(f"Error syncing Q-Verify: {err}")
 
@@ -603,14 +687,42 @@ def sync_all_modules() -> dict[str, int]:
                         )
 
                     if sec_entities:
+                        # Hop 1: Target Auditee -> Document
                         emit_forensic_finding(
                             source_module="core",
-                            event_type="PROFILE_DOCUMENT_LEGAL_NEXUS",
+                            event_type="PROFILE_DOCUMENT_ATTACHED",
                             primary_entity_data={
                                 "name": prof.full_name,
                                 "type": ForensicEntity.EntityType.EMPLOYEE,
                                 "is_target": True,
                                 "metadata": {"is_substantiated": prof.is_substantiated},
+                            },
+                            secondary_entities_data=[
+                                {
+                                    "name": doc.filename,
+                                    "type": ForensicEntity.EntityType.DOCUMENT,
+                                    "relation_type": "DOCUMENT_ATTACHED",
+                                    "direction": "out",
+                                }
+                            ],
+                            evidence_data={
+                                "source_module": "core",
+                                "source_model": "ProfileDocument",
+                                "source_record_id": str(doc.id),
+                                "summary_snippet": f"Attached Legal Document: {doc.filename}",
+                            },
+                            timeline_title=f"Legal Document Attached: {doc.filename}",
+                            timeline_description=f"Evidentiary document {doc.filename} attached to {prof.full_name}",
+                            severity="INFO",
+                        )
+
+                        # Hop 2: Document -> Counterparties
+                        emit_forensic_finding(
+                            source_module="core",
+                            event_type="PROFILE_DOCUMENT_LEGAL_NEXUS",
+                            primary_entity_data={
+                                "name": doc.filename,
+                                "type": ForensicEntity.EntityType.DOCUMENT,
                             },
                             secondary_entities_data=sec_entities,
                             evidence_data={

@@ -742,6 +742,7 @@ def get_mode1_keyword_graph(
     target_entity_dict = {str(e.id): e for e in target_entities}
 
     # Scope relationships strictly to those involving target auditees
+    # Scope relationships strictly to those involving target auditees
     if target_entity_ids:
         audit_rels = list(
             EntityRelationship.objects.filter(
@@ -751,12 +752,34 @@ def get_mode1_keyword_graph(
             .select_related("source_entity", "target_entity")
             .prefetch_related("evidence_pointers")
         )
+
+        # 2-Hop Traversal: Include relationships for intermediate DOCUMENT nodes connected to target auditees
+        doc_node_ids = {
+            r.target_entity_id if r.source_entity_id in target_entity_ids else r.source_entity_id
+            for r in audit_rels
+            if (
+                r.target_entity.entity_type == ForensicEntity.EntityType.DOCUMENT
+                or r.source_entity.entity_type == ForensicEntity.EntityType.DOCUMENT
+            )
+        }
+        if doc_node_ids:
+            doc_rels = list(
+                EntityRelationship.objects.filter(
+                    Q(source_entity_id__in=doc_node_ids) | Q(target_entity_id__in=doc_node_ids)
+                )
+                .select_related("source_entity", "target_entity")
+                .prefetch_related("evidence_pointers")
+            )
+            for dr in doc_rels:
+                if dr not in audit_rels:
+                    audit_rels.append(dr)
     else:
         audit_rels = list(
             EntityRelationship.objects.select_related(
                 "source_entity", "target_entity"
             ).prefetch_related("evidence_pointers")[:100]
         )
+        doc_node_ids = set()
 
     # Allowed entities strictly within the active audit scope
     allowed_entities_dict: dict[str, ForensicEntity] = {str(e.id): e for e in target_entities}
@@ -842,7 +865,7 @@ def get_mode1_keyword_graph(
             k_low = k_term.lower()
             matching_cps: list[ForensicEntity] = []
             for c in allowed_entities_dict.values():
-                if c.id in target_entity_ids:
+                if c.id in target_entity_ids or c.id in doc_node_ids:
                     continue
 
                 matched = False
@@ -872,75 +895,143 @@ def get_mode1_keyword_graph(
 
             active_kw_names.add(k_term)
 
-            # Star Topology: Connect target auditees directly to each matching counterparty
+            # Connect target auditees to matching counterparties (through intermediate DOCUMENT bridges where available)
+            doc_node_ids_str = {str(d) for d in doc_node_ids}
             for cp in matching_cps:
                 matched_nodes[str(cp.id)] = cp
 
-                connected_targets = [
-                    te for te in target_entities if (str(te.id), str(cp.id)) in rel_map
-                ]
-                if not connected_targets and target_entities:
-                    connected_targets = [target_entities[0]]
+                # Check if there is an intermediate document node connecting target auditee and cp
+                doc_bridge_found = False
+                for d_id in doc_node_ids:
+                    d_id_str = str(d_id)
+                    for te in target_entities:
+                        te_id_str = str(te.id)
+                        if (te_id_str, d_id_str) in rel_map and (d_id_str, str(cp.id)) in rel_map:
+                            doc_bridge_found = True
+                            doc_ent = allowed_entities_dict.get(d_id_str)
+                            if doc_ent:
+                                matched_nodes[d_id_str] = doc_ent
 
-                for te in connected_targets:
-                    pair_key = tuple(sorted([str(te.id), str(cp.id)]))
-                    if pair_key in edge_set:
-                        continue
-                    edge_set.add(pair_key)
+                            # Hop 1: te -> doc
+                            p_key1 = tuple(sorted([te_id_str, d_id_str]))
+                            if p_key1 not in edge_set:
+                                edge_set.add(p_key1)
+                                r1_list = rel_map[(te_id_str, d_id_str)]
+                                r1 = next(
+                                    (r for r in r1_list if str(r.source_entity_id) == te_id_str),
+                                    r1_list[0],
+                                )
+                                ed1 = _format_edge(r1)
+                                ed1["source"] = te_id_str
+                                ed1["target"] = d_id_str
+                                ed1["from"] = te_id_str
+                                ed1["to"] = d_id_str
+                                tool1 = resolve_rel_tool_names(r1)
+                                ed1["label"] = (
+                                    f"{tool1}: {doc_ent.display_name if doc_ent else 'Document'}"
+                                )
+                                ed1["relation_type_display"] = (
+                                    f"[{tool1}] {r1.get_relation_type_display()}"
+                                )
+                                edges.append(ed1)
 
-                    rels = rel_map.get((str(te.id), str(cp.id)), [])
-                    rel_match = rels[0] if rels else None
-                    tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
+                            # Hop 2: doc -> cp
+                            p_key2 = tuple(sorted([d_id_str, str(cp.id)]))
+                            if p_key2 not in edge_set:
+                                edge_set.add(p_key2)
+                                r2_list = rel_map[(d_id_str, str(cp.id))]
+                                r2 = next(
+                                    (r for r in r2_list if str(r.source_entity_id) == d_id_str),
+                                    r2_list[0],
+                                )
+                                ed2 = _format_edge(r2)
+                                ed2["source"] = d_id_str
+                                ed2["target"] = str(cp.id)
+                                ed2["from"] = d_id_str
+                                ed2["to"] = str(cp.id)
+                                tool2 = resolve_rel_tool_names(r2)
+                                ed2["label"] = f"{tool2}: {cp.display_name}"
+                                ed2["relation_type_display"] = (
+                                    f"[{tool2}] {r2.get_relation_type_display()}"
+                                )
+                                edges.append(ed2)
 
-                    if rel_match:
-                        edge_dict = _format_edge(rel_match)
-                        edge_dict["label"] = f"{tool_name}: {k_term}"
-                        edge_dict["relation_type_display"] = (
-                            f"[{tool_name}] {rel_match.get_relation_type_display()} ({k_term})"
-                        )
-                        edges.append(edge_dict)
-                    else:
-                        snip = (
-                            f"Interlink based on forensic keyword '{k_term}' "
-                            f"correlating '{te.display_name}' and '{cp.display_name}' across audit evidence."
-                        )
-                        edges.append(
-                            {
-                                "id": f"kw__{te.id}__{cp.id}__{k_term}",
-                                "source": str(te.id),
-                                "target": str(cp.id),
-                                "from": str(te.id),
-                                "to": str(cp.id),
-                                "relation_type": "KEYWORD_INTERLINK",
-                                "relation_type_display": f"[{tool_name}] Keyword Correlation ({k_term})",
-                                "label": f"{tool_name}: {k_term}",
-                                "weight": 2.5,
-                                "confidence": 0.95,
-                                "module": "q_link",
-                                "is_direct": False,
-                                "is_rapid_layering": False,
-                                "is_external": False,
-                                "evidence": {
-                                    "source_module": f"Q-{tool_name}",
-                                    "snippet": snip,
-                                },
-                                "evidence_count": 1,
-                            }
-                        )
+                if not doc_bridge_found:
+                    connected_targets = [
+                        te for te in target_entities if (str(te.id), str(cp.id)) in rel_map
+                    ]
+                    if not connected_targets and target_entities:
+                        connected_targets = [target_entities[0]]
 
-        # Include remaining audit relationships involving target auditees (Star Topology)
+                    for te in connected_targets:
+                        pair_key = tuple(sorted([str(te.id), str(cp.id)]))
+                        if pair_key in edge_set:
+                            continue
+                        edge_set.add(pair_key)
+
+                        rels = rel_map.get((str(te.id), str(cp.id)), [])
+                        rel_match = rels[0] if rels else None
+                        tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
+
+                        if rel_match:
+                            edge_dict = _format_edge(rel_match)
+                            edge_dict["label"] = f"{tool_name}: {k_term}"
+                            edge_dict["relation_type_display"] = (
+                                f"[{tool_name}] {rel_match.get_relation_type_display()} ({k_term})"
+                            )
+                            edges.append(edge_dict)
+                        else:
+                            snip = (
+                                f"Interlink based on forensic keyword '{k_term}' "
+                                f"correlating '{te.display_name}' and '{cp.display_name}' across audit evidence."
+                            )
+                            edges.append(
+                                {
+                                    "id": f"kw__{te.id}__{cp.id}__{k_term}",
+                                    "source": str(te.id),
+                                    "target": str(cp.id),
+                                    "from": str(te.id),
+                                    "to": str(cp.id),
+                                    "relation_type": "KEYWORD_INTERLINK",
+                                    "relation_type_display": f"[{tool_name}] Keyword Correlation ({k_term})",
+                                    "label": f"{tool_name}: {k_term}",
+                                    "weight": 2.5,
+                                    "confidence": 0.95,
+                                    "module": "q_link",
+                                    "is_direct": False,
+                                    "is_rapid_layering": False,
+                                    "is_external": False,
+                                    "evidence": {
+                                        "source_module": f"Q-{tool_name}",
+                                        "snippet": snip,
+                                    },
+                                    "evidence_count": 1,
+                                }
+                            )
+
+        # Include remaining audit relationships involving target auditees or intermediate document nodes
+        doc_node_ids_str = {str(d) for d in doc_node_ids}
         for r in audit_rels:
             s_id = str(r.source_entity_id)
             t_id = str(r.target_entity_id)
 
-            if s_id not in target_entity_dict and t_id not in target_entity_dict:
+            if (
+                s_id not in target_entity_dict
+                and t_id not in target_entity_dict
+                and s_id not in doc_node_ids_str
+                and t_id not in doc_node_ids_str
+            ):
                 continue
 
             pair_key = tuple(sorted([s_id, t_id]))
             if pair_key not in edge_set:
                 edge_set.add(pair_key)
                 tool_name = resolve_rel_tool_names(r)
-                other_entity = r.target_entity if s_id in target_entity_dict else r.source_entity
+                other_entity = (
+                    r.target_entity
+                    if (s_id in target_entity_dict or s_id in doc_node_ids_str)
+                    else r.source_entity
+                )
                 edge_dict = _format_edge(r)
                 edge_dict["label"] = f"{tool_name}: {other_entity.display_name}"
                 edge_dict["relation_type_display"] = (
@@ -992,7 +1083,7 @@ def get_mode1_keyword_graph(
     # Find matching counterparties in active audit scope
     matching_cps = []
     for c in allowed_entities_dict.values():
-        if c.id in target_entity_ids:
+        if c.id in target_entity_ids or c.id in doc_node_ids:
             continue
         matched = False
         if kw_lower in c.display_name.lower():
@@ -1005,12 +1096,16 @@ def get_mode1_keyword_graph(
             for r in audit_rels:
                 if r.source_entity_id == c.id or r.target_entity_id == c.id:
                     for ptr in r.evidence_pointers.all():
-                        if (
-                            kw_lower in (ptr.summary_snippet or "").lower()
-                            or kw_lower in str(ptr.metadata or {}).lower()
-                        ):
-                            matched = True
-                            break
+                        snip = (ptr.summary_snippet or "").lower()
+                        meta_str = str(ptr.metadata or {}).lower()
+                        if kw_lower in snip or kw_lower in meta_str:
+                            other_entity_match = any(
+                                kw_lower == other_ent.display_name.lower() and other_ent.id != c.id
+                                for other_ent in allowed_entities_dict.values()
+                            )
+                            if not other_entity_match:
+                                matched = True
+                                break
                 if matched:
                     break
         if matched:
@@ -1032,53 +1127,106 @@ def get_mode1_keyword_graph(
             .exists()
         )
 
-    # Star Topology: Connect target auditee(s) to matching counterparties
+    # Star Topology: Connect target auditee(s) to matching counterparties (checking for intermediate document bridges)
+    doc_node_ids_str = {str(d) for d in doc_node_ids}
     for cp in matching_cps:
         matched_nodes[str(cp.id)] = cp
-        connected_targets = [te for te in target_entities if (str(te.id), str(cp.id)) in rel_map]
-        if not connected_targets and target_entities:
-            connected_targets = [target_entities[0]]
 
-        for te in connected_targets:
-            pair_key = tuple(sorted([str(te.id), str(cp.id)]))
-            if pair_key in edge_set:
-                continue
-            edge_set.add(pair_key)
-            rels = rel_map.get((str(te.id), str(cp.id)), [])
-            rel_match = rels[0] if rels else None
-            tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
+        # Check if there is an intermediate document node connecting target auditee and cp
+        doc_bridge_found = False
+        for d_id in doc_node_ids:
+            d_id_str = str(d_id)
+            for te in target_entities:
+                te_id_str = str(te.id)
+                if (te_id_str, d_id_str) in rel_map and (d_id_str, str(cp.id)) in rel_map:
+                    doc_bridge_found = True
+                    doc_ent = allowed_entities_dict.get(d_id_str)
+                    if doc_ent:
+                        matched_nodes[d_id_str] = doc_ent
 
-            if rel_match:
-                edge_dict = _format_edge(rel_match)
-                edge_dict["label"] = f"{tool_name}: {kw}"
-                edge_dict["relation_type_display"] = (
-                    f"[{tool_name}] {rel_match.get_relation_type_display()} ({kw})"
-                )
-                edges.append(edge_dict)
-            else:
-                edges.append(
-                    {
-                        "id": f"kw__{te.id}__{cp.id}__{kw}",
-                        "source": str(te.id),
-                        "target": str(cp.id),
-                        "from": str(te.id),
-                        "to": str(cp.id),
-                        "relation_type": "KEYWORD_INTERLINK",
-                        "relation_type_display": f"[{tool_name}] Keyword Correlation ({kw})",
-                        "label": f"{tool_name}: {kw}",
-                        "weight": 2.5,
-                        "confidence": 0.95,
-                        "module": "q_link",
-                        "is_direct": False,
-                        "is_rapid_layering": False,
-                        "is_external": False,
-                        "evidence": {
-                            "source_module": f"Q-{tool_name}",
-                            "snippet": f"Interlink based on keyword '{kw}' between '{te.display_name}' and '{cp.display_name}'.",
-                        },
-                        "evidence_count": 1,
-                    }
-                )
+                    # Hop 1: te -> doc
+                    p_key1 = tuple(sorted([te_id_str, d_id_str]))
+                    if p_key1 not in edge_set:
+                        edge_set.add(p_key1)
+                        r1_list = rel_map[(te_id_str, d_id_str)]
+                        r1 = next(
+                            (r for r in r1_list if str(r.source_entity_id) == te_id_str), r1_list[0]
+                        )
+                        ed1 = _format_edge(r1)
+                        ed1["source"] = te_id_str
+                        ed1["target"] = d_id_str
+                        ed1["from"] = te_id_str
+                        ed1["to"] = d_id_str
+                        tool1 = resolve_rel_tool_names(r1)
+                        ed1["label"] = f"{tool1}: {doc_ent.display_name if doc_ent else 'Document'}"
+                        ed1["relation_type_display"] = f"[{tool1}] {r1.get_relation_type_display()}"
+                        edges.append(ed1)
+
+                    # Hop 2: doc -> cp
+                    p_key2 = tuple(sorted([d_id_str, str(cp.id)]))
+                    if p_key2 not in edge_set:
+                        edge_set.add(p_key2)
+                        r2_list = rel_map[(d_id_str, str(cp.id))]
+                        r2 = next(
+                            (r for r in r2_list if str(r.source_entity_id) == d_id_str), r2_list[0]
+                        )
+                        ed2 = _format_edge(r2)
+                        ed2["source"] = d_id_str
+                        ed2["target"] = str(cp.id)
+                        ed2["from"] = d_id_str
+                        ed2["to"] = str(cp.id)
+                        tool2 = resolve_rel_tool_names(r2)
+                        ed2["label"] = f"{tool2}: {cp.display_name}"
+                        ed2["relation_type_display"] = f"[{tool2}] {r2.get_relation_type_display()}"
+                        edges.append(ed2)
+
+        if not doc_bridge_found:
+            connected_targets = [
+                te for te in target_entities if (str(te.id), str(cp.id)) in rel_map
+            ]
+            if not connected_targets and target_entities:
+                connected_targets = [target_entities[0]]
+
+            for te in connected_targets:
+                pair_key = tuple(sorted([str(te.id), str(cp.id)]))
+                if pair_key in edge_set:
+                    continue
+                edge_set.add(pair_key)
+                rels = rel_map.get((str(te.id), str(cp.id)), [])
+                rel_match = rels[0] if rels else None
+                tool_name = resolve_rel_tool_names(rels) if rels else "Bank"
+
+                if rel_match:
+                    edge_dict = _format_edge(rel_match)
+                    edge_dict["label"] = f"{tool_name}: {kw}"
+                    edge_dict["relation_type_display"] = (
+                        f"[{tool_name}] {rel_match.get_relation_type_display()} ({kw})"
+                    )
+                    edges.append(edge_dict)
+                else:
+                    edges.append(
+                        {
+                            "id": f"kw__{te.id}__{cp.id}__{kw}",
+                            "source": str(te.id),
+                            "target": str(cp.id),
+                            "from": str(te.id),
+                            "to": str(cp.id),
+                            "relation_type": "KEYWORD_INTERLINK",
+                            "relation_type_display": f"[{tool_name}] Keyword Correlation ({kw})",
+                            "label": f"{tool_name}: {kw}",
+                            "weight": 2.5,
+                            "confidence": 0.95,
+                            "module": "q_link",
+                            "is_direct": False,
+                            "is_rapid_layering": False,
+                            "is_external": False,
+                            "evidence": {
+                                "source_module": f"Q-{tool_name}",
+                                "snippet": f"Interlink based on keyword '{kw}' between '{te.display_name}' and '{cp.display_name}'.",
+                            },
+                            "evidence_count": 1,
+                        }
+                    )
 
     # If target auditees matched kw, or if only target auditees exist (e.g., Maharajan & Dhanasekaran)
     if (target_matched or not matching_cps) and len(target_entities) >= 2:
@@ -1190,13 +1338,31 @@ def get_mode2_audit_graph(
         target_ids = {e.id for e in core_targets}
 
         if target_ids:
-            relations = EntityRelationship.objects.filter(
-                Q(source_entity_id__in=target_ids) | Q(target_entity_id__in=target_ids)
+            relations = list(
+                EntityRelationship.objects.filter(
+                    Q(source_entity_id__in=target_ids) | Q(target_entity_id__in=target_ids)
+                )
             )
             connected_ids = set(target_ids)
             for r in relations:
                 connected_ids.add(r.source_entity_id)
                 connected_ids.add(r.target_entity_id)
+
+            # 2-Hop Traversal: Include counterparties connected to intermediate DOCUMENT nodes
+            doc_entities = ForensicEntity.objects.filter(
+                id__in=connected_ids,
+                entity_type=ForensicEntity.EntityType.DOCUMENT,
+            )
+            doc_ids = {d.id for d in doc_entities}
+            if doc_ids:
+                doc_relations = list(
+                    EntityRelationship.objects.filter(
+                        Q(source_entity_id__in=doc_ids) | Q(target_entity_id__in=doc_ids)
+                    )
+                )
+                for r in doc_relations:
+                    connected_ids.add(r.source_entity_id)
+                    connected_ids.add(r.target_entity_id)
 
             entities = list(
                 ForensicEntity.objects.filter(id__in=connected_ids).order_by(

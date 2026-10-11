@@ -5,6 +5,7 @@ Follows agentic-django principles: pure domain workflows, atomic transactions, a
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from django.conf import settings
 from django.db import transaction
@@ -12,6 +13,7 @@ from django.db.models import Avg, Count, Q
 from loguru import logger
 
 from .backend import inspect_document
+from .backend.ner_extractor import extract_proper_nouns_and_entities_from_file
 from .models import VerificationCase, VerifiedDocument
 
 
@@ -175,7 +177,60 @@ def ingest_and_verify_document(
         summary=result.summary,
     )
 
-    # 5. Update case aggregate KPIs
+    # 5. Extract NER entities & proper nouns from document content
+    if doc.storage_path and Path(doc.storage_path).exists():
+        try:
+            custodian_name = case.custodian_name if case else ""
+            ner_entities = extract_proper_nouns_and_entities_from_file(
+                doc.storage_path, doc.mime_type, custodian_name=custodian_name
+            )
+            raw_meta = dict(doc.raw_metadata or {})
+            raw_meta["ner_entities"] = ner_entities
+
+            # Populate matched keywords and keyword pages from extracted entities
+            from .backend.content_search import search_keywords_with_pages
+
+            ner_names = [e["name"] for e in ner_entities if e.get("name")]
+            if custodian_name and custodian_name not in ner_names:
+                ner_names.append(custodian_name)
+
+            if ner_names:
+                counts, pages = search_keywords_with_pages(
+                    doc.storage_path, doc.mime_type, ner_names
+                )
+                doc.matched_keywords = counts
+                raw_meta["keyword_pages"] = pages
+
+            doc.raw_metadata = raw_meta
+            doc.save(update_fields=["matched_keywords", "raw_metadata"])
+
+            # Propagate extracted proper nouns to InvestigationProfile keywords if profile exists
+            if custodian_name:
+                try:
+                    from core.models import InvestigationProfile
+                    from core.profiles import add_keywords_to_profile
+
+                    prof = InvestigationProfile.objects.filter(
+                        full_name__iexact=custodian_name
+                    ).first()
+                    if prof:
+                        add_keywords_to_profile(prof.id, ner_names)
+                except Exception as ex_prof:
+                    logger.debug(f"Auto-keyword propagation in Q-Verify skipped: {ex_prof}")
+
+            # Emit findings to Q-Link knowledge graph (Auditee -> Document -> Counterparties)
+            from django.apps import apps
+
+            if apps.is_installed("q_link") and custodian_name:
+                try:
+                    _emit_q_verify_findings_to_q_link(doc, custodian_name, ner_entities)
+                except Exception as ex_link:
+                    logger.debug(f"Q-Link dispatch in Q-Verify skipped: {ex_link}")
+
+        except Exception as exc:
+            logger.warning(f"Error during NER extraction for document {doc.filename}: {exc}")
+
+    # 6. Update case aggregate KPIs
     if case:
         recompute_case_metrics(case)
 
@@ -186,6 +241,114 @@ def ingest_and_verify_document(
         doc.risk_level,
     )
     return doc
+
+
+def _emit_q_verify_findings_to_q_link(
+    doc: VerifiedDocument,
+    custodian_name: str,
+    ner_entities: list[dict[str, Any]],
+) -> None:
+    """Dispatches 2-hop document nexus findings to Q-Link: Auditee -> Document -> Counterparties."""
+    from django.apps import apps
+
+    if not apps.is_installed("q_link"):
+        return
+
+    from q_link.backend.dispatcher import emit_forensic_finding
+    from q_link.models import ForensicEntity
+
+    # Hop 1: Auditee / Custodian -> Document
+    emit_forensic_finding(
+        source_module="q_verify",
+        event_type="DOCUMENT_ALTERATION_DETECTED",
+        primary_entity_data={
+            "name": custodian_name,
+            "type": ForensicEntity.EntityType.EMPLOYEE,
+            "is_target": True,
+        },
+        secondary_entities_data=[
+            {
+                "name": doc.filename,
+                "type": ForensicEntity.EntityType.DOCUMENT,
+                "relation_type": "DOCUMENT_ATTACHED",
+                "direction": "out",
+                "metadata": {
+                    "risk_level": doc.risk_level,
+                    "score": doc.authenticity_score,
+                },
+            }
+        ],
+        evidence_data={
+            "source_module": "q_verify",
+            "source_model": "VerifiedDocument",
+            "source_record_id": str(doc.id),
+            "evidence_url": f"/verify/case/{doc.case.id}/" if doc.case else "/verify/",
+            "summary_snippet": f"File: {doc.filename} | Score: {doc.authenticity_score} | Level: {doc.risk_level}",
+            "occurred_at": doc.created_at,
+        },
+        occurred_at=doc.created_at,
+        timeline_title=f"Doc Verification: {doc.filename}",
+        timeline_description=f"Authenticity Score: {doc.authenticity_score}/100 for custodian {custodian_name}",
+        severity="CRITICAL" if doc.risk_level in ["HIGH_RISK_TAMPERED", "SUSPICIOUS"] else "INFO",
+    )
+
+    # Hop 2: Document -> Counterparties / Partners
+    secondaries = []
+    for ent in ner_entities:
+        ent_name = ent.get("name")
+        if not ent_name or ent_name.lower() == custodian_name.lower():
+            continue
+        ent_type = (
+            ForensicEntity.EntityType.COMPANY
+            if ent.get("entity_type") == "ORGANIZATION"
+            else ForensicEntity.EntityType.EMPLOYEE
+        )
+        rel_type = (
+            "PARTNER"
+            if ent.get("entity_type") == "PARTNER"
+            else ("DIRECTOR_OF" if ent.get("entity_type") == "ORGANIZATION" else "ASSOCIATE")
+        )
+        secondaries.append(
+            {
+                "name": ent_name,
+                "type": ent_type,
+                "relation_type": rel_type,
+                "direction": "out",
+                "weight": float(ent.get("count", 1)),
+                "metadata": {
+                    "pages": ent.get("pages", []),
+                    "role": ent.get("role", ""),
+                    "file_name": doc.filename,
+                },
+            }
+        )
+
+    if secondaries:
+        emit_forensic_finding(
+            source_module="q_verify",
+            event_type="DOCUMENT_NER_LEGAL_NEXUS",
+            primary_entity_data={
+                "name": doc.filename,
+                "type": ForensicEntity.EntityType.DOCUMENT,
+                "metadata": {
+                    "risk_level": doc.risk_level,
+                    "score": doc.authenticity_score,
+                },
+            },
+            secondary_entities_data=secondaries,
+            evidence_data={
+                "source_module": "q_verify",
+                "source_model": "VerifiedDocument",
+                "source_record_id": str(doc.id),
+                "evidence_url": f"/verify/case/{doc.case.id}/" if doc.case else "/verify/",
+                "summary_snippet": f"Legal document {doc.filename} established nexus with {', '.join([s['name'] for s in secondaries])}",
+                "occurred_at": doc.created_at,
+            },
+            occurred_at=doc.created_at,
+            timeline_title=f"Legal Document Nexus: {doc.filename}",
+            timeline_description=f"Identified {len(secondaries)} parties in {doc.filename}: {', '.join([s['name'] for s in secondaries])}",
+            severity="WARNING",
+        )
 
 
 def recompute_case_metrics(case: VerificationCase) -> None:
@@ -224,13 +387,15 @@ def perform_document_search(
     document_id: str, custom_keywords: list[str] | None = None
 ) -> VerifiedDocument:
     """
-    Performs keyword search on the document content based on associated profile keywords
-    and optionally custom keywords. Results are saved in matched_keywords.
+    Performs keyword search on the document content based on associated profile keywords,
+    extracted NER proper nouns, and optionally custom keywords. Results are saved in matched_keywords.
     """
     doc = VerifiedDocument.objects.get(id=document_id)
 
     profile_keywords = []
+    custodian_name = ""
     if doc.case and doc.case.custodian_name:
+        custodian_name = doc.case.custodian_name
         from core.models import InvestigationProfile
 
         profile = InvestigationProfile.objects.filter(
@@ -242,8 +407,29 @@ def perform_document_search(
     if not custom_keywords:
         custom_keywords = []
 
+    # Extract or retrieve NER proper nouns
+    raw_meta = dict(doc.raw_metadata or {})
+    ner_entities = raw_meta.get("ner_entities", [])
+    if not ner_entities and doc.storage_path and Path(doc.storage_path).exists():
+        try:
+            from .backend.ner_extractor import extract_proper_nouns_and_entities_from_file
+
+            ner_entities = extract_proper_nouns_and_entities_from_file(
+                doc.storage_path, doc.mime_type, custodian_name=custodian_name
+            )
+            raw_meta["ner_entities"] = ner_entities
+            doc.raw_metadata = raw_meta
+        except Exception as ex_ner:
+            logger.debug(f"On-demand NER extraction bypassed: {ex_ner}")
+
+    ner_names = [e["name"] for e in ner_entities if e.get("name")]
+    if custodian_name and custodian_name not in ner_names:
+        ner_names.append(custodian_name)
+
     # Deduplicate and combine keywords using set comprehension for Ruff C403 compliance
-    all_keywords = list({k.strip() for k in custom_keywords + profile_keywords if k.strip()})
+    all_keywords = list(
+        {k.strip() for k in custom_keywords + profile_keywords + ner_names if k.strip()}
+    )
 
     if not all_keywords:
         return doc
@@ -266,7 +452,6 @@ def perform_document_search(
         existing_matches.update(new_results)
         doc.matched_keywords = existing_matches
 
-        raw_meta = dict(doc.raw_metadata or {})
         existing_pages = dict(raw_meta.get("keyword_pages", {}))
         existing_pages.update(new_pages)
         raw_meta["keyword_pages"] = existing_pages
