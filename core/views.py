@@ -118,6 +118,7 @@ def landing_view(request: HttpRequest) -> HttpResponse:
             "audits": audits,
             "audits_json": json.dumps(audits),
             "next_audit_name": next_audit_name,
+            "has_active_audit": bool(active_audit),
         },
     )
 

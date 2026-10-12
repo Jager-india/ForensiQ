@@ -1,13 +1,13 @@
 {% comment %}
 ForensiQ Module Card Component
-Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, stats_line1, stats_line2
+Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, stats_line1, stats_line2, has_audit
 {% endcomment %}
-{% with a=accent|default:"orange" h=href|default:"#" t=tag|default:"LIVE" sb=status_badge|default:tag|default:"LIVE" is_hub=name|default:"" %}
+{% with a=accent|default:"orange" h=href|default:"#" t=tag|default:"LIVE" sb=status_badge|default:tag|default:"LIVE" is_hub=name|default:"" has_a=has_audit|default:False %}
 <a href="{{ h }}" 
    class="group relative w-full h-full flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 overflow-hidden
    {% if name == 'Link' %}
        p-5 sm:p-6 rounded-2xl bg-theme-surface border border-theme-border shadow-md hover:shadow-2xl dark:hover:shadow-black/70 border-l-4 border-l-orange-500 ring-1 ring-orange-500/40 hover:border-r-orange-500/50 shadow-orange-500/10
-   {% elif not is_used and sb != 'Ready' and sb != 'Mapped' and t != 'BUILDING' %}
+   {% elif has_a and not is_used and sb != 'Ready' and sb != 'Mapped' and t != 'BUILDING' %}
        p-4 sm:p-4.5 rounded-xl bg-theme-surface/75 border border-theme-border/60 border-l-4 border-l-zinc-400/50 dark:border-l-zinc-600/50 opacity-80 hover:opacity-100 hover:shadow-lg dark:hover:shadow-black/50
    {% elif t == 'BUILDING' %}
        p-4 sm:p-4.5 rounded-xl bg-theme-surface/80 border border-theme-border border-l-4 border-l-zinc-400 dark:border-l-zinc-600 shadow-sm hover:border-theme-border-strong
@@ -21,12 +21,13 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
        {% elif a == 'amber' %} border-l-4 border-l-[#dfab57] dark:border-l-[#dfab57] hover:border-r-[#dfab57]/30
        {% elif a == 'steel' or a == 'blue' %} border-l-4 border-l-[#6ba3c7] dark:border-l-[#7eaecf] hover:border-r-[#7eaecf]/30
        {% elif a == 'copper' or a == 'terracotta' %} border-l-4 border-l-[#c56a48] dark:border-l-[#d67b59] hover:border-r-[#d67b59]/30
+       {% elif a == 'indigo' %} border-l-4 border-l-[#818cf8] dark:border-l-[#818cf8] hover:border-r-[#818cf8]/30
        {% else %} border-l-4 border-l-amber-500 hover:border-r-amber-500/30
        {% endif %}
    {% endif %}">
 
-    <!-- Subtle Ambient Hover Glow (Only for live/used modules) -->
-    {% if t != 'BUILDING' and is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}
+    <!-- Subtle Ambient Hover Glow (Only for live/colored modules) -->
+    {% if t != 'BUILDING' and not has_a or is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}
     <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none
         {% if name == 'Link' %} bg-gradient-to-br from-orange-500/15 via-amber-500/5 to-transparent
         {% elif a == 'orange' %} bg-gradient-to-br from-[#e87a4d]/5 to-transparent
@@ -37,6 +38,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
         {% elif a == 'amber' %} bg-gradient-to-br from-[#dfab57]/5 to-transparent
         {% elif a == 'steel' or a == 'blue' %} bg-gradient-to-br from-[#7eaecf]/5 to-transparent
         {% elif a == 'copper' or a == 'terracotta' %} bg-gradient-to-br from-[#d67b59]/5 to-transparent
+        {% elif a == 'indigo' %} bg-gradient-to-br from-[#818cf8]/5 to-transparent
         {% else %} bg-gradient-to-br from-amber-500/5 to-transparent {% endif %}">
     </div>
     {% endif %}
@@ -46,7 +48,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
         <!-- Top Row: Number · Category & Status Pill -->
         <div class="flex items-center justify-between mb-2 sm:mb-2.5">
             <span class="font-mono text-[11px] font-bold tracking-[0.2em] uppercase
-                {% if t == 'BUILDING' or not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}
+                {% if t == 'BUILDING' or has_a and not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}
                     text-zinc-500 dark:text-zinc-400
                 {% else %}
                     {% if name == 'Link' %} text-orange-500 dark:text-orange-400 font-extrabold
@@ -58,6 +60,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
                     {% elif a == 'amber' %} text-[#c99238] dark:text-[#e8b765]
                     {% elif a == 'steel' or a == 'blue' %} text-[#5a92b8] dark:text-[#7eaecf]
                     {% elif a == 'copper' or a == 'terracotta' %} text-[#b85a38] dark:text-[#d67b59]
+                    {% elif a == 'indigo' %} text-[#6366f1] dark:text-[#818cf8]
                     {% else %} text-amber-500 {% endif %}
                 {% endif %}">
                 {% if num %}{{ num }} · {% endif %}{{ category }}
@@ -95,7 +98,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
             <span class="text-[9px] font-bold tracking-widest px-2 py-0.5 rounded font-mono uppercase bg-zinc-500/10 text-zinc-400 dark:text-zinc-500 border border-zinc-500/20">
                 AWAITING BANK DATA
             </span>
-            {% elif t %}
+            {% elif t or sb == 'LIVE' %}
             <span class="text-[9px] font-extrabold tracking-widest px-2 py-0.5 rounded font-mono uppercase shadow-sm
                 {% if a == 'orange' %} bg-[#e87a4d] text-zinc-950
                 {% elif a == 'gold' %} bg-[#d6c487] text-zinc-950
@@ -105,15 +108,16 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
                 {% elif a == 'amber' %} bg-[#dfab57] text-zinc-950
                 {% elif a == 'steel' or a == 'blue' %} bg-[#7eaecf] text-zinc-950
                 {% elif a == 'copper' or a == 'terracotta' %} bg-[#d67b59] text-zinc-950
+                {% elif a == 'indigo' %} bg-[#818cf8] text-zinc-950
                 {% else %} bg-amber-500 text-zinc-950 {% endif %}">
-                {{ sb }}
+                {{ sb|default:t|default:"LIVE" }}
             </span>
             {% endif %}
         </div>
 
         <!-- Module Title: Q-Name -->
-        <h2 class="{% if name == 'Link' %}text-3xl{% else %}text-2xl{% endif %} font-black tracking-tight {% if t == 'BUILDING' or not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}text-theme-text/85{% else %}text-theme-text{% endif %} mb-1.5 flex items-center">
-            {% if t == 'BUILDING' or not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}
+        <h2 class="{% if name == 'Link' %}text-3xl{% else %}text-2xl{% endif %} font-black tracking-tight {% if t == 'BUILDING' or has_a and not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}text-theme-text/85{% else %}text-theme-text{% endif %} mb-1.5 flex items-center">
+            {% if t == 'BUILDING' or has_a and not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}
                 <span class="text-theme-muted">Q</span>-{{ name }}
             {% else %}
                 <span class="{% if name == 'Link' %} text-orange-500 dark:text-orange-400
@@ -125,6 +129,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
                              {% elif a == 'amber' %} text-[#c99238] dark:text-[#e8b765]
                              {% elif a == 'steel' or a == 'blue' %} text-[#5a92b8] dark:text-[#7eaecf]
                              {% elif a == 'copper' or a == 'terracotta' %} text-[#b85a38] dark:text-[#d67b59]
+                             {% elif a == 'indigo' %} text-[#6366f1] dark:text-[#818cf8]
                              {% else %} text-amber-500 {% endif %}">Q</span>-{{ name }}
             {% endif %}
             {% if name == 'Link' %}
@@ -136,7 +141,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
 
         <!-- Catchphrase / Tagline -->
         {% if tagline %}
-        <p class="text-xs font-medium {% if t == 'BUILDING' or not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}text-theme-muted{% else %}text-theme-text/90{% endif %} mb-2 leading-relaxed">
+        <p class="text-xs font-medium {% if t == 'BUILDING' or has_a and not is_used and sb != 'Ready' and sb != 'Mapped' and name != 'Link' %}text-theme-muted{% else %}text-theme-text/90{% endif %} mb-2 leading-relaxed">
             {{ tagline }}
         </p>
         {% endif %}
@@ -144,11 +149,11 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
         <!-- Active Audit Module Metrics -->
         {% if stats_line1 %}
         <div class="mt-auto pt-2 border-t border-theme-border/50 flex flex-col gap-0.5 text-[11px] font-mono">
-            <div class="flex items-center justify-between {% if is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-text font-bold{% else %}text-zinc-500 dark:text-zinc-400 font-medium{% endif %}">
+            <div class="flex items-center justify-between {% if not has_a or is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-text font-bold{% else %}text-zinc-500 dark:text-zinc-400 font-medium{% endif %}">
                 <span>{{ stats_line1 }}</span>
             </div>
             {% if stats_line2 %}
-            <div class="text-[10px] {% if is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-muted{% else %}text-zinc-500 dark:text-zinc-500{% endif %}">
+            <div class="text-[10px] {% if not has_a or is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-muted{% else %}text-zinc-500 dark:text-zinc-500{% endif %}">
                 <span>{{ stats_line2 }}</span>
             </div>
             {% endif %}
@@ -164,7 +169,7 @@ Props: num, category, name, tagline, tag, accent, href, is_used, status_badge, s
     </div>
 
     <!-- Interactive Launch Link Indicator (Pinned to bottom) -->
-    <div class="mt-3 pt-2.5 border-t border-theme-border/60 flex items-center justify-between text-xs font-semibold {% if is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-muted group-hover:text-theme-text{% else %}text-zinc-500 dark:text-zinc-400 group-hover:text-theme-text{% endif %} transition-colors relative z-10">
+    <div class="mt-3 pt-2.5 border-t border-theme-border/60 flex items-center justify-between text-xs font-semibold {% if not has_a or is_used or sb == 'Ready' or sb == 'Mapped' or name == 'Link' %}text-theme-muted group-hover:text-theme-text{% else %}text-zinc-500 dark:text-zinc-400 group-hover:text-theme-text{% endif %} transition-colors relative z-10">
         {% if t == 'BUILDING' %}
         <span class="flex items-center gap-1.5 text-theme-muted text-[11px]">
             <i class="fa-solid fa-code text-[10px]"></i> In Development

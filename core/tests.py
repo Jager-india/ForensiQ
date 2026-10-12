@@ -2216,15 +2216,15 @@ class ActiveAuditHomepageTests(TestCase):
         stats = get_active_audit_module_stats(None)
         self.assertIn("bank", stats)
         self.assertFalse(stats["bank"]["is_used"])
-        self.assertEqual(stats["bank"]["status_badge"], "Not Uploaded")
-        self.assertIn("0", stats["bank"]["stats_line1"])
+        self.assertEqual(stats["bank"]["status_badge"], "LIVE")
+        self.assertEqual(stats["bank"]["stats_line1"], "Statements uploaded: 0")
         self.assertEqual(stats["bank"]["stats_line2"], "Last checked: —")
         self.assertEqual(stats["link"]["status_badge"], "HUB")
         self.assertFalse(stats["link"]["is_used"])
-        # Q-Trail has no direct upload mechanism; without bank statements it awaits bank data
+        self.assertEqual(stats["link"]["stats_line1"], "Active Evidence Sources: 0/8")
         self.assertIn("trail", stats)
         self.assertFalse(stats["trail"]["is_used"])
-        self.assertEqual(stats["trail"]["status_badge"], "Awaiting Bank Data")
+        self.assertEqual(stats["trail"]["status_badge"], "LIVE")
         self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
         self.assertEqual(stats["trail"]["stats_line2"], "Source: Requires Q-Bank statements")
 
@@ -2444,6 +2444,8 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertContains(response, "landing-active-audit-pill")
         self.assertContains(response, "No Active Audit")
         self.assertContains(response, "SELECT")
+        self.assertContains(response, "LIVE")
+        self.assertNotContains(response, "NOT UPLOADED")
 
     def test_landing_page_audit_cards_render_selection_action(self):
         # When viewing the landing page, the audits modal template should contain
