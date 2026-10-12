@@ -268,7 +268,7 @@
         function initGlobalAuditManager() {
             if (!window.Alpine) return;
             Alpine.data('globalAuditManager', () => ({
-                showAuditModal: {% if not active_audit and request.path != '/' and request.path != '/login/' and request.path != '/logout/' and request.path != '/admin/' and all_audits %}true{% else %}false{% endif %},
+                showAuditModal: {% if not active_audit and request.path != '/' and request.path != '/login/' and request.path != '/logout/' and request.path != '/admin/' and 'manuals' not in request.path and 'privacy' not in request.path and 'terms' not in request.path and all_audits %}true{% else %}false{% endif %},
                 searchAuditQuery: '',
                 auditsList: {{ all_audits_json|default:'[]'|safe }},
                 currentAuditId: '{{ active_audit.id|default:'' }}',

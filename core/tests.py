@@ -2134,6 +2134,8 @@ class FooterAndManualsTests(TestCase):
         self.assertContains(response, "User Manuals")
         self.assertIn("manuals", response.context)
         self.assertEqual(response.context["active_key"], "core")
+        content = response.content.decode("utf-8")
+        self.assertIn("showAuditModal: false", content)
 
     def test_manuals_view_with_app_param(self):
         url = reverse("manuals") + "?app=q_mail"
