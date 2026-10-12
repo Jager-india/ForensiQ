@@ -1,15 +1,15 @@
-<c-base title="ForensiQ | Forensic Investigation Platform">
+<c-base title="ForensiQ | Forensic Investigation Platform" no_scroll="true">
 
-    <div x-data="profilesManager">
+    <div x-data="profilesManager" class="w-full flex flex-col justify-center my-auto">
         <!-- Page Header Section with Top Right Audits & Profiles Buttons & Modal -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-3 shrink-0">
         <div>
             <div
-                class="flex items-center space-x-2 text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 mb-1.5">
+                class="flex items-center space-x-2 text-[10px] sm:text-xs font-mono font-semibold uppercase tracking-wider text-amber-500 mb-0.5">
                 <span class="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
                 <span>In-house digital forensic audit ecosystem &bull; AI-Assisted</span>
             </div>
-            <h1 class="text-3xl sm:text-4xl font-black tracking-tight text-theme-text dark:text-white">
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-theme-text dark:text-white leading-tight">
                 Investigation Platform
             </h1>
         </div>
@@ -21,7 +21,7 @@
             <button type="button" 
                     id="landing-active-audit-pill" 
                     @click="openModalTab('audits')"
-                    class="h-10 px-3.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-text dark:text-white"
+                    class="h-8.5 sm:h-9 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-text dark:text-white"
                     title="Active Audit: {{ active_audit.name }} — Click to view audits directory">
                 <span class="relative flex h-2 w-2">
                     <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -29,7 +29,7 @@
                 </span>
                 <span class="font-mono font-bold text-emerald-600 dark:text-emerald-400">{{ active_audit.name }}</span>
                 {% if active_audit.title %}
-                <span class="text-theme-muted hidden md:inline truncate max-w-[150px]">{{ active_audit.title }}</span>
+                <span class="text-theme-muted hidden md:inline truncate max-w-[140px]">{{ active_audit.title }}</span>
                 {% endif %}
                 <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold">ACTIVE</span>
             </button>
@@ -37,7 +37,7 @@
             <button type="button" 
                     id="landing-active-audit-pill" 
                     @click="openModalTab('audits')"
-                    class="h-10 px-3.5 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700/80 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-muted hover:text-theme-text"
+                    class="h-8.5 sm:h-9 px-3 rounded-xl bg-slate-100 dark:bg-zinc-800/80 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700/80 text-xs font-medium flex items-center gap-2 transition cursor-pointer text-theme-muted hover:text-theme-text"
                     title="No active audit selected — Click to select an audit">
                 <span class="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-500"></span>
                 <span class="font-mono text-zinc-500 dark:text-zinc-400">No Active Audit</span>
@@ -46,17 +46,18 @@
             {% endif %}
 
             <button type="button" id="landing-audits-btn" @click="openModalTab('audits')"
-                class="h-10 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-2 transition shadow-lg shadow-amber-500/20 cursor-pointer">
+                class="h-8.5 sm:h-9 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-amber-500/20 cursor-pointer">
                 <i class="fa-solid fa-folder-tree text-xs"></i>
                 <span>Audits</span>
                 <span class="ml-0.5 px-1.5 py-0.5 rounded-full bg-zinc-950/20 text-zinc-950 text-[10px] font-mono" x-text="auditsList.length">{{ audits|length }}</span>
             </button>
             <button type="button" id="landing-profiles-btn" @click="openModalTab('directory')"
-                class="h-10 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-theme-text dark:text-zinc-200 text-xs font-bold flex items-center gap-2 transition border border-slate-200 dark:border-zinc-700 cursor-pointer">
+                class="h-8.5 sm:h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-theme-text dark:text-zinc-200 text-xs font-bold flex items-center gap-1.5 transition border border-slate-200 dark:border-zinc-700 cursor-pointer">
                 <i class="fa-solid fa-users text-xs text-amber-500"></i>
                 <span>Profiles</span>
                 <span class="ml-0.5 px-1.5 py-0.5 rounded-full bg-slate-200 dark:bg-zinc-700 text-theme-text dark:text-zinc-200 text-[10px] font-mono" x-text="profilesList.length">{{ profiles|length }}</span>
             </button>
+        </div>
         </div>
 
 
@@ -1151,7 +1152,7 @@
         </div>
 
         <!-- Dynamic Modules Grid with Q-Link Golden Thread Visual Nexus -->
-        <div id="modules-hub-container" class="relative my-4">
+        <div id="modules-hub-container" class="relative w-full">
             <!-- Golden Threads Visual Nexus SVG Layer -->
             <svg id="golden-threads-svg" 
                  class="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible transition-opacity duration-500"
@@ -1190,9 +1191,9 @@
             </svg>
 
             <!-- 3x3 Dynamic Modules Grid with Q-Link in the Center -->
-            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7 lg:gap-8 items-stretch">
+            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3 xl:gap-3.5 items-stretch w-full">
                 {% for module in modules %}
-                <div class="module-card-wrapper flex transition-all duration-300 {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.03] w-full{% else %}satellite-card z-10 hover:z-20 max-w-[360px] w-full mx-auto{% endif %}"
+                <div class="module-card-wrapper flex transition-all duration-300 {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.01] sm:scale-[1.02] w-full{% else %}satellite-card z-10 hover:z-20 max-w-[360px] w-full mx-auto{% endif %}"
                      id="module-card-{{ module.name|lower }}"
                      data-module-name="{{ module.name }}"
                      data-is-hub="{% if module.name == 'Link' %}true{% else %}false{% endif %}"
