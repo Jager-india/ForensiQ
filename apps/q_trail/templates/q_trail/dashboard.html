@@ -54,6 +54,7 @@
                 }
             }, totalDurationMs);
         },
+        submitting: false,
         init() {
             // Display loading screen every time Q-Trail app is opened with random 3-6 seconds duration
             const randomDuration = this.getRandomDuration();
@@ -62,17 +63,17 @@
             });
         },
         submitWithDelay(event) {
+            if (this.submitting) return;
+            this.submitting = true;
+            this.isLoading = true;
             const form = event.target;
-            const randomDuration = this.getRandomDuration();
-            this.runSequentialLoading(randomDuration, () => {
-                form.submit();
-            });
+            form.submit();
         },
         compareAllWithDelay(url) {
-            const randomDuration = this.getRandomDuration();
-            this.runSequentialLoading(randomDuration, () => {
-                window.location.href = url;
-            });
+            if (this.submitting) return;
+            this.submitting = true;
+            this.isLoading = true;
+            window.location.href = url;
         }
     }">
 

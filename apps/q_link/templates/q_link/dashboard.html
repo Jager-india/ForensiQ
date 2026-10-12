@@ -70,11 +70,12 @@
                 }
             }, totalDurationMs);
         },
+        navigating: false,
         navigateWithDelay(url) {
-            const randomDuration = this.getRandomDuration();
-            this.runSequentialLoading(randomDuration, () => {
-                window.location.href = url;
-            });
+            if (this.navigating) return;
+            this.navigating = true;
+            this.isLoading = true;
+            window.location.href = url;
         },
         init() {
             window.qLinkApp = this;
