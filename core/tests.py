@@ -158,6 +158,43 @@ class CorePortalAuthMiddlewareAndViewsTests(TestCase):
         self.assertEqual(res_double_slash.status_code, 302)
         self.assertEqual(res_double_slash.url, "/")
 
+    def test_login_page_does_not_leak_example_investigator_id(self):
+        # Ensure hardcoded investigator ID (276980) is never exposed in UI placeholders or errors
+        res = self.client.get("/login/")
+        self.assertEqual(res.status_code, 200)
+        self.assertNotIn(b"276980", res.content)
+        self.assertIn(b"Enter Numeric Investigator ID", res.content)
+
+        res_err = self.client.post("/login/", {"username": "admin_alpha", "password": "any"})
+        self.assertEqual(res_err.status_code, 200)
+        self.assertNotIn(b"276980", res_err.content)
+        self.assertIn(b"Investigator ID must be a numeric integer.", res_err.content)
+
+    def test_inactive_account_blocked_from_login_and_portal_access(self):
+        self.user.is_active = False
+        self.user.save()
+
+        # Login attempt rejected
+        res = self.client.post("/login/", {"username": "276980", "password": "forensiq2026"})
+        self.assertEqual(res.status_code, 200)
+        self.assertIn(b"Invalid Investigator ID or password", res.content)
+
+        # Deactivated user cannot bypass middleware even if session exists
+        self.client.force_login(self.user)
+        res_landing = self.client.get("/")
+        self.assertEqual(res_landing.status_code, 302)
+        self.assertIn("/login/?next=/", res_landing.url)
+
+    def test_unauthenticated_session_flag_cannot_bypass_portal_auth(self):
+        # Attacker injects portal_authenticated=True into session without user authentication
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 302)
+        self.assertIn("/login/?next=/", res.url)
+
     def test_portal_logout_locks_workstation(self):
         # Authenticate first
         self.client.force_login(self.user)
@@ -546,7 +583,11 @@ class CoreInvestigationProfilesTests(TestCase):
 
 class CoreProfileViewsTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
         self.client = Client()
+        self.user = User.objects.create_user(username="99990", password="forensiq2026")
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -1069,6 +1110,9 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
     """
 
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="99991", password="forensiq2026")
         self.profile = InvestigationProfile.objects.create(
             full_name="Vikram Sethi",
             department="Procurement",
@@ -1117,6 +1161,7 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
         )
 
         client = Client()
+        client.force_login(self.user)
         session = client.session
         session["portal_authenticated"] = True
         session["active_profile_id"] = str(self.profile.id)
@@ -1187,6 +1232,7 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
 
     def test_q_scan_config_profile_keywords_injection(self):
         client = Client()
+        client.force_login(self.user)
         session = client.session
         session["portal_authenticated"] = True
         session["active_profile_id"] = str(self.profile.id)
@@ -1595,9 +1641,11 @@ class CoreAuditTests(TestCase):
         self.assertTrue(self.Audit.objects.filter(title="Comma Created Audit").exists())
 
     def test_map_audit_profiles_view(self):
+        from django.contrib.auth.models import User
+
         from core.audits import create_audit
 
-        audit = create_audit(title="Mapping View Test")
+        audit = create_audit(title="Mapping View Test", creator=self.user)
         response = self.client.post(
             reverse("map_audit_profiles", kwargs={"audit_id": audit.id}),
             data=json.dumps({"profile_ids": [str(self.profile1.id), str(self.profile3.id)]}),
@@ -1615,6 +1663,19 @@ class CoreAuditTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(res_str.status_code, 200)
+
+        # Non-creator receives 403 Forbidden (IDOR prevention)
+        user_intruder = User.objects.create_user(username="99994", password="forensiq2026")
+        intruder_client = Client()
+        intruder_client.force_login(user_intruder)
+        res_intruder = intruder_client.post(
+            reverse("map_audit_profiles", kwargs={"audit_id": audit.id}),
+            data=json.dumps({"profile_ids": [str(self.profile2.id)]}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_intruder.status_code, 403)
+        self.assertEqual(res_intruder.json()["status"], "error")
+        self.assertIn("Only the creator can edit", res_intruder.json()["message"])
 
         # 404 for non-existent audit
         res_404 = self.client.post(
@@ -2061,7 +2122,7 @@ class CoreAuditTests(TestCase):
         self.assertEqual(res_form_err.status_code, 302)
 
     def test_map_audit_profiles_view_string_payload(self):
-        audit = create_audit(title="Mapping String Payload Test")
+        audit = create_audit(title="Mapping String Payload Test", creator=self.user)
         url = reverse("map_audit_profiles", kwargs={"audit_id": audit.id})
 
         # 1. JSON string of profile IDs
@@ -2363,6 +2424,10 @@ class FooterAndManualsTests(TestCase):
         self.assertContains(response, reverse("terms_of_use"))
 
     def test_base_layout_footer_links_when_authenticated(self):
+        from django.contrib.auth.models import User
+
+        user = User.objects.create_user(username="99993", password="forensiq2026")
+        self.client.force_login(user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()

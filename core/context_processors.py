@@ -53,7 +53,12 @@ def global_profiles_context(request: HttpRequest) -> dict[str, Any]:
 
         return {
             "all_audits": all_audits,
-            "all_audits_json": json.dumps([a.to_dict(user=user) for a in all_audits]),
+            "all_audits_json": (
+                json.dumps([a.to_dict(user=user) for a in all_audits])
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+                .replace("&", "\\u0026")
+            ),
             "active_audit": active_audit,
             "investigation_profiles": investigation_profiles,
             "all_investigation_profiles": all_profiles,

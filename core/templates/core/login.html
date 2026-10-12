@@ -122,7 +122,8 @@
                             </div>
 
                             <input type="text" inputmode="numeric" pattern="[0-9]+" name="username" id="portal-username" required autofocus
-                                placeholder="Enter Numeric ID (e.g. 276980)"
+                                autocomplete="username"
+                                placeholder="Enter Numeric Investigator ID"
                                 value="{{ request.POST.username|default:'' }}"
                                 class="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-zinc-700/80 bg-zinc-950/90 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/60 focus:border-amber-500 font-mono transition">
                         </div>
@@ -138,6 +139,7 @@
                             </div>
 
                             <input type="password" name="password" id="portal-password" required
+                                autocomplete="current-password"
                                 placeholder="Enter Security Key..."
                                 class="w-full pl-10 pr-11 py-2.5 text-sm rounded-xl border border-zinc-700/80 bg-zinc-950/90 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500/60 focus:border-amber-500 font-mono transition">
 

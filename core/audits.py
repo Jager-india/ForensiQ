@@ -144,16 +144,26 @@ def map_profiles_to_audit(
     audit_id: str | uuid.UUID,
     profile_ids: Sequence[str | uuid.UUID],
     *,
+    user=None,
     replace: bool = False,
 ) -> Audit:
     """
     Maps a list of investigation profiles to an existing audit.
+    Enforces authorization: only the creator can modify audit mappings.
     If replace is True, existing profile mappings are overwritten.
     If replace is False, new profiles are added to the existing mappings.
     """
     audit = get_audit_by_id(audit_id)
     if not audit:  # pragma: no cover
         raise ValueError(f"Audit with ID '{audit_id}' does not exist.")
+
+    if user is not None:
+        from django.core.exceptions import PermissionDenied
+
+        if not user.is_authenticated:
+            raise PermissionDenied("Authentication required to modify audit mappings.")
+        if audit.creator_id and str(audit.creator_id) != str(user.id) and audit.creator != user:
+            raise PermissionDenied("Only the creator can edit this audit's profile mappings.")
 
     profiles = list(InvestigationProfile.objects.filter(id__in=profile_ids))
 
@@ -172,13 +182,24 @@ def map_profiles_to_audit(
 def unmap_profile_from_audit(
     audit_id: str | uuid.UUID,
     profile_id: str | uuid.UUID,
+    *,
+    user=None,
 ) -> Audit:
     """
     Removes a single investigation profile mapping from an audit.
+    Enforces authorization: only the creator can modify audit mappings.
     """
     audit = get_audit_by_id(audit_id)
     if not audit:  # pragma: no cover
         raise ValueError(f"Audit with ID '{audit_id}' does not exist.")
+
+    if user is not None:
+        from django.core.exceptions import PermissionDenied
+
+        if not user.is_authenticated:
+            raise PermissionDenied("Authentication required to modify audit mappings.")
+        if audit.creator_id and str(audit.creator_id) != str(user.id) and audit.creator != user:
+            raise PermissionDenied("Only the creator can edit this audit's profile mappings.")
 
     audit.profiles.remove(profile_id)
     return audit

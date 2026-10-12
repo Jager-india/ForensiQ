@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
@@ -34,6 +35,11 @@ from .profiles import (
 from .selectors import get_active_audit_module_stats
 
 
+def safe_json_dumps(obj: object) -> str:
+    """Serializes obj to JSON safely for direct HTML template embedding, neutralizing <, >, &."""
+    return json.dumps(obj).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
 @csrf_protect
 @require_http_methods(["GET", "POST"])
 def portal_login_view(request):
@@ -43,29 +49,33 @@ def portal_login_view(request):
     """
     next_url = request.GET.get("next") or request.POST.get("next") or "/"
 
-    # Sanitize next_url against open redirect
-    if not next_url.startswith("/") or next_url.startswith("//"):
+    # Sanitize next_url against open redirect using Django's security validator
+    if not url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
         next_url = "/"
 
-    # If already logged in, redirect straight away
-    if request.user.is_authenticated:
+    # If already logged in and active, redirect straight away
+    if request.user.is_authenticated and request.user.is_active:
         return redirect(next_url)
 
     error = None
 
     if request.method == "POST":
         username_raw = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "").strip()
+        password = request.POST.get("password", "")
 
         if not username_raw:
             error = "Please enter your numeric Investigator ID."
-        elif not username_raw.isdigit():
-            error = "Investigator ID must be a numeric integer (e.g. 276980)."
+        elif not (username_raw.isdigit() and len(username_raw) <= 30):
+            error = "Investigator ID must be a numeric integer."
         elif not password:
             error = "Please enter your password."
         else:
             user = authenticate(request, username=username_raw, password=password)
-            if user is not None:
+            if user is not None and user.is_active:
                 login(request, user)
                 request.session["portal_authenticated"] = True
                 request.session.modified = True
@@ -131,11 +141,11 @@ def landing_view(request: HttpRequest) -> HttpResponse:
             "total_modules": len(modules),
             "used_satellite_count": used_satellite_count,
             "profiles": profiles,
-            "profiles_json": json.dumps(profiles),
+            "profiles_json": safe_json_dumps(profiles),
             "audits": audits,
-            "audits_json": json.dumps(audits),
+            "audits_json": safe_json_dumps(audits),
             "current_user": current_user_data,
-            "current_user_json": json.dumps(current_user_data),
+            "current_user_json": safe_json_dumps(current_user_data),
             "next_audit_name": next_audit_name,
             "has_active_audit": bool(active_audit),
         },
@@ -674,7 +684,12 @@ def map_audit_profiles_view(request: HttpRequest, audit_id: str) -> JsonResponse
             raw_pids = [x.strip() for x in raw_pids.split(",") if x.strip()]
 
     try:
-        audit = map_profiles_to_audit(audit_id, raw_pids, replace=replace)
+        audit = map_profiles_to_audit(
+            audit_id,
+            raw_pids,
+            user=request.user,
+            replace=replace,
+        )
         return JsonResponse(
             {
                 "status": "success",
@@ -682,6 +697,8 @@ def map_audit_profiles_view(request: HttpRequest, audit_id: str) -> JsonResponse
                 "audit": audit.to_dict(user=request.user),
             }
         )
+    except PermissionDenied as err:
+        return JsonResponse({"status": "error", "message": str(err)}, status=403)
     except ValueError as err:
         return JsonResponse({"status": "error", "message": str(err)}, status=404)
     except Exception as err:

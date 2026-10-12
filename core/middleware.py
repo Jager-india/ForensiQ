@@ -31,9 +31,7 @@ class PortalAuthMiddleware:
         is_exempt = any(path.startswith(prefix) for prefix in self.EXEMPT_PREFIXES)
 
         if not is_exempt:
-            is_authenticated = request.user.is_authenticated or request.session.get(
-                "portal_authenticated", False
-            )
+            is_authenticated = request.user.is_authenticated and request.user.is_active
             if not is_authenticated:
                 next_param = urllib.parse.quote(request.get_full_path())
                 return redirect(f"/login/?next={next_param}")
