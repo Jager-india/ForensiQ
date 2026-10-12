@@ -2359,8 +2359,42 @@ class ActiveAuditHomepageTests(TestCase):
         stats = get_active_audit_module_stats(self.audit)
         self.assertTrue(stats["trail"]["is_used"])
         self.assertEqual(stats["trail"]["status_badge"], "Ready")
-        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
+        self.assertEqual(stats["trail"]["stats_line1"], "Ready to trace (15 transactions ready)")
         self.assertEqual(stats["trail"]["stats_line2"], "Source: Q-Bank (Data ready)")
+
+    def test_q_trail_stats_mapped_via_intermediary_node(self):
+        from decimal import Decimal
+
+        from django.apps import apps
+
+        CaseDossier = apps.get_model("q_trail", "CaseDossier")
+        FundTrailPath = apps.get_model("q_trail", "FundTrailPath")
+        PassThroughNode = apps.get_model("q_trail", "PassThroughNode")
+
+        dossier = CaseDossier.objects.create(
+            case_number="TR-TEST-999",
+            title=f"Audit {self.audit.name} - Money Trail Reconciliation",
+            status="Active",
+        )
+        trail = FundTrailPath.objects.create(
+            case=dossier,
+            source_entity="External Sender",
+            destination_entity="External Recipient",
+            total_amount=Decimal("50000.00"),
+            hop_count=2,
+        )
+        PassThroughNode.objects.create(
+            trail=trail,
+            entity_name=self.profile.full_name,
+            inflow_amount=Decimal("50000.00"),
+            outflow_amount=Decimal("48000.00"),
+        )
+
+        stats = get_active_audit_module_stats(self.audit)
+        self.assertTrue(stats["trail"]["is_used"])
+        self.assertEqual(stats["trail"]["status_badge"], "Mapped")
+        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 1")
+        self.assertIn("Synced from Q-Bank", stats["trail"]["stats_line2"])
 
     def test_q_trail_stats_awaiting_bank_data(self):
         # Active audit with no bank statements uploaded

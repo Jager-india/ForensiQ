@@ -84,14 +84,30 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
             "time_window_days", request.GET.get("time_window_days", "0")
         )
         min_amount_str = request.POST.get("min_amount", request.GET.get("min_amount", "1000"))
-        save_dossier = False
+        save_dossier = request.method == "POST"
         case_title = ""
+        if save_dossier and active_audit:
+            case_title = f"Audit {active_audit.name} - Money Trail Reconciliation"
+            try:
+                from .models import CaseDossier
+
+                CaseDossier.objects.filter(title=case_title).delete()
+            except Exception as exc:
+                logger.debug(f"[Q-Trail] Could not refresh automated dossier: {exc}")
     elif request.method == "POST":
         profile_ids = request.POST.getlist("profile_ids")
         time_window_str = request.POST.get("time_window_days", "0")
         min_amount_str = request.POST.get("min_amount", "1000")
-        save_dossier = request.POST.get("save_dossier") == "on"
+        save_dossier = True
         case_title = request.POST.get("case_title", "").strip()
+        if not case_title and active_audit:
+            case_title = f"Audit {active_audit.name} - Money Trail Reconciliation"
+            try:
+                from .models import CaseDossier
+
+                CaseDossier.objects.filter(title=case_title).delete()
+            except Exception as exc:
+                logger.debug(f"[Q-Trail] Could not refresh automated dossier: {exc}")
     else:
         profile_ids = request.GET.getlist("profile_ids")
         time_window_str = request.GET.get("time_window_days", "0")

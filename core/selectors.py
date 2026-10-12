@@ -119,8 +119,9 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
                 trail_qs = FundTrailPath.objects.filter(
                     models.Q(source_entity__in=profile_names)
                     | models.Q(destination_entity__in=profile_names)
+                    | models.Q(pass_through_nodes__entity_name__in=profile_names)
                     | models.Q(case__title__icontains=audit.name)
-                )
+                ).distinct()
             elif audit:
                 trail_qs = FundTrailPath.objects.none()
             else:
@@ -132,21 +133,50 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
 
             if count > 0:
                 status_badge = "LIVE" if not audit else "Mapped"
+                stats_line1 = f"Fund trails mapped: {count}"
                 stats_line2 = f"Synced from Q-Bank • {date_str}"
                 is_used = True
             elif bank_has_data:
                 status_badge = "LIVE" if not audit else "Ready"
+                bank_tx_count = 0
+                try:
+                    BankAccount = apps.get_model("q_bank", "BankAccount")
+                    BankTransaction = apps.get_model("q_bank", "BankTransaction")
+                    if BankAccount and audit and profile_names:
+                        audit_accounts = BankAccount.objects.filter(
+                            models.Q(person__full_name__in=profile_names)
+                            | models.Q(account_holder__in=profile_names)
+                        )
+                        if BankTransaction:
+                            bank_tx_count = BankTransaction.objects.filter(
+                                account__in=audit_accounts
+                            ).count()
+                        if not bank_tx_count:
+                            bank_tx_count = sum(b.total_transactions or 0 for b in audit_accounts)
+                except Exception as exc:
+                    logger.debug(
+                        f"[Selectors] Failed to count bank transactions for Q-Trail: {exc}"
+                    )
+
+                if bank_tx_count > 0:
+                    stats_line1 = (
+                        f"Ready to trace ({bank_tx_count} transaction"
+                        f"{'s' if bank_tx_count != 1 else ''} ready)"
+                    )
+                else:
+                    stats_line1 = "Ready to trace (Bank data ready)"
                 stats_line2 = "Source: Q-Bank (Data ready)"
                 is_used = True
             else:
                 status_badge = "LIVE" if not audit else "Awaiting Bank Data"
+                stats_line1 = "Fund trails mapped: 0"
                 stats_line2 = "Source: Requires Q-Bank statements"
                 is_used = False
 
             stats["trail"] = {
                 "is_used": is_used,
                 "status_badge": status_badge,
-                "stats_line1": f"Fund trails mapped: {count}",
+                "stats_line1": stats_line1,
                 "stats_line2": stats_line2,
             }
         else:
@@ -161,7 +191,9 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
             stats["trail"] = {
                 "is_used": bank_has_data,
                 "status_badge": status_badge,
-                "stats_line1": "Fund trails mapped: 0",
+                "stats_line1": (
+                    "Ready to trace (Bank data ready)" if bank_has_data else "Fund trails mapped: 0"
+                ),
                 "stats_line2": stats_line2,
             }
     except Exception as exc:  # pragma: no cover

@@ -30,19 +30,13 @@ def get_voice_api_endpoint() -> str:
     Resolves the active Voice Model transcription endpoint from Django settings or environment.
     Defaults to http://127.0.0.1:8434/v1/audio/transcriptions.
     """
-    configured_url = getattr(
-        settings,
-        "VOICE_MODEL_ENDPOINT",
-        os.getenv(
-            "VOICE_MODEL_ENDPOINT",
-            os.getenv(
-                "VOICE_API_URL",
-                os.getenv("API_URL", "http://127.0.0.1:8434/v1/audio/transcriptions"),
-            ),
-        ),
+    configured_url = (
+        getattr(settings, "VOICE_MODEL_ENDPOINT", None)
+        or os.getenv("VOICE_MODEL_ENDPOINT")
+        or os.getenv("VOICE_API_URL")
+        or os.getenv("API_URL")
+        or "http://127.0.0.1:8434/v1/audio/transcriptions"
     )
-    if not configured_url:
-        configured_url = "http://127.0.0.1:8434/v1/audio/transcriptions"
 
     if "/v1/audio/transcriptions" in configured_url or "/transcribe" in configured_url:
         return configured_url
@@ -57,9 +51,9 @@ def request_remote_transcription(
     Returns (success, api_data_dict, error_message).
     """
     api_url = get_voice_api_endpoint()
-    timeout_sec = float(
-        getattr(settings, "VOICE_API_TIMEOUT", os.getenv("VOICE_API_TIMEOUT", "60.0"))
-    )
+    voice_timeout_setting = getattr(settings, "VOICE_API_TIMEOUT", None)
+    voice_timeout_env = os.getenv("VOICE_API_TIMEOUT")
+    timeout_sec = float(voice_timeout_setting or voice_timeout_env or 60.0)
 
     try:
         files = {"file": (filename, file_bytes, content_type)}

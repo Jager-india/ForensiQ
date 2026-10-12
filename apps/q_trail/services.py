@@ -1014,9 +1014,14 @@ def analyze_profiles_money_trail(
                                 "intermediary": str(row["Intermediary_Entity"]),
                                 "outflow_date": str(row["Outflow_Date"]),
                                 "inflow_date": str(row["Inflow_Date"]),
-                                "time_delta_days": float(row["Time_Delta_Days"]),
+                                "time_delta_days": (
+                                    float(row["Time_Delta_Days"])
+                                    if "Time_Delta_Days" in row
+                                    else round(float(row.get("Time_Delta_Hours", 0.0)) / 24.0, 2)
+                                ),
                             }
                         ],
+                        velocity_hours=float(row.get("Time_Delta_Hours", 0.0)),
                         is_circular=row["Sender_Person"] == row["Recipient_Person"],
                         risk_score=85 if float(row["Retention_Pct"]) > 10 else 75,
                     )
