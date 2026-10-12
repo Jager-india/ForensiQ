@@ -2217,16 +2217,16 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertIn("bank", stats)
         self.assertFalse(stats["bank"]["is_used"])
         self.assertEqual(stats["bank"]["status_badge"], "LIVE")
-        self.assertEqual(stats["bank"]["stats_line1"], "Statements uploaded: 0")
-        self.assertEqual(stats["bank"]["stats_line2"], "Last checked: —")
+        self.assertEqual(stats["bank"]["stats_line1"], "")
+        self.assertEqual(stats["bank"]["stats_line2"], "")
         self.assertEqual(stats["link"]["status_badge"], "HUB")
         self.assertFalse(stats["link"]["is_used"])
-        self.assertEqual(stats["link"]["stats_line1"], "Active Evidence Sources: 0/8")
+        self.assertEqual(stats["link"]["stats_line1"], "")
         self.assertIn("trail", stats)
         self.assertFalse(stats["trail"]["is_used"])
         self.assertEqual(stats["trail"]["status_badge"], "LIVE")
-        self.assertEqual(stats["trail"]["stats_line1"], "Fund trails mapped: 0")
-        self.assertEqual(stats["trail"]["stats_line2"], "Source: Requires Q-Bank statements")
+        self.assertEqual(stats["trail"]["stats_line1"], "")
+        self.assertEqual(stats["trail"]["stats_line2"], "")
 
     def test_module_stats_with_active_audit_and_uploaded_data(self):
         from decimal import Decimal

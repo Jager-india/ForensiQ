@@ -30,13 +30,32 @@ def get_active_audit_module_stats(audit: Audit | None) -> dict[str, dict[str, An
     profile_names: list[str] = []
     profile_emails: list[str] = []
 
-    if audit:
-        # Pre-fetch profile information for fast in-memory query matching
-        for p in audit.profiles.all():
-            if p.full_name:
-                profile_names.append(p.full_name)
-            if p.email:
-                profile_emails.append(p.email)
+    if not audit:
+        # Audit unselected condition: modules are in standby with vibrant LIVE badges and clean cards (no count lines until an audit is active)
+        base_stats: dict[str, dict[str, Any]] = {}
+        for s in ["bank", "trail", "mail", "scan", "verify", "voice", "ledger", "chat"]:
+            base_stats[s] = {
+                "is_used": False,
+                "status_badge": "LIVE",
+                "stats_line1": "",
+                "stats_line2": "",
+            }
+            base_stats[f"q_{s}"] = base_stats[s]
+        base_stats["link"] = {
+            "is_used": False,
+            "status_badge": "HUB",
+            "stats_line1": "",
+            "stats_line2": "",
+        }
+        base_stats["q_link"] = base_stats["link"]
+        return base_stats
+
+    # Pre-fetch profile information for fast in-memory query matching
+    for p in audit.profiles.all():
+        if p.full_name:
+            profile_names.append(p.full_name)
+        if p.email:
+            profile_emails.append(p.email)
 
     stats: dict[str, dict[str, Any]] = {}
 
