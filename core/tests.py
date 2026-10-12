@@ -8,7 +8,6 @@ from decimal import Decimal
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
@@ -96,7 +95,14 @@ class CoreFileUploaderTests(TestCase):
 
 class CorePortalAuthMiddlewareAndViewsTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
         self.client = Client()
+        self.user = User.objects.create_user(username="276980", password="forensiq2026")
+
+    def test_bcrypt_hasher_used_for_passwords(self):
+        # Verify that bcrypt_sha256 hasher was used to hash user password
+        self.assertTrue(self.user.password.startswith("bcrypt_sha256$"))
 
     def test_unauthenticated_redirect_to_login(self):
         res = self.client.get("/")
@@ -109,35 +115,52 @@ class CorePortalAuthMiddlewareAndViewsTests(TestCase):
         self.assertIn(b"Authorized Personnel Only", res.content)
 
     def test_login_failure_with_wrong_password(self):
-        res = self.client.post("/login/", {"password": "wrong_password", "next": "/"})
+        # Non-numeric username rejected
+        res_non_numeric = self.client.post(
+            "/login/", {"username": "admin_user", "password": "forensiq2026", "next": "/"}
+        )
+        self.assertEqual(res_non_numeric.status_code, 200)
+        self.assertIn(b"Investigator ID must be a numeric integer", res_non_numeric.content)
+
+        # Wrong password rejected
+        res = self.client.post(
+            "/login/", {"username": "276980", "password": "wrong_password", "next": "/"}
+        )
         self.assertEqual(res.status_code, 200)
-        self.assertIn(b"Invalid portal access key", res.content)
+        self.assertIn(b"Invalid Investigator ID or password", res.content)
         self.assertFalse(self.client.session.get("portal_authenticated", False))
 
     def test_login_success_with_valid_password(self):
-        valid_pwd = getattr(settings, "PORTAL_ACCESS_PASSWORD", "forensiq2026")
-        res = self.client.post("/login/", {"password": valid_pwd, "next": "/bank/"})
+        res = self.client.post(
+            "/login/", {"username": "276980", "password": "forensiq2026", "next": "/bank/"}
+        )
         self.assertEqual(res.status_code, 302)
         self.assertEqual(res.url, "/bank/")
         self.assertTrue(self.client.session.get("portal_authenticated", False))
 
     def test_open_redirect_sanitization(self):
-        valid_pwd = getattr(settings, "PORTAL_ACCESS_PASSWORD", "forensiq2026")
         # Attempt malicious off-site redirect
         res = self.client.post(
-            "/login/", {"password": valid_pwd, "next": "https://malicious-site.com"}
+            "/login/",
+            {
+                "username": "276980",
+                "password": "forensiq2026",
+                "next": "https://malicious-site.com",
+            },
         )
         self.assertEqual(res.status_code, 302)
         self.assertEqual(res.url, "/")
 
         res_double_slash = self.client.post(
-            "/login/", {"password": valid_pwd, "next": "//malicious-site.com"}
+            "/login/",
+            {"username": "276980", "password": "forensiq2026", "next": "//malicious-site.com"},
         )
         self.assertEqual(res_double_slash.status_code, 302)
         self.assertEqual(res_double_slash.url, "/")
 
     def test_portal_logout_locks_workstation(self):
         # Authenticate first
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -149,6 +172,7 @@ class CorePortalAuthMiddlewareAndViewsTests(TestCase):
         self.assertFalse(self.client.session.get("portal_authenticated", False))
 
     def test_landing_view_authenticated(self):
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -1175,14 +1199,17 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
         self.assertIn("SWISS_ACCOUNT", cfg_data["keywords"])
 
     def test_get_profile_keywords_scopes_and_fallbacks(self):
+        from django.contrib.auth.models import User
+
         from core.audits import create_audit
         from core.profiles import create_investigation_profile, get_profile_keywords
 
+        test_user = User.objects.create_user(username="9999", password="forensiq2026")
         p1 = create_investigation_profile(
             full_name="Agent Alpha", keywords=["KW_ALPHA_1", "KW_ALPHA_2"]
         )
         p2 = create_investigation_profile(full_name="Agent Beta", keywords=["KW_BETA_1"])
-        audit = create_audit(title="Scope Audit", profile_ids=[str(p1.id)])
+        audit = create_audit(title="Scope Audit", profile_ids=[str(p1.id)], creator=test_user)
 
         # 1. Direct profile_id
         self.assertEqual(get_profile_keywords(profile_id=p1.id), ["KW_ALPHA_1", "KW_ALPHA_2"])
@@ -1197,6 +1224,7 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
         # 4. Request with active audit in session
         factory = RequestFactory()
         req = factory.get("/scan/")
+        req.user = test_user
         req.session = {"active_audit_id": str(audit.id)}
         self.assertEqual(get_profile_keywords(request=req), ["KW_ALPHA_1", "KW_ALPHA_2"])
 
@@ -1360,8 +1388,12 @@ class CoreAuditTests(TestCase):
         from core.models import Audit, InvestigationProfile
 
         self.Audit = Audit
+        from django.contrib.auth.models import User
+
         self.InvestigationProfile = InvestigationProfile
+        self.user = User.objects.create_user(username="276980", password="forensiq2026")
         self.client = Client()
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -1480,7 +1512,11 @@ class CoreAuditTests(TestCase):
     def test_landing_view_contains_audits(self):
         from core.audits import create_audit
 
-        create_audit(title="Landing Test Audit", profile_ids=[str(self.profile1.id)])
+        create_audit(
+            title="Landing Test Audit",
+            creator=self.user,
+            profile_ids=[str(self.profile1.id)],
+        )
 
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
@@ -1493,7 +1529,7 @@ class CoreAuditTests(TestCase):
         payload = {
             "title": "API Created Audit",
             "description": "Via JSON endpoint",
-            "status": "IN_PROGRESS",
+            "status": "ACTIVE",
             "profile_ids": [str(self.profile1.id), str(self.profile2.id)],
         }
         response = self.client.post(
@@ -1505,7 +1541,9 @@ class CoreAuditTests(TestCase):
         data = response.json()
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["audit"]["title"], "API Created Audit")
-        self.assertEqual(data["audit"]["status"], "IN_PROGRESS")
+        self.assertEqual(data["audit"]["status"], "ACTIVE")
+        self.assertEqual(data["audit"]["creator_username"], "276980")
+        self.assertTrue(data["audit"]["is_creator"])
         self.assertEqual(data["audit"]["profiles_count"], 2)
         self.assertTrue(data["audit"]["name"].endswith("-01") or "-WB-" in data["audit"]["name"])
 
@@ -1589,7 +1627,7 @@ class CoreAuditTests(TestCase):
     def test_api_audits_list_and_next_name(self):
         from core.audits import create_audit
 
-        create_audit(title="List Test Audit")
+        create_audit(title="List Test Audit", creator=self.user)
 
         # List endpoint
         res_list = self.client.get(reverse("api_audits"))
@@ -1614,6 +1652,7 @@ class CoreAuditTests(TestCase):
         audit = create_audit(
             title="Active Filter Test Audit",
             profile_ids=[str(self.profile1.id), str(self.profile2.id)],
+            creator=self.user,
         )
 
         # 1. API set active audit via POST
@@ -1630,6 +1669,7 @@ class CoreAuditTests(TestCase):
         # 2. Context processor reflects filtered profiles
         factory = RequestFactory()
         req = factory.get("/")
+        req.user = self.user
         req.session = self.client.session
         ctx = global_profiles_context(req)
 
@@ -1667,6 +1707,152 @@ class CoreAuditTests(TestCase):
         ctx_cleared = global_profiles_context(req)
         self.assertTrue(ctx_cleared["is_audit_active"])
         self.assertEqual(ctx_cleared["active_audit"].id, audit.id)
+
+    def test_audit_creator_visibility_scoping(self):
+        from django.contrib.auth.models import User
+
+        from core.audits import create_audit, get_all_audits
+
+        user_b = User.objects.create_user(username="1001", password="forensiq2026")
+
+        # User A creates an ACTIVE audit
+        audit_a = create_audit(
+            name="2026-WB-90",
+            title="Private Active Audit by A",
+            creator=self.user,
+            status="ACTIVE",
+        )
+
+        # User A creates a COMPLETED audit
+        audit_completed = create_audit(
+            name="2026-WB-91",
+            title="Completed Public Audit",
+            creator=self.user,
+            status="COMPLETED",
+        )
+
+        # 1. User A sees both audits
+        audits_a = list(get_all_audits(user=self.user))
+        audit_ids_a = [a.id for a in audits_a]
+        self.assertIn(audit_a.id, audit_ids_a)
+        self.assertIn(audit_completed.id, audit_ids_a)
+
+        # 2. User B sees ONLY the COMPLETED audit, NOT User A's ACTIVE audit
+        audits_b = list(get_all_audits(user=user_b))
+        audit_ids_b = [a.id for a in audits_b]
+        self.assertNotIn(audit_a.id, audit_ids_b)
+        self.assertIn(audit_completed.id, audit_ids_b)
+
+        # 3. Via API as User B
+        client_b = Client()
+        client_b.force_login(user_b)
+        session_b = client_b.session
+        session_b["portal_authenticated"] = True
+        session_b.save()
+
+        res_b = client_b.get(reverse("api_audits"))
+        self.assertEqual(res_b.status_code, 200)
+        api_audit_ids = [a["id"] for a in res_b.json()["audits"]]
+        self.assertNotIn(str(audit_a.id), api_audit_ids)
+        self.assertIn(str(audit_completed.id), api_audit_ids)
+
+        # 4. User A marks audit_a as COMPLETED -> now User B sees it
+        audit_a.status = "COMPLETED"
+        audit_a.save()
+
+        audits_b_after = list(get_all_audits(user=user_b))
+        self.assertIn(audit_a.id, [a.id for a in audits_b_after])
+
+    def test_update_audit_view_permissions_and_validation(self):
+        from django.contrib.auth.models import User
+
+        from core.audits import create_audit
+
+        user_b = User.objects.create_user(username="1002", password="forensiq2026")
+        audit_a = create_audit(
+            name="2026-WB-92",
+            title="Original Title",
+            creator=self.user,
+            status="ACTIVE",
+        )
+
+        # 1. User A (creator) successfully updates title and toggles status to COMPLETED
+        res_a = self.client.post(
+            reverse("update_audit", kwargs={"audit_id": audit_a.id}),
+            data=json.dumps({"title": "Updated by Creator", "status": "COMPLETED"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_a.status_code, 200)
+        data_a = res_a.json()
+        self.assertEqual(data_a["status"], "success")
+        self.assertEqual(data_a["audit"]["title"], "Updated by Creator")
+        self.assertEqual(data_a["audit"]["status"], "COMPLETED")
+
+        # 2. User B attempts to edit User A's audit -> 403 Forbidden
+        client_b = Client()
+        client_b.force_login(user_b)
+        session_b = client_b.session
+        session_b["portal_authenticated"] = True
+        session_b.save()
+
+        res_b = client_b.post(
+            reverse("update_audit", kwargs={"audit_id": audit_a.id}),
+            data=json.dumps({"title": "Unauthorized Modification"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_b.status_code, 403)
+        self.assertEqual(res_b.json()["status"], "error")
+
+        # 3. Invalid status value (not ACTIVE or COMPLETED) -> 400 Bad Request
+        res_invalid = self.client.post(
+            reverse("update_audit", kwargs={"audit_id": audit_a.id}),
+            data=json.dumps({"status": "ARCHIVED"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_invalid.status_code, 400)
+        self.assertEqual(res_invalid.json()["status"], "error")
+
+    def test_set_active_audit_restricted_to_creator_for_active_audits(self):
+        from django.contrib.auth.models import User
+
+        from core.audits import create_audit
+
+        user_b = User.objects.create_user(username="1003", password="forensiq2026")
+        audit_a = create_audit(
+            name="2026-WB-93",
+            title="Active Scope",
+            creator=self.user,
+            status="ACTIVE",
+        )
+
+        # User B attempts to set User A's ACTIVE audit as active audit
+        client_b = Client()
+        client_b.force_login(user_b)
+        session_b = client_b.session
+        session_b["portal_authenticated"] = True
+        session_b.save()
+
+        res_b = client_b.post(
+            reverse("set_active_audit"),
+            data=json.dumps({"audit_id": str(audit_a.id)}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_b.status_code, 200)
+        # Blocked: active_audit is null
+        self.assertIsNone(res_b.json()["active_audit"])
+
+        # Once User A marks it COMPLETED, User B CAN select it
+        audit_a.status = "COMPLETED"
+        audit_a.save()
+
+        res_b_completed = client_b.post(
+            reverse("set_active_audit"),
+            data=json.dumps({"audit_id": str(audit_a.id)}),
+            content_type="application/json",
+        )
+        self.assertEqual(res_b_completed.status_code, 200)
+        self.assertIsNotNone(res_b_completed.json()["active_audit"])
+        self.assertEqual(res_b_completed.json()["active_audit"]["id"], str(audit_a.id))
 
     def test_api_profiles_list(self):
         res = self.client.get(reverse("api_profiles"))
@@ -2199,6 +2385,10 @@ class ActiveAuditHomepageTests(TestCase):
     """
 
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="276980", password="forensiq2026")
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -2211,6 +2401,7 @@ class ActiveAuditHomepageTests(TestCase):
         self.audit = create_audit(
             name="2026-WB-88",
             title="Procurement Tender Audit",
+            creator=self.user,
             profile_ids=[self.profile.id],
         )
 

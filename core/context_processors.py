@@ -25,7 +25,8 @@ def global_profiles_context(request: HttpRequest) -> dict[str, Any]:
     profiles mapped to that audit.
     """
     try:
-        all_audits = list(get_all_audits())
+        user = getattr(request, "user", None)
+        all_audits = list(get_all_audits(user=user))
         active_audit = get_active_audit(request)
 
         all_profiles = list(get_all_profiles())
@@ -52,7 +53,7 @@ def global_profiles_context(request: HttpRequest) -> dict[str, Any]:
 
         return {
             "all_audits": all_audits,
-            "all_audits_json": json.dumps([a.to_dict() for a in all_audits]),
+            "all_audits_json": json.dumps([a.to_dict(user=user) for a in all_audits]),
             "active_audit": active_audit,
             "investigation_profiles": investigation_profiles,
             "all_investigation_profiles": all_profiles,

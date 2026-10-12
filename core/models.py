@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -312,9 +313,7 @@ class Audit(ForensicBaseModel):
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE", "Active"
-        IN_PROGRESS = "IN_PROGRESS", "In Progress"
         COMPLETED = "COMPLETED", "Completed"
-        ARCHIVED = "ARCHIVED", "Archived"
 
     name = models.CharField(
         max_length=32,
@@ -339,6 +338,15 @@ class Audit(ForensicBaseModel):
         default=Status.ACTIVE,
         db_index=True,
     )
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="audits_created",
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Investigator / Creator of this audit scope",
+    )
     profiles = models.ManyToManyField(
         InvestigationProfile,
         related_name="audits",
@@ -357,13 +365,20 @@ class Audit(ForensicBaseModel):
             return f"{self.name} - {self.title}"
         return self.name
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self, user=None) -> dict[str, object]:
+        is_creator = False
+        if user and user.is_authenticated and self.creator_id:
+            is_creator = str(self.creator_id) == str(user.id) or self.creator == user
+
         return {
             "id": str(self.id),
             "name": self.name,
             "title": self.title,
             "description": self.description,
             "status": self.status,
+            "creator_id": self.creator_id,
+            "creator_username": self.creator.username if self.creator else None,
+            "is_creator": is_creator,
             "profiles_count": self.profiles.count(),
             "profile_ids": [str(p.id) for p in self.profiles.all()],
             "profiles": [p.to_dict() for p in self.profiles.all()],

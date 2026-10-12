@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Sequence
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.utils import timezone
@@ -46,12 +46,23 @@ def generate_next_audit_name(year: int | None = None) -> str:
     return f"{prefix}{next_seq:02d}"
 
 
-def get_all_audits() -> QuerySet[Audit]:
+def get_all_audits(user=None) -> QuerySet[Audit]:
     """
-    Returns all audits ordered by newest first, with prefetched profiles
-    to eliminate N+1 query patterns.
+    Returns audits ordered by newest first, with prefetched profiles.
+    Visibility scoping:
+    - COMPLETED audits are visible to all users.
+    - ACTIVE audits are visible strictly to their creator.
     """
-    return Audit.objects.prefetch_related("profiles").order_by("-name")
+    qs = Audit.objects.prefetch_related("profiles")
+    if user is not None:
+        if user.is_authenticated:
+            qs = qs.filter(
+                models.Q(status=Audit.Status.COMPLETED)
+                | models.Q(status=Audit.Status.ACTIVE, creator=user)
+            )
+        else:
+            qs = qs.filter(status=Audit.Status.COMPLETED)
+    return qs.order_by("-name")
 
 
 def get_audit_by_id(audit_id: str | uuid.UUID | None) -> Audit | None:
@@ -83,12 +94,13 @@ def create_audit(
     title: str = "",
     description: str = "",
     status: str = "ACTIVE",
+    creator=None,
     profile_ids: Sequence[str | uuid.UUID] | None = None,
     year: int | None = None,
 ) -> Audit:
     """
     Creates a new Audit with an auto-generated unique name (YYYY-WB-XX) if not provided,
-    and maps initial investigation profiles under it.
+    assigned to the specified creator, and maps initial investigation profiles under it.
     """
     target_status = status if status in dict(Audit.Status.choices) else "ACTIVE"
 
@@ -106,6 +118,7 @@ def create_audit(
                 title=title.strip(),
                 description=description.strip(),
                 status=target_status,
+                creator=creator,
             )
             break
         except IntegrityError:  # pragma: no cover
@@ -171,19 +184,78 @@ def unmap_profile_from_audit(
     return audit
 
 
+@transaction.atomic
+def update_audit(
+    audit_id: str | uuid.UUID,
+    *,
+    user=None,
+    title: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+) -> Audit:
+    """
+    Updates an audit's title, description, or toggles status between ACTIVE and COMPLETED.
+    Strictly enforced: only the creator can edit an active audit or toggle its status.
+    """
+    audit = get_audit_by_id(audit_id)
+    if not audit:
+        raise ValueError(f"Audit with ID '{audit_id}' does not exist.")
+
+    from django.core.exceptions import PermissionDenied
+
+    if user is not None:
+        if not user.is_authenticated:
+            raise PermissionDenied("Authentication required to modify audits.")
+        if audit.creator_id and str(audit.creator_id) != str(user.id) and audit.creator != user:
+            raise PermissionDenied("Only the creator can edit this audit or toggle its status.")
+
+    if title is not None:
+        audit.title = title.strip()
+    if description is not None:
+        audit.description = description.strip()
+    if status is not None:
+        target_status = status.strip().upper()
+        if target_status in dict(Audit.Status.choices):
+            audit.status = target_status
+        else:
+            raise ValueError(
+                f"Invalid status '{status}'. Audit status must be ACTIVE or COMPLETED."
+            )
+
+    audit.save()
+    logger.info(f"Updated Audit '{audit.name}': status={audit.status}.")
+    return audit
+
+
 def get_active_audit(request: HttpRequest) -> Audit | None:
     """
     Returns the currently active audit selected in the user's session.
+    Enforces that active audits are only visible/selectable by their creator.
     """
     audit_id = request.session.get("active_audit_id")
     if audit_id:
-        return get_audit_by_id(audit_id)
+        audit = get_audit_by_id(audit_id)
+        if audit:
+            if audit.status == Audit.Status.ACTIVE:
+                user = getattr(request, "user", None)
+                if not user or not user.is_authenticated:
+                    set_active_audit(request, None)
+                    return None
+                if (
+                    audit.creator_id
+                    and str(audit.creator_id) != str(user.id)
+                    and audit.creator != user
+                ):
+                    set_active_audit(request, None)
+                    return None
+            return audit
     return None
 
 
 def set_active_audit(request: HttpRequest, audit_id: str | uuid.UUID | None) -> Audit | None:
     """
     Sets or clears the active audit in the user's session.
+    Restricts active audits to their creator.
     """
     if not audit_id or str(audit_id).strip().lower() in ("__none__", "all", "none", ""):
         request.session.pop("active_audit_id", None)
@@ -194,6 +266,13 @@ def set_active_audit(request: HttpRequest, audit_id: str | uuid.UUID | None) -> 
 
     audit = get_audit_by_id(audit_id)
     if audit:
+        if audit.status == Audit.Status.ACTIVE:
+            user = getattr(request, "user", None)
+            if not user or not user.is_authenticated:
+                return None
+            if audit.creator_id and str(audit.creator_id) != str(user.id) and audit.creator != user:
+                return None
+
         request.session["active_audit_id"] = str(audit.id)
         request.session["active_audit_name"] = audit.name
         if hasattr(request.session, "modified"):

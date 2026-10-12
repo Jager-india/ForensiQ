@@ -174,12 +174,18 @@
                 </template>
                 {% endif %}
 
-                {% if request.session.portal_authenticated %}
-                <a href="{% url 'portal_logout' %}" title="Logout"
-                    class="h-9 px-3 rounded-lg flex items-center gap-1.5 text-xs font-semibold text-theme-muted hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-theme-border transition">
-                    <i class="fa-solid fa-lock text-xs"></i>
-                    <span class="hidden sm:inline">Logout</span>
-                </a>
+                {% if request.user.is_authenticated or request.session.portal_authenticated %}
+                <div class="flex items-center gap-2">
+                    <span class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-mono font-bold" title="Logged in Investigator ID">
+                        <i class="fa-solid fa-id-badge text-[11px]"></i>
+                        <span>ID: {{ request.user.username }}</span>
+                    </span>
+                    <a href="{% url 'portal_logout' %}" title="Logout"
+                        class="h-9 px-3 rounded-lg flex items-center gap-1.5 text-xs font-semibold text-theme-muted hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-theme-border transition">
+                        <i class="fa-solid fa-lock text-xs"></i>
+                        <span class="hidden sm:inline">Logout</span>
+                    </a>
+                </div>
                 {% endif %}
 
                 <!-- Dark / Light Mode Toggle Button -->

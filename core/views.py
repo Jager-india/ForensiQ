@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
 
-from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import authenticate, login, logout
+from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_protect
@@ -17,6 +18,7 @@ from .audits import (
     get_all_audits,
     map_profiles_to_audit,
     set_active_audit,
+    update_audit,
 )
 from .manuals import get_manual_by_key, get_user_manuals
 from .modules import get_discovered_modules
@@ -36,8 +38,8 @@ from .selectors import get_active_audit_module_stats
 @require_http_methods(["GET", "POST"])
 def portal_login_view(request):
     """
-    Master Portal Password Login View.
-    Authenticates investigative access using only a portal password key.
+    Investigator Authentication Login View.
+    Authenticates investigative access using numeric Investigator ID and bcrypt-hashed password.
     """
     next_url = request.GET.get("next") or request.POST.get("next") or "/"
 
@@ -46,21 +48,30 @@ def portal_login_view(request):
         next_url = "/"
 
     # If already logged in, redirect straight away
-    if request.session.get("portal_authenticated", False):
+    if request.user.is_authenticated:
         return redirect(next_url)
 
     error = None
 
     if request.method == "POST":
+        username_raw = request.POST.get("username", "").strip()
         password = request.POST.get("password", "").strip()
-        expected_password = getattr(settings, "PORTAL_ACCESS_PASSWORD", "")
 
-        if password and expected_password and password == expected_password:
-            request.session["portal_authenticated"] = True
-            request.session.modified = True
-            return redirect(next_url)
+        if not username_raw:
+            error = "Please enter your numeric Investigator ID."
+        elif not username_raw.isdigit():
+            error = "Investigator ID must be a numeric integer (e.g. 276980)."
+        elif not password:
+            error = "Please enter your password."
         else:
-            error = "Invalid portal access key. Please verify your credentials."
+            user = authenticate(request, username=username_raw, password=password)
+            if user is not None:
+                login(request, user)
+                request.session["portal_authenticated"] = True
+                request.session.modified = True
+                return redirect(next_url)
+            else:
+                error = "Invalid Investigator ID or password. Please verify your credentials."
 
     return render(
         request,
@@ -77,6 +88,7 @@ def portal_logout_view(request):
     """
     Logout View to lock the workstation and clear session credentials.
     """
+    logout(request)
     request.session.flush()
     return redirect("/login/")
 
@@ -104,8 +116,13 @@ def landing_view(request: HttpRequest) -> HttpResponse:
             used_satellite_count += 1
 
     profiles = [p.to_dict() for p in get_all_profiles()]
-    audits = [a.to_dict() for a in get_all_audits()]
+    audits = [a.to_dict(user=request.user) for a in get_all_audits(user=request.user)]
     next_audit_name = generate_next_audit_name()
+    current_user_data = (
+        {"id": request.user.id, "username": request.user.username}
+        if request.user.is_authenticated
+        else None
+    )
     return render(
         request,
         "core/landing.html",
@@ -117,6 +134,8 @@ def landing_view(request: HttpRequest) -> HttpResponse:
             "profiles_json": json.dumps(profiles),
             "audits": audits,
             "audits_json": json.dumps(audits),
+            "current_user": current_user_data,
+            "current_user_json": json.dumps(current_user_data),
             "next_audit_name": next_audit_name,
             "has_active_audit": bool(active_audit),
         },
@@ -601,11 +620,13 @@ def create_audit_view(request: HttpRequest) -> HttpResponse:
                 profile_ids.append(item_str)
 
     try:
+        creator = request.user if request.user.is_authenticated else None
         audit = create_audit(
             name=name,
             title=title,
             description=description,
             status=status,
+            creator=creator,
             profile_ids=profile_ids,
         )
     except Exception as err:
@@ -618,7 +639,7 @@ def create_audit_view(request: HttpRequest) -> HttpResponse:
         return JsonResponse(
             {
                 "status": "success",
-                "audit": audit.to_dict(),
+                "audit": audit.to_dict(user=request.user),
                 "next_audit_name": generate_next_audit_name(),
             }
         )
@@ -658,7 +679,7 @@ def map_audit_profiles_view(request: HttpRequest, audit_id: str) -> JsonResponse
             {
                 "status": "success",
                 "message": f"Updated profile mappings for Audit '{audit.name}'",
-                "audit": audit.to_dict(),
+                "audit": audit.to_dict(user=request.user),
             }
         )
     except ValueError as err:
@@ -667,16 +688,63 @@ def map_audit_profiles_view(request: HttpRequest, audit_id: str) -> JsonResponse
         return JsonResponse({"status": "error", "message": str(err)}, status=500)
 
 
+@require_POST
+def update_audit_view(request: HttpRequest, audit_id: str) -> JsonResponse:
+    """
+    Updates an audit's title, description, or toggles status between ACTIVE and COMPLETED.
+    Strictly enforced: only the creator can edit an active audit or toggle its status.
+    """
+    is_json = (
+        request.content_type == "application/json"
+        or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    )
+    if is_json and request.body:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except Exception:
+            payload = {}
+    else:
+        payload = request.POST
+
+    title = payload.get("title")
+    description = payload.get("description")
+    status = payload.get("status")
+
+    try:
+        audit = update_audit(
+            audit_id,
+            user=request.user,
+            title=str(title) if title is not None else None,
+            description=str(description) if description is not None else None,
+            status=str(status) if status is not None else None,
+        )
+        return JsonResponse(
+            {
+                "status": "success",
+                "message": f"Audit '{audit.name}' successfully updated.",
+                "audit": audit.to_dict(user=request.user),
+            }
+        )
+    except PermissionDenied as err:
+        return JsonResponse({"status": "error", "message": str(err)}, status=403)
+    except ValueError as err:
+        return JsonResponse({"status": "error", "message": str(err)}, status=400)
+    except Exception as err:
+        return JsonResponse({"status": "error", "message": str(err)}, status=500)
+
+
 @require_GET
 def audit_list_api_view(request: HttpRequest) -> JsonResponse:
     """
-    JSON API returning all registered audits and their mapped profiles.
+    JSON API returning registered audits visible to the user:
+    - Completed audits visible to all.
+    - Active audits visible only to creator.
     """
-    audits = get_all_audits()
+    audits = get_all_audits(user=request.user)
     return JsonResponse(
         {
             "status": "success",
-            "audits": [a.to_dict() for a in audits],
+            "audits": [a.to_dict(user=request.user) for a in audits],
             "next_audit_name": generate_next_audit_name(),
         }
     )

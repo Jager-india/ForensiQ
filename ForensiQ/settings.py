@@ -205,6 +205,14 @@ MAILERS = {
     },
 }
 
+# Password Hashers (Enforces BCrypt as primary hasher)
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.BCryptPasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+]
+
 # ForensiQ Portal Security (Master Key required in environment / .env)
 PORTAL_ACCESS_PASSWORD = os.environ.get("PORTAL_ACCESS_PASSWORD")
 if not PORTAL_ACCESS_PASSWORD:
