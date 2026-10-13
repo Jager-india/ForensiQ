@@ -53,12 +53,11 @@
 
             <!-- Brand Logo -->
             <div class="flex items-center">
-                <a href="/" class="flex items-center group select-none">
-                    <span class="text-xl font-black tracking-tight text-theme-text flex items-center leading-none">
-                        <span>Forensi</span>
-                        <img src="{% static 'core/images/letter_q_orange.png' %}" alt="Q"
-                            class="inline-block h-[1.18em] w-auto ml-[0.05em] translate-y-[0.08em] filter drop-shadow-[0_2px_6px_rgba(245,158,11,0.3)] group-hover:scale-105 transition transform">
-                    </span>
+                <a href="/" class="flex items-center group select-none" aria-label="ForensiQ home">
+                    <img src="{% static 'core/images/forensiq_logo_light.png' %}" alt="ForensiQ"
+                        class="block dark:hidden h-9 sm:h-10 w-auto group-hover:scale-[1.03] transition-transform">
+                    <img src="{% static 'core/images/forensiq_logo_dark.png' %}" alt="ForensiQ"
+                        class="hidden dark:block h-9 sm:h-10 w-auto group-hover:scale-[1.03] transition-transform">
                 </a>
             </div>
 
