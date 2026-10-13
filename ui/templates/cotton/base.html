@@ -199,7 +199,7 @@
     </header>
 
     <!-- Main Content Workspace -->
-    <main class="flex-1 max-w-7xl w-full mx-auto {% if no_scroll or request.path == '/' %}min-h-0 px-4 sm:px-6 lg:px-8 py-2 flex flex-col justify-center overflow-hidden{% else %}p-4 sm:p-6 lg:p-8{% endif %}">
+    <main class="flex-1 max-w-7xl w-full mx-auto {% if no_scroll or request.path == '/' %}min-h-0 px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-2 flex flex-col overflow-hidden{% else %}p-4 sm:p-6 lg:p-8{% endif %}">
         {{ slot }}
     </main>
 

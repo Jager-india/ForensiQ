@@ -1,6 +1,6 @@
 <c-base title="ForensiQ | Forensic Investigation Platform" no_scroll="true">
 
-    <div x-data="profilesManager" class="w-full flex flex-col justify-center my-auto">
+    <div x-data="profilesManager" class="w-full flex-1 min-h-0 flex flex-col justify-between">
         <!-- Page Header Section with Top Right Audits & Profiles Buttons & Modal -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2 sm:mb-3 shrink-0">
         <div>
@@ -1009,7 +1009,6 @@
                 </div>
             </div>
         </div>
-    </div>
 
 
         <!-- App Launch Audit Intercept Modal -->
@@ -1152,7 +1151,7 @@
         </div>
 
         <!-- Dynamic Modules Grid with Q-Link Golden Thread Visual Nexus -->
-        <div id="modules-hub-container" class="relative w-full">
+        <div id="modules-hub-container" class="relative w-full flex-1 min-h-0 flex items-center justify-center my-auto">
             <!-- Golden Threads Visual Nexus SVG Layer -->
             <svg id="golden-threads-svg" 
                  class="absolute inset-0 w-full h-full pointer-events-none z-0 overflow-visible transition-opacity duration-500"
