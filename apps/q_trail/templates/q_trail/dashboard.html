@@ -169,7 +169,7 @@
 
         <!-- Page Header -->
         <c-page_header title="Q-Trail"
-            subtitle="Follow the money across bank accounts to see direct payments, hidden middlemen, and circular money loops."
+            subtitle="Follow the money trail between bank accounts and identify middle men."
             icon="fa-solid fa-route" icon_color="text-amber-400" back_url="/">
 
             <c-slot name="actions">
@@ -203,9 +203,7 @@
                                 <i class="fa-solid fa-database text-[9px]"></i> Data Source: Q-Bank Statements
                             </span>
                         </div>
-                        <p class="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-                            Pick 2 or more people to compare transfers and find hidden third parties passing money between them.
-                        </p>
+                        
                     </div>
 
                 <div class="flex flex-wrap items-center gap-2 max-w-full">
@@ -497,34 +495,7 @@
         window.topologyGraphData = {{ topology_graph_json | safe }};
     </script>
 
-    <!-- Executive Forensic Intelligence Findings Briefing -->
-    {% if executive_findings %}
-    <div class="mb-6 p-4 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
-        <div class="flex items-center justify-between pb-3 mb-3 border-b border-theme-border">
-            <div class="flex items-center gap-2">
-                <i class="fa-solid fa-shield-halved text-amber-500 text-sm"></i>
-                <h3 class="font-bold text-sm text-theme-text tracking-tight">Executive Forensic Intelligence Briefing</h3>
-            </div>
-            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                {{ executive_findings|length }} Flagged Indicator(s)
-            </span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {% for item in executive_findings %}
-            <div class="p-3 rounded-xl border flex items-start gap-3 transition {% if item.severity == 'CRITICAL' %}bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-200{% elif item.severity == 'WARNING' %}bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200{% else %}bg-sky-500/10 border-sky-500/25 text-sky-800 dark:text-sky-200{% endif %}">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 {% if item.severity == 'CRITICAL' %}bg-rose-500/20 text-rose-600 dark:text-rose-400{% elif item.severity == 'WARNING' %}bg-amber-500/20 text-amber-600 dark:text-amber-400{% else %}bg-sky-500/20 text-sky-600 dark:text-sky-400{% endif %}">
-                    <i class="{{ item.icon }} text-xs"></i>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <h4 class="font-bold text-xs text-theme-text leading-snug">{{ item.title }}</h4>
-                    <p class="text-[11px] text-theme-muted mt-0.5 leading-relaxed">{{ item.detail }}</p>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-
+    
     <!-- 1. Forensic Vitals Summary Banner -->
     <c-trail.vitals :direct_volume="metrics.total_direct_volume_formatted"
         :direct_count="metrics.total_direct_transfers_count" :outflow_volume="metrics.total_outflow_formatted"
@@ -648,13 +619,6 @@
                             <i class="fa-solid fa-user-secret text-amber-500"></i>
                             <span>Suspected Middlemen Passing Money</span>
                         </h3>
-                        <p class="text-xs text-theme-muted mt-0.5">
-                            {% if time_window_days > 0 %}
-                            Payments sent from Person A to a middleman, and then forwarded to Person B within {{ time_window_days }} days.
-                            {% else %}
-                            Payments sent from Person A to a middleman, and then forwarded to Person B across any dates (no time limit).
-                            {% endif %}
-                        </p>
                     </div>
                     <span
                         class="text-xs bg-theme-subtle text-theme-muted border border-theme-border px-2.5 py-1 rounded-full font-mono">
@@ -669,8 +633,38 @@
         </div>
     </div>
 
+    
+
     <!-- 6. 1-Hop Suspected Intermediary Conduits Triage Deck -->
     <c-trail.conduit_deck />
+    <!-- Executive Forensic Intelligence Findings Briefing -->
+    {% if executive_findings %}
+    <div class="mb-6 p-4 bg-theme-surface border border-theme-border rounded-2xl shadow-sm">
+        <div class="flex items-center justify-between pb-3 mb-3 border-b border-theme-border">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved text-amber-500 text-sm"></i>
+                <h3 class="font-bold text-sm text-theme-text tracking-tight">Executive Forensic Intelligence Briefing</h3>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                {{ executive_findings|length }} Flagged Indicator(s)
+            </span>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {% for item in executive_findings %}
+            <div class="p-3 rounded-xl border flex items-start gap-3 transition {% if item.severity == 'CRITICAL' %}bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-200{% elif item.severity == 'WARNING' %}bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200{% else %}bg-sky-500/10 border-sky-500/25 text-sky-800 dark:text-sky-200{% endif %}">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 {% if item.severity == 'CRITICAL' %}bg-rose-500/20 text-rose-600 dark:text-rose-400{% elif item.severity == 'WARNING' %}bg-amber-500/20 text-amber-600 dark:text-amber-400{% else %}bg-sky-500/20 text-sky-600 dark:text-sky-400{% endif %}">
+                    <i class="{{ item.icon }} text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <h4 class="font-bold text-xs text-theme-text leading-snug">{{ item.title }}</h4>
+                    <p class="text-[11px] text-theme-muted mt-0.5 leading-relaxed">{{ item.detail }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
 
     <!-- 7. Cross-Profile Pairwise Flow Matrix (Who Paid Whom Summary Table) -->
     <div x-data="{ isExpanded: false }"
@@ -696,9 +690,6 @@
                         </span>
                         {% endif %}
                     </h3>
-                    <p class="text-xs text-theme-muted mt-0.5">
-                        Total money moved between selected people (Direct payments + money passed through middlemen).
-                    </p>
                 </div>
             </div>
 

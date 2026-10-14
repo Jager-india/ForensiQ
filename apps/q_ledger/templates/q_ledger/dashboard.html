@@ -3,7 +3,7 @@
     <!-- Page Header matching ForensiQ App Standard -->
     <c-page_header 
         title="Q-Ledger" 
-        subtitle="SAP ERP & procurement forensic analysis, 3-way matching, price variance, and fake vendor detection." 
+        subtitle="SAP Procurement forensics" 
         icon="fa-solid fa-file-invoice-dollar"
         icon_color="text-amber-400"
         back_url="/">
@@ -317,7 +317,6 @@
                     <i class="fa-solid fa-microscope text-amber-500"></i>
                     <span>Forensic Audit Checkpoints</span>
                 </h3>
-                <p class="text-xs text-theme-muted mt-0.5">8 specialized forensic detection algorithms running across the ERP dataset.</p>
             </div>
         </div>
 
@@ -562,8 +561,7 @@
                 <span>Import SAP ERP Evidence</span>
             </h3>
             <p class="text-xs text-theme-muted mb-5">
-                Ingest SAP PR/PO extracts and optional MARA material master files. Data is cross-referenced with the background G/L and SLoc masters.
-            </p>
+Import PRPO Extracts and MARA            </p>
 
             <form method="POST" action="{% url 'q_ledger:dashboard' %}" enctype="multipart/form-data" class="space-y-5">
                 {% csrf_token %}
@@ -595,7 +593,7 @@
                     </button>
                     <button type="submit" 
                             class="px-5 py-2 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-lg shadow-amber-500/20 cursor-pointer transition">
-                        Ingest & Run Audit
+                        Import and Run Audit
                     </button>
                 </div>
             </form>
