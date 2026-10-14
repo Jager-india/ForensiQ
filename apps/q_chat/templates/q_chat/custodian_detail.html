@@ -389,7 +389,6 @@
                 <i class="fa-solid fa-cloud-arrow-up text-sky-400"></i>
                 <span>Import Chat Export File</span>
             </h3>
-            <p class="text-xs text-theme-muted mb-5">Supports WhatsApp (.txt), Teams / Slack (JSON / CSV), or Telegram export files.</p>
 
             <form method="POST" action="{% url 'q_chat:upload' %}" enctype="multipart/form-data" class="space-y-4">
                 {% csrf_token %}

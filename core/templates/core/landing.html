@@ -75,7 +75,6 @@
                         </div>
                         <div>
                             <h3 class="text-base font-bold text-theme-text dark:text-white">Forensic Audits &amp; Target Profiles</h3>
-                            <p class="text-xs text-theme-muted">Sequential audit references (YYYY-WB-XX), mapped subject profiles, and keyword tracking.</p>
                         </div>
                     </div>
                     <button type="button" @click="showProfileModal = false" class="text-theme-muted hover:text-theme-text cursor-pointer p-1">
@@ -381,7 +380,7 @@
                             <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
                                 Audit Title / Subject <span class="text-rose-500">*</span>
                             </label>
-                            <input type="text" x-model="newAuditTitle" placeholder="e.g. Strategic Vendor Collusion & Procurement Review" required
+                            <input type="text" x-model="newAuditTitle"  required
                                 class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -407,7 +406,7 @@
                         <!-- Scope & Description Notes -->
                         <div>
                             <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Investigation Scope / Terms of Reference</label>
-                            <textarea x-model="newAuditDescription" rows="2" placeholder="Audit terms of reference, whistle-blower allegations, or suspicious parameter hypotheses..."
+                            <textarea x-model="newAuditDescription" rows="2" , whistle-blower allegations, or suspicious parameter hypotheses..."
                                 class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500"></textarea>
                         </div>
 
@@ -500,7 +499,7 @@
                         <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-zinc-500 text-xs"></i>
                         <input type="text" 
                                x-model="searchQuery" 
-                               placeholder="Filter profiles by name, department, employee ID, or investigation keyword..."
+                               placeholder=""
                                class="w-full pl-9 pr-4 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:border-amber-500 transition">
                     </div>
 
@@ -686,7 +685,7 @@
 
                         <div>
                             <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Target / Auditee Full Name <span class="text-rose-500">*</span></label>
-                            <input type="text" name="full_name" placeholder="e.g. Ramesh Chandra / Rajesh Sharma" required
+                            <input type="text" name="full_name"  required
                                 class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                         </div>
 
@@ -729,12 +728,12 @@
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
                                     <span x-text="newCategory === 'VENDOR_EMPLOYEE' ? 'Vendor Employee ID / Ref' : ((newCategory === 'VENDOR_COMPANY' || newCategory === 'VENDOR') ? 'Vendor Company Code / Tax ID' : (newCategory === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref'))"></span>
                                 </label>
-                                <input type="text" name="employee_id" placeholder="e.g. EMP-9042"
+                                <input type="text" name="employee_id" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 font-mono">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Department / Division</label>
-                                <input type="text" name="department" placeholder="e.g. Strategic Procurement"
+                                <input type="text" name="department" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                         </div>
@@ -742,12 +741,12 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Designation / Role</label>
-                                <input type="text" name="designation" placeholder="e.g. Senior Buyer / GM"
+                                <input type="text" name="designation" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Official Email</label>
-                                <input type="email" name="email" placeholder="e.g. target@company.internal"
+                                <input type="email" name="email" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                         </div>
@@ -755,7 +754,7 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Contact Phone</label>
-                                <input type="text" name="phone" placeholder="e.g. +91 98401 23456"
+                                <input type="text" name="phone" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                             <div>
@@ -805,7 +804,7 @@
                                        @keydown.enter.prevent="addTag()"
                                        @keydown.,.prevent="addTag()"
                                        @keydown.backspace="if(!keywordInput) removeTag(newKeywords.length - 1)"
-                                       placeholder="Add keyword (e.g. kickback, cash, confidential)..."
+                                       
                                        class="flex-1 min-w-[180px] bg-transparent border-0 text-xs text-theme-text dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-0 p-1">
                             </div>
                         </div>
@@ -901,12 +900,12 @@
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">
                                     <span x-text="editingProfile && editingProfile.category === 'VENDOR_EMPLOYEE' ? 'Vendor Employee ID / Ref' : (editingProfile && (editingProfile.category === 'VENDOR_COMPANY' || editingProfile.category === 'VENDOR') ? 'Vendor Company Code / Tax ID' : (editingProfile && editingProfile.category === 'RELATIVE_OF_EMPLOYEE' ? 'Target Ref / ID' : 'Employee ID / Target Ref'))"></span>
                                 </label>
-                                <input type="text" x-model="editingProfile.employee_id" placeholder="e.g. EMP-9042"
+                                <input type="text" x-model="editingProfile.employee_id" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500 font-mono">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Department / Division</label>
-                                <input type="text" x-model="editingProfile.department" placeholder="e.g. Strategic Procurement"
+                                <input type="text" x-model="editingProfile.department" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                         </div>
@@ -914,12 +913,12 @@
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Designation / Role</label>
-                                <input type="text" x-model="editingProfile.designation" placeholder="e.g. Senior Buyer / GM"
+                                <input type="text" x-model="editingProfile.designation" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                             <div>
                                 <label class="block text-xs font-semibold text-theme-text dark:text-zinc-200 mb-1">Official Email</label>
-                                <input type="email" x-model="editingProfile.email" placeholder="e.g. target@company.internal"
+                                <input type="email" x-model="editingProfile.email" 
                                     class="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-zinc-950/60 border border-slate-200 dark:border-zinc-800 text-theme-text dark:text-white focus:outline-none focus:border-amber-500">
                             </div>
                         </div>
@@ -983,7 +982,7 @@
                                        @keydown.space.prevent="addEditTag()"
                                        @keydown.tab.prevent="addEditTag()"
                                        @keydown.backspace="if(!editKeywordInput && (editingProfile.keywords || []).length) removeEditTag(editingProfile.keywords.length - 1)"
-                                       placeholder="Add keyword (e.g. kickback, cash, confidential)..."
+                                       
                                        class="flex-1 min-w-[180px] bg-transparent border-0 text-xs text-theme-text dark:text-white placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-0 p-1">
                             </div>
                         </div>
@@ -1039,8 +1038,7 @@
                 <!-- Body -->
                 <div class="p-5 space-y-4 flex-1 overflow-y-auto">
                     <p class="text-xs text-slate-500 dark:text-zinc-400">
-                        Choose a registered forensic audit below to scope subjects, financial accounts, and intelligence inside <span class="font-bold text-theme-text dark:text-zinc-200" x-text="'Q-' + pendingModule.name"></span>.
-                    </p>
+                        Choose a registered forensic audit below </p>
 
                     <!-- Search box -->
                     <div class="relative" x-show="auditsList.length > 0">
