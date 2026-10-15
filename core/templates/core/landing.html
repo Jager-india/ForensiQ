@@ -1188,9 +1188,9 @@
             </svg>
 
             <!-- 3x3 Dynamic Modules Grid with Q-Link in the Center -->
-            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-2.5 lg:gap-3 xl:gap-3.5 items-stretch w-full">
+            <div id="modules-cards-grid" class="relative z-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 md:gap-3.5 lg:gap-4.5 xl:gap-6 2xl:gap-7 items-stretch w-full max-w-[1720px] mx-auto">
                 {% for module in modules %}
-                <div class="module-card-wrapper flex transition-all duration-300 {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.01] sm:scale-[1.02] w-full{% else %}satellite-card z-10 hover:z-20 max-w-[360px] w-full mx-auto{% endif %}"
+                <div class="module-card-wrapper flex transition-all duration-300 w-full {% if module.name == 'Link' %}hub-center-card z-20 scale-[1.01] sm:scale-[1.02]{% else %}satellite-card z-10 hover:z-20{% endif %}"
                      id="module-card-{{ module.name|lower }}"
                      data-module-name="{{ module.name }}"
                      data-is-hub="{% if module.name == 'Link' %}true{% else %}false{% endif %}"

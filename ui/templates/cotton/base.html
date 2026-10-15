@@ -49,7 +49,7 @@
 
     <!-- Top Navigation Command Bar -->
     <header class="bg-theme-surface/90 backdrop-blur-md border-b border-theme-border sticky top-0 z-50 shrink-0">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 {% if no_scroll or request.path == '/' %}h-13 sm:h-14{% else %}h-16{% endif %} flex items-center justify-between">
+        <div class="w-full px-4 sm:px-8 lg:px-12 xl:px-14 {% if no_scroll or request.path == '/' %}h-13 sm:h-14{% else %}h-16{% endif %} flex items-center justify-between">
 
             <!-- Brand Logo -->
             <div class="flex items-center">
@@ -198,13 +198,13 @@
     </header>
 
     <!-- Main Content Workspace -->
-    <main class="flex-1 max-w-7xl w-full mx-auto {% if no_scroll or request.path == '/' %}min-h-0 px-4 sm:px-6 lg:px-8 pt-3 sm:pt-4 pb-2 flex flex-col overflow-hidden{% else %}p-4 sm:p-6 lg:p-8{% endif %}">
+    <main class="flex-1 w-full {% if no_scroll or request.path == '/' %}min-h-0 px-4 sm:px-8 lg:px-12 xl:px-14 pt-3 sm:pt-4 pb-2 flex flex-col overflow-hidden{% else %}max-w-7xl mx-auto p-4 sm:p-6 lg:p-8{% endif %}">
         {{ slot }}
     </main>
 
     <!-- Footer -->
     <footer class="bg-theme-surface border-t border-theme-border {% if no_scroll or request.path == '/' %}py-1.5 sm:py-2 shrink-0{% else %}py-6 mt-auto{% endif %}">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-xs text-theme-muted">
+        <div class="w-full px-4 sm:px-8 lg:px-12 xl:px-14 flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 text-xs text-theme-muted">
             <div class="flex items-center gap-2 text-center sm:text-left">
                 <span class="font-semibold text-theme-text">ForensiQ</span>
                 <span>&bull;</span>
