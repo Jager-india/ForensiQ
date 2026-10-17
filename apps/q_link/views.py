@@ -40,7 +40,14 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     and initializes the interactive Vis.js network graph canvas with 3 Operational Modes.
     """
     active_audit = get_active_audit(request)
-    mode = request.GET.get("mode", "keyword").strip().lower()
+    if not active_audit and getattr(request, "user", None) and request.user.is_authenticated:
+        from core.audits import get_all_audits
+
+        audits = get_all_audits(request.user)
+        if audits.exists():
+            active_audit = audits.first()
+
+    mode = request.GET.get("mode", "audit").strip().lower()
     keyword = request.GET.get("keyword", "").strip()
 
     scope = request.GET.get("scope")

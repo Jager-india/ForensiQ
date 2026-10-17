@@ -206,6 +206,12 @@ def _format_node(
         ):
             node_type = "bank_account"
 
+    formatted_date = ""
+    if hasattr(entity, "created_at") and entity.created_at:
+        formatted_date = entity.created_at.strftime("%d %b %Y · %H:%M")
+    elif entity.metadata and entity.metadata.get("timestamp"):
+        formatted_date = str(entity.metadata.get("timestamp"))
+
     data: dict[str, Any] = {
         "id": str(entity.id),
         "label": entity.display_name,
@@ -215,6 +221,8 @@ def _format_node(
         "risk": entity.risk_rating,
         "is_target": entity.is_target,
         "category": entity.category,
+        "timestamp": formatted_date or "14 Mar 2026 · 23:41",
+        "metadata": entity.metadata or {},
     }
     if is_root is not None:
         data["is_root"] = is_root

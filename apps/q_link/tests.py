@@ -231,7 +231,12 @@ class QLinkAPITests(TestCase):
     """Tests Q-Link view endpoints."""
 
     def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testuser_api", password="password123")
         self.client = Client()
+        self.client.force_login(self.user)
         # Set session master portal auth
         session = self.client.session
         session["portal_authenticated"] = True
@@ -501,8 +506,14 @@ class QLinkAuditScopingTests(TestCase):
     """Tests for Q-Link audit scoping and scope toggle between audit and all profiles."""
 
     def setUp(self):
+        from django.contrib.auth import get_user_model
+
         from core.audits import create_audit
         from core.models import InvestigationProfile
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testuser_scope", password="password123")
+        self.client.force_login(self.user)
 
         self.prof1 = InvestigationProfile.objects.create(
             full_name="Vikash Subject Alpha",
@@ -817,6 +828,12 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
     """
 
     def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="testuser_drawer", password="password123")
+        self.client.force_login(self.user)
+
         self.e1, _ = resolve_or_create_entity("Mr. V", ForensicEntity.EntityType.EMPLOYEE)
         self.e2, _ = resolve_or_create_entity("Palani", ForensicEntity.EntityType.VENDOR)
         self.rel, _ = create_or_update_relationship(
@@ -917,12 +934,11 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
         # Check off-canvas workstation slide-over drawer
         self.assertIn('id="workstation-drawer"', content)
         self.assertIn("openWorkstationDrawer", content)
-        # Check floating Image 2 Signal legend card
-        self.assertIn("Signal", content)
-        self.assertIn("Healthy (Verified)", content)
-        self.assertIn("Degraded (Risk)", content)
-        self.assertIn("Failing (Layering)", content)
-        self.assertIn("Request path", content)
+        # Check top bar header pills & badges
+        self.assertIn("LIVE SYNC", content)
+        self.assertIn("PRIORITY FLAGS", content)
+        self.assertIn("High Risk Flow", content)
+        self.assertIn("Full Audit Topology", content)
         # Check Archivus-style evidence reader drawer
         self.assertIn('id="evidence-reader-drawer"', content)
         self.assertIn('id="reader-spotlight-box"', content)
