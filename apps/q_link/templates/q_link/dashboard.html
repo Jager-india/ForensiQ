@@ -373,6 +373,47 @@
             <div class="relative w-full overflow-hidden">
                 <div id="qlink-canvas" class="w-full h-[760px] bg-[#0c0915] relative transition-colors duration-200"></div>
 
+                <!-- Floating Glassmorphic Edge Hover Tooltip with Module Square-Boxes -->
+                <div id="qlink-edge-tooltip"
+                     class="hidden absolute pointer-events-none z-30 min-w-[280px] max-w-[340px] rounded-2xl bg-[#120e24]/95 backdrop-blur-2xl border border-white/15 p-3.5 shadow-2xl text-white transition-opacity duration-100">
+                    <!-- Header: Entity Nexus -->
+                    <div class="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-white/10">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
+                            <span id="tooltip-nexus" class="text-xs font-black tracking-wide text-slate-100 truncate">—</span>
+                        </div>
+                        <span id="tooltip-count-badge" class="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-bold text-amber-300 border border-white/10 flex-shrink-0">1 Link</span>
+                    </div>
+                    <!-- Core Details -->
+                    <div class="space-y-1.5 mb-3">
+                        <div class="flex items-baseline justify-between text-xs">
+                            <span class="text-slate-400 font-medium">Relation:</span>
+                            <span id="tooltip-relation" class="font-bold text-slate-200 text-right max-w-[180px] truncate">—</span>
+                        </div>
+                        <div class="flex items-baseline justify-between text-xs">
+                            <span class="text-slate-400 font-medium">Total Volume:</span>
+                            <span id="tooltip-amount" class="font-mono font-black text-emerald-400">—</span>
+                        </div>
+                        <div id="tooltip-rapid-layering-badge" class="hidden items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-[11px] font-bold text-rose-300">
+                            <i class="fa-solid fa-bolt-lightning text-rose-400 animate-pulse"></i>
+                            <span>Rapid Layering Intermediary</span>
+                        </div>
+                    </div>
+                    <!-- Module Square Boxes -->
+                    <div>
+                        <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold mb-2 flex items-center justify-between">
+                            <span>Discovered In</span>
+                            <span id="tooltip-modules-count" class="text-amber-400 font-mono">0</span>
+                        </div>
+                        <div id="tooltip-modules-container" class="grid grid-cols-3 gap-1.5"></div>
+                    </div>
+                    <!-- Merged Sub-Links -->
+                    <div id="tooltip-sublinks-wrapper" class="hidden mt-2.5 pt-2 border-t border-white/10">
+                        <div class="text-[9.5px] font-mono uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Merged Flows</div>
+                        <div id="tooltip-sublinks-container" class="space-y-1 max-h-20 overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+
                 <!-- Floating Glassmorphic Bottom-Left Controls (Tier 1 Navigation + Tier 2 Filters) -->
                 <div class="absolute bottom-6 left-6 z-20 flex flex-col gap-2 p-2 rounded-2xl bg-[#120e24]/90 dark:bg-[#120e24]/90 backdrop-blur-xl border border-white/10 shadow-2xl pointer-events-auto">
                     <!-- Tier 1: Canvas Navigation Controls -->
@@ -392,6 +433,10 @@
                         <div class="w-px h-4 bg-white/15 mx-0.5"></div>
                         <button type="button" onclick="resetNetworkHighlight()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-white/10 transition cursor-pointer" title="Clear Selection">
                             <i class="fa-solid fa-xmark text-xs"></i>
+                        </button>
+                        <div class="w-px h-4 bg-white/15 mx-0.5"></div>
+                        <button id="btn-toggle-labels" type="button" onclick="toggleAllEdgeLabels()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-amber-400 hover:bg-white/10 transition cursor-pointer" title="Toggle Edge Labels">
+                            <i id="icon-toggle-labels" class="fa-regular fa-tag text-xs"></i>
                         </button>
                     </div>
 
@@ -832,6 +877,8 @@
         let graphNodes = null;
         let graphEdges = null;
         let isPhysicsEnabled = true;
+        // Edge label visibility state: hidden by default for clean map
+        let showAllEdgeLabels = false;
 
         // Theme-aware color helper: returns the right color for current mode
         function isDarkMode() {
@@ -1098,19 +1145,10 @@
             });
         }
 
-        // Format edges with smooth curves, separated parallel flows, and forensic styling matching reference design
+        // Format edges — straight arrows (smooth: false), labels hidden by default for clean map.
+        // Server-side merge_graph_edges() already consolidates parallel/bidirectional pairs.
         function formatEdges(edges) {
-            // Group edges by undirected node pair to identify and distribute parallel connections
-            const pairMap = new Map();
-            edges.forEach((e, i) => {
-                const u = String(e.from || e.source);
-                const v = String(e.to || e.target);
-                const key = u < v ? `${u}___${v}` : `${v}___${u}`;
-                if (!pairMap.has(key)) pairMap.set(key, []);
-                pairMap.get(key).push({ edge: e, index: i });
-            });
-
-            return edges.map((e, i) => {
+            return edges.map((e) => {
                 const isRapidLayering = Boolean(e.is_rapid_layering || (e.relation_type === "RAPID_LAYERING") || (e.weight && Number(e.weight) >= 10000000));
                 const relType = String(e.relation_type || "").toUpperCase();
 
@@ -1160,49 +1198,34 @@
                     edgeLabel = "Rapid Layering" + amtStr;
                 }
 
-                // Multi-edge curvature distribution:
-                const u = String(e.from || e.source);
-                const v = String(e.to || e.target);
-                const key = u < v ? `${u}___${v}` : `${v}___${u}`;
-                const group = pairMap.get(key) || [];
-                const groupPos = group.findIndex(item => item.index === i);
-                const totalInGroup = group.length;
+                // Straight arrows: smooth is disabled now that server merges parallel edges
+                const straightConfig = { enabled: false };
 
-                let smoothConfig = {
-                    enabled: true,
-                    type: "cubicBezier",
-                    roundness: 0.45,
-                    forceDirection: "none"
-                };
+                // Bidirectional: use both arrows when is_bidirectional is set
+                const arrowConfig = e.is_bidirectional
+                    ? { to: { enabled: true, scaleFactor: 0.7 }, from: { enabled: true, scaleFactor: 0.7 } }
+                    : { to: { enabled: true, scaleFactor: 0.7 } };
 
-                if (totalInGroup > 1) {
-                    const smoothTypes = ["curvedCW", "curvedCCW", "curvedCW", "curvedCCW"];
-                    const roundnesses = [0.35, 0.35, 0.65, 0.65];
-                    smoothConfig = {
-                        enabled: true,
-                        type: smoothTypes[groupPos % smoothTypes.length],
-                        roundness: roundnesses[groupPos % roundnesses.length]
-                    };
-                }
+                // Labels hidden by default; shown when showAllEdgeLabels = true or on node click
+                const labelFontSize = showAllEdgeLabels ? 9.5 : 0;
+                const labelFontColor = showAllEdgeLabels ? fontColor : "rgba(0,0,0,0)";
 
                 return {
                     id: e.id,
                     from: e.from || e.source,
                     to: e.to || e.target,
                     label: edgeLabel,
-                    arrows: {
-                        to: { enabled: true, scaleFactor: 0.7 }
-                    },
-                    smooth: smoothConfig,
+                    arrows: arrowConfig,
+                    smooth: straightConfig,
                     color: { color: edgeColor, highlight: highlightColor },
                     font: {
-                        color: fontColor,
-                        size: 9.5,
+                        color: labelFontColor,
+                        size: labelFontSize,
                         face: "'Inter', -apple-system, sans-serif",
                         align: "middle",
-                        background: fontBg,
-                        strokeWidth: 1,
-                        strokeColor: fontStroke
+                        background: showAllEdgeLabels ? fontBg : "rgba(0,0,0,0)",
+                        strokeWidth: showAllEdgeLabels ? 1 : 0,
+                        strokeColor: showAllEdgeLabels ? fontStroke : "rgba(0,0,0,0)"
                     },
                     width: edgeWidth,
                     dashes: edgeDashes,
@@ -1240,12 +1263,8 @@
                     }
                 },
                 edges: {
-                    smooth: {
-                        enabled: true,
-                        type: "cubicBezier",
-                        roundness: 0.5,
-                        forceDirection: "none"
-                    },
+                    // Straight arrows globally; per-edge smooth overrides in formatEdges
+                    smooth: { enabled: false },
                     arrows: {
                         to: { enabled: true, scaleFactor: 0.75 }
                     }
@@ -1452,6 +1471,138 @@
                 touchStartDist = 0;
             });
 
+            // Floating edge hover tooltip (glassmorphic, module square-boxes)
+            const edgeTooltipEl = document.getElementById("qlink-edge-tooltip");
+
+            function formatWeight(w) {
+                if (!w || isNaN(Number(w))) return "—";
+                const v = Number(w);
+                if (v >= 10000000) return "₹" + (v / 10000000).toFixed(2) + " Cr";
+                if (v >= 100000) return "₹" + (v / 100000).toFixed(2) + " L";
+                if (v >= 1000) return "₹" + v.toLocaleString("en-IN");
+                return v.toFixed(2);
+            }
+
+            function buildModuleBoxes(modules) {
+                if (!modules || !modules.length) {
+                    return `<div class="col-span-3 text-[10px] text-slate-500 text-center py-1">Source unknown</div>`;
+                }
+                return modules.map(m => {
+                    const bg = (m.badge_bg || "bg-slate-500/15").replace("bg-", "").replace("/15", "");
+                    const textCls = m.badge_text || "text-slate-400";
+                    const borderCls = m.badge_border || "border-slate-500/30";
+                    const bgCls = m.badge_bg || "bg-slate-500/15";
+                    const count = m.evidence_count || 1;
+                    return `<div class="flex flex-col items-center justify-center gap-1 p-2 rounded-lg ${bgCls} border ${borderCls} cursor-default select-none" title="${m.name || m.short_name} — ${count} evidence record(s)">
+                        <i class="${m.icon || 'fa-solid fa-cube'} text-sm ${textCls}"></i>
+                        <span class="text-[9px] font-bold font-mono ${textCls} leading-none text-center">${m.short_name || m.name || '?'}</span>
+                        ${count > 1 ? `<span class="text-[8px] font-mono text-slate-500">${count}x</span>` : ''}
+                    </div>`;
+                }).join("");
+            }
+
+            function buildSubLinks(subLinks) {
+                if (!subLinks || subLinks.length <= 1) return "";
+                return subLinks.map(sl => {
+                    const wt = sl.weight ? formatWeight(sl.weight) : "—";
+                    const labelText = sl.label || sl.relation_type || "Link";
+                    const rlIcon = sl.is_rapid_layering ? `<i class="fa-solid fa-bolt-lightning text-rose-400 text-[9px]"></i>` : "";
+                    return `<div class="flex items-center justify-between text-[10px] gap-1.5">
+                        ${rlIcon}
+                        <span class="text-slate-400 truncate flex-1">${labelText}</span>
+                        <span class="text-emerald-400 font-mono font-bold flex-shrink-0">${wt}</span>
+                    </div>`;
+                }).join("");
+            }
+
+            // Track mouse position over canvas for tooltip positioning
+            let tooltipMouseX = 0, tooltipMouseY = 0;
+            const canvasRect = () => container.getBoundingClientRect();
+
+            container.addEventListener("mousemove", function(ev) {
+                tooltipMouseX = ev.clientX;
+                tooltipMouseY = ev.clientY;
+                if (edgeTooltipEl && !edgeTooltipEl.classList.contains("hidden")) {
+                    const rect = canvasRect();
+                    let tx = ev.clientX - rect.left + 18;
+                    let ty = ev.clientY - rect.top - 12;
+                    const ttW = edgeTooltipEl.offsetWidth || 300;
+                    const ttH = edgeTooltipEl.offsetHeight || 200;
+                    if (tx + ttW > rect.width - 10) tx = ev.clientX - rect.left - ttW - 18;
+                    if (ty + ttH > rect.height - 10) ty = ev.clientY - rect.top - ttH - 12;
+                    edgeTooltipEl.style.left = Math.max(0, tx) + "px";
+                    edgeTooltipEl.style.top = Math.max(0, ty) + "px";
+                }
+            });
+
+            networkInstance.on("hoverEdge", function(params) {
+                if (!edgeTooltipEl || !graphEdges) return;
+                const edge = graphEdges.get(params.edge);
+                if (!edge) return;
+                const raw = edge.raw || {};
+
+                // Nexus header
+                const srcName = raw.source_name || (graphNodes && graphNodes.get(edge.from) ? graphNodes.get(edge.from).label.split("\n")[0] : "Entity A");
+                const tgtName = raw.target_name || (graphNodes && graphNodes.get(edge.to) ? graphNodes.get(edge.to).label.split("\n")[0] : "Entity B");
+                const nexus = `${srcName} → ${tgtName}`;
+                const isBidir = Boolean(raw.is_bidirectional);
+                const isMerged = Boolean(raw.is_merged);
+                const mergedCount = raw.merged_count || 1;
+                const totalWeight = raw.weight || 0;
+                const isRL = Boolean(raw.is_rapid_layering);
+
+                const nexusEl = edgeTooltipEl.querySelector("#tooltip-nexus");
+                const countBadge = edgeTooltipEl.querySelector("#tooltip-count-badge");
+                const relationEl = edgeTooltipEl.querySelector("#tooltip-relation");
+                const amountEl = edgeTooltipEl.querySelector("#tooltip-amount");
+                const rlBadge = edgeTooltipEl.querySelector("#tooltip-rapid-layering-badge");
+                const modulesContainer = edgeTooltipEl.querySelector("#tooltip-modules-container");
+                const modulesCount = edgeTooltipEl.querySelector("#tooltip-modules-count");
+                const sublinksWrapper = edgeTooltipEl.querySelector("#tooltip-sublinks-wrapper");
+                const sublinksContainer = edgeTooltipEl.querySelector("#tooltip-sublinks-container");
+
+                if (nexusEl) nexusEl.textContent = nexus;
+                if (countBadge) countBadge.textContent = isBidir ? `${mergedCount} Links ⇄` : isMerged ? `${mergedCount} Merged Links` : "1 Link";
+                if (relationEl) relationEl.textContent = edge.label || raw.relation_type || "Direct Connection";
+                if (amountEl) amountEl.textContent = totalWeight > 0 ? formatWeight(totalWeight) : "—";
+
+                if (rlBadge) {
+                    if (isRL) {
+                        rlBadge.classList.remove("hidden");
+                        rlBadge.classList.add("flex");
+                    } else {
+                        rlBadge.classList.add("hidden");
+                        rlBadge.classList.remove("flex");
+                    }
+                }
+
+                const modules = raw.modules || [];
+                if (modulesContainer) modulesContainer.innerHTML = buildModuleBoxes(modules);
+                if (modulesCount) modulesCount.textContent = modules.length;
+
+                const subLinks = raw.sub_links || [];
+                if (sublinksWrapper && sublinksContainer) {
+                    if (subLinks.length > 1) {
+                        sublinksContainer.innerHTML = buildSubLinks(subLinks);
+                        sublinksWrapper.classList.remove("hidden");
+                    } else {
+                        sublinksWrapper.classList.add("hidden");
+                    }
+                }
+
+                // Position tooltip
+                const rect = canvasRect();
+                let tx = tooltipMouseX - rect.left + 18;
+                let ty = tooltipMouseY - rect.top - 12;
+                edgeTooltipEl.style.left = Math.max(0, tx) + "px";
+                edgeTooltipEl.style.top = Math.max(0, ty) + "px";
+                edgeTooltipEl.classList.remove("hidden");
+            });
+
+            networkInstance.on("blurEdge", function() {
+                if (edgeTooltipEl) edgeTooltipEl.classList.add("hidden");
+            });
+
             // Click Events:
             // - Node click: Highlight 1st and 2nd degree path, dim unrelated nodes, open Inspector drawer
             // - Edge click: Open Audit Evidence Trail drawer
@@ -1468,7 +1619,13 @@
                     openWorkstationDrawer('inspector');
                 } else if (params.edges.length > 0) {
                     const edgeId = params.edges[0];
-                    inspectEdge(edgeId);
+                    // For merged edges, pass all sub-link IDs so get_edge_evidence aggregates citations
+                    const edgeData = graphEdges ? graphEdges.get(edgeId) : null;
+                    const raw = edgeData ? (edgeData.raw || {}) : {};
+                    const subIds = (raw.sub_link_ids && raw.sub_link_ids.length > 0)
+                        ? raw.sub_link_ids.join(",")
+                        : edgeId;
+                    inspectEdge(subIds);
                 } else {
                     resetNetworkHighlight();
                 }
@@ -1579,21 +1736,21 @@
             });
             graphNodes.update(nodeUpdates);
 
-            // Dim unrelated edges
+            // Dim unrelated edges; show labels for connected edges when a node is selected
             const edgeUpdates = [];
             graphEdges.forEach(edge => {
                 if (highlightedNodeIds.has(edge.from) && highlightedNodeIds.has(edge.to)) {
                     edgeUpdates.push({
                         id: edge.id,
                         color: edge.originalColor,
-                        font: edge.originalFont,
+                        font: edge.originalFont, // Restore visible font for highlighted edges
                         hidden: false
                     });
                 } else {
                     edgeUpdates.push({
                         id: edge.id,
                         color: { color: tc.dimEdge },
-                        font: { color: "transparent", strokeWidth: 0 },
+                        font: { color: "rgba(0,0,0,0)", size: 0, strokeWidth: 0 },
                         hidden: false
                     });
                 }
@@ -1630,7 +1787,12 @@
                 edgeUpdates.push({
                     id: edge.id,
                     color: edge.originalColor,
-                    font: edge.originalFont,
+                    // Restore to original font only if global label toggle is ON, else hide
+                    font: showAllEdgeLabels ? edge.originalFont : {
+                        color: "rgba(0,0,0,0)",
+                        size: 0,
+                        strokeWidth: 0
+                    },
                     hidden: false
                 });
             });
@@ -1649,6 +1811,38 @@
             window.dispatchEvent(new CustomEvent('close-workstation'));
             const backdrop = document.getElementById("workstation-backdrop");
             if (backdrop) backdrop.classList.add("hidden");
+        }
+
+        // Toggle all edge labels on/off (for "Toggle Labels" toolbar button)
+        function toggleAllEdgeLabels() {
+            showAllEdgeLabels = !showAllEdgeLabels;
+            if (!graphEdges) return;
+
+            const btn = document.getElementById("btn-toggle-labels");
+            const icon = document.getElementById("icon-toggle-labels");
+            if (btn) {
+                btn.classList.toggle("text-amber-400", showAllEdgeLabels);
+                btn.classList.toggle("bg-amber-400/15", showAllEdgeLabels);
+                btn.classList.toggle("text-slate-300", !showAllEdgeLabels);
+            }
+            if (icon) {
+                icon.className = showAllEdgeLabels
+                    ? "fa-solid fa-tag text-xs"
+                    : "fa-regular fa-tag text-xs";
+            }
+
+            const edgeUpdates = [];
+            graphEdges.forEach(edge => {
+                edgeUpdates.push({
+                    id: edge.id,
+                    font: showAllEdgeLabels ? edge.originalFont : {
+                        color: "rgba(0,0,0,0)",
+                        size: 0,
+                        strokeWidth: 0
+                    }
+                });
+            });
+            graphEdges.update(edgeUpdates);
         }
 
         // Open Evidence Drawer

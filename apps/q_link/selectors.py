@@ -81,6 +81,268 @@ def resolve_tool_display_name(module_code: str | None) -> str:
     return TOOL_DISPLAY_MAP.get(clean, clean.replace("q_", "").capitalize())
 
 
+MODULE_INFO_MAP: dict[str, dict[str, Any]] = {
+    "q_bank": {
+        "key": "q_bank",
+        "name": "Q-Bank",
+        "short_name": "Bank",
+        "icon": "fa-solid fa-building-columns",
+        "color": "emerald",
+        "badge_bg": "bg-emerald-500/15",
+        "badge_border": "border-emerald-500/30",
+        "badge_text": "text-emerald-400",
+    },
+    "bank": {
+        "key": "q_bank",
+        "name": "Q-Bank",
+        "short_name": "Bank",
+        "icon": "fa-solid fa-building-columns",
+        "color": "emerald",
+        "badge_bg": "bg-emerald-500/15",
+        "badge_border": "border-emerald-500/30",
+        "badge_text": "text-emerald-400",
+    },
+    "q_verify": {
+        "key": "q_verify",
+        "name": "Q-Verify",
+        "short_name": "Verify",
+        "icon": "fa-solid fa-shield-halved",
+        "color": "amber",
+        "badge_bg": "bg-amber-500/15",
+        "badge_border": "border-amber-500/30",
+        "badge_text": "text-amber-400",
+    },
+    "verify": {
+        "key": "q_verify",
+        "name": "Q-Verify",
+        "short_name": "Verify",
+        "icon": "fa-solid fa-shield-halved",
+        "color": "amber",
+        "badge_bg": "bg-amber-500/15",
+        "badge_border": "border-amber-500/30",
+        "badge_text": "text-amber-400",
+    },
+    "q_trail": {
+        "key": "q_trail",
+        "name": "Q-Trail",
+        "short_name": "Trail",
+        "icon": "fa-solid fa-route",
+        "color": "rose",
+        "badge_bg": "bg-rose-500/15",
+        "badge_border": "border-rose-500/30",
+        "badge_text": "text-rose-400",
+    },
+    "trail": {
+        "key": "q_trail",
+        "name": "Q-Trail",
+        "short_name": "Trail",
+        "icon": "fa-solid fa-route",
+        "color": "rose",
+        "badge_bg": "bg-rose-500/15",
+        "badge_border": "border-rose-500/30",
+        "badge_text": "text-rose-400",
+    },
+    "q_mail": {
+        "key": "q_mail",
+        "name": "Q-Mail",
+        "short_name": "Mail",
+        "icon": "fa-solid fa-envelope",
+        "color": "cyan",
+        "badge_bg": "bg-cyan-500/15",
+        "badge_border": "border-cyan-500/30",
+        "badge_text": "text-cyan-400",
+    },
+    "mail": {
+        "key": "q_mail",
+        "name": "Q-Mail",
+        "short_name": "Mail",
+        "icon": "fa-solid fa-envelope",
+        "color": "cyan",
+        "badge_bg": "bg-cyan-500/15",
+        "badge_border": "border-cyan-500/30",
+        "badge_text": "text-cyan-400",
+    },
+    "q_ledger": {
+        "key": "q_ledger",
+        "name": "Q-Ledger",
+        "short_name": "Ledger",
+        "icon": "fa-solid fa-receipt",
+        "color": "purple",
+        "badge_bg": "bg-purple-500/15",
+        "badge_border": "border-purple-500/30",
+        "badge_text": "text-purple-400",
+    },
+    "ledger": {
+        "key": "q_ledger",
+        "name": "Q-Ledger",
+        "short_name": "Ledger",
+        "icon": "fa-solid fa-receipt",
+        "color": "purple",
+        "badge_bg": "bg-purple-500/15",
+        "badge_border": "border-purple-500/30",
+        "badge_text": "text-purple-400",
+    },
+    "q_voice": {
+        "key": "q_voice",
+        "name": "Q-Voice",
+        "short_name": "Voice",
+        "icon": "fa-solid fa-microphone",
+        "color": "blue",
+        "badge_bg": "bg-blue-500/15",
+        "badge_border": "border-blue-500/30",
+        "badge_text": "text-blue-400",
+    },
+    "voice": {
+        "key": "q_voice",
+        "name": "Q-Voice",
+        "short_name": "Voice",
+        "icon": "fa-solid fa-microphone",
+        "color": "blue",
+        "badge_bg": "bg-blue-500/15",
+        "badge_border": "border-blue-500/30",
+        "badge_text": "text-blue-400",
+    },
+    "q_chat": {
+        "key": "q_chat",
+        "name": "Q-Chat",
+        "short_name": "Chat",
+        "icon": "fa-brands fa-whatsapp",
+        "color": "teal",
+        "badge_bg": "bg-teal-500/15",
+        "badge_border": "border-teal-500/30",
+        "badge_text": "text-teal-400",
+    },
+    "chat": {
+        "key": "q_chat",
+        "name": "Q-Chat",
+        "short_name": "Chat",
+        "icon": "fa-brands fa-whatsapp",
+        "color": "teal",
+        "badge_bg": "bg-teal-500/15",
+        "badge_border": "border-teal-500/30",
+        "badge_text": "text-teal-400",
+    },
+    "q_scan": {
+        "key": "q_scan",
+        "name": "Q-Scan",
+        "short_name": "Scan",
+        "icon": "fa-solid fa-file-invoice-dollar",
+        "color": "indigo",
+        "badge_bg": "bg-indigo-500/15",
+        "badge_border": "border-indigo-500/30",
+        "badge_text": "text-indigo-400",
+    },
+    "scan": {
+        "key": "q_scan",
+        "name": "Q-Scan",
+        "short_name": "Scan",
+        "icon": "fa-solid fa-file-invoice-dollar",
+        "color": "indigo",
+        "badge_bg": "bg-indigo-500/15",
+        "badge_border": "border-indigo-500/30",
+        "badge_text": "text-indigo-400",
+    },
+    "q_link": {
+        "key": "q_link",
+        "name": "Q-Link",
+        "short_name": "Link",
+        "icon": "fa-solid fa-network-wired",
+        "color": "violet",
+        "badge_bg": "bg-violet-500/15",
+        "badge_border": "border-violet-500/30",
+        "badge_text": "text-violet-400",
+    },
+    "link": {
+        "key": "q_link",
+        "name": "Q-Link",
+        "short_name": "Link",
+        "icon": "fa-solid fa-network-wired",
+        "color": "violet",
+        "badge_bg": "bg-violet-500/15",
+        "badge_border": "border-violet-500/30",
+        "badge_text": "text-violet-400",
+    },
+    "core": {
+        "key": "core",
+        "name": "Q-Core",
+        "short_name": "Profile",
+        "icon": "fa-solid fa-fingerprint",
+        "color": "slate",
+        "badge_bg": "bg-slate-500/15",
+        "badge_border": "border-slate-500/30",
+        "badge_text": "text-slate-400",
+    },
+    "profile": {
+        "key": "core",
+        "name": "Q-Core",
+        "short_name": "Profile",
+        "icon": "fa-solid fa-fingerprint",
+        "color": "slate",
+        "badge_bg": "bg-slate-500/15",
+        "badge_border": "border-slate-500/30",
+        "badge_text": "text-slate-400",
+    },
+}
+
+
+def get_module_info(mod_key: str | None) -> dict[str, Any]:
+    """Returns canonical module styling, brand name, and icon configuration."""
+    clean = str(mod_key or "q_bank").strip().lower()
+    if clean in MODULE_INFO_MAP:
+        return dict(MODULE_INFO_MAP[clean])
+    name = clean.replace("q_", "").capitalize()
+    return {
+        "key": clean,
+        "name": f"Q-{name}" if not name.startswith("Q-") else name,
+        "short_name": name,
+        "icon": "fa-solid fa-cube",
+        "color": "amber",
+        "badge_bg": "bg-amber-500/15",
+        "badge_border": "border-amber-500/30",
+        "badge_text": "text-amber-400",
+    }
+
+
+def resolve_edge_modules(
+    rel: EntityRelationship,
+    ev_pointers: list[EvidencePointer] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Extracts all unique originating forensic modules for a relationship edge,
+    including evidence pointer counts for square-box attribution.
+    """
+    counts: dict[str, int] = {}
+    pointers = ev_pointers if ev_pointers is not None else list(rel.evidence_pointers.all())
+
+    for ptr in pointers:
+        m = (ptr.source_module or "").strip().lower()
+        if m:
+            clean_m = "q_" + m if not m.startswith("q_") and f"q_{m}" in MODULE_INFO_MAP else m
+            counts[clean_m] = counts.get(clean_m, 0) + 1
+
+    if rel.source_module:
+        rm = rel.source_module.strip().lower()
+        clean_rm = "q_" + rm if not rm.startswith("q_") and f"q_{rm}" in MODULE_INFO_MAP else rm
+        if clean_rm not in counts:
+            counts[clean_rm] = 1
+
+    if not counts:
+        counts["q_bank"] = 1
+
+    modules: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for mod_key, count in counts.items():
+        info = get_module_info(mod_key)
+        canonical_key = info["key"]
+        if canonical_key not in seen_keys:
+            seen_keys.add(canonical_key)
+            info["evidence_count"] = count
+            modules.append(info)
+
+    return modules
+
+
 def resolve_rel_tool_names(rel_or_list: Any) -> str:
     """
     Extracts all unique originating forensic tools for a relationship from its evidence pointers.
@@ -275,23 +537,176 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
     is_rl = bool(rel.metadata.get("is_rapid_layering") or rel.relation_type == "RAPID_LAYERING")
     is_ext = is_external or bool(rel.metadata.get("is_external"))
 
+    modules = resolve_edge_modules(rel, ev_pointers)
     return {
         "id": str(rel.id),
         "source": str(rel.source_entity_id),
         "target": str(rel.target_entity_id),
         "from": str(rel.source_entity_id),
         "to": str(rel.target_entity_id),
+        "source_name": rel.source_entity.display_name,
+        "target_name": rel.target_entity.display_name,
         "relation_type": rel.relation_type,
         "label": rel.get_relation_type_display(),
         "weight": rel.weight,
         "confidence": rel.confidence_score,
         "module": rel.source_module,
+        "modules": modules,
         "is_direct": rel.is_direct,
         "is_rapid_layering": is_rl,
         "is_external": is_ext,
         "evidence": evidence_dict,
         "evidence_count": evidence_count,
+        "is_bidirectional": False,
+        "is_merged": False,
+        "sub_link_ids": [str(rel.id)],
     }
+
+
+def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Consolidates parallel and bi-directional edges between identical node pairs into
+    a single straight connection, aggregating financial weights, combining forensic module
+    square-box citations, and embedding sub-link flow details for hover tooltips.
+    """
+    if not edges:
+        return []
+
+    pair_groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for edge in edges:
+        u = str(edge.get("from") or edge.get("source") or "")
+        v = str(edge.get("to") or edge.get("target") or "")
+        if not u or not v:
+            continue
+        pair_key = tuple(sorted([u, v]))
+        pair_groups.setdefault(pair_key, []).append(edge)
+
+    merged_edges: list[dict[str, Any]] = []
+
+    for (u, v), group in pair_groups.items():
+        if len(group) == 1:
+            edge = dict(group[0])
+            if "modules" not in edge or not edge["modules"]:
+                mod_name = edge.get("module") or "q_bank"
+                edge["modules"] = [get_module_info(mod_name)]
+            if "sub_links" not in edge or not edge["sub_links"]:
+                edge["sub_links"] = [
+                    {
+                        "id": edge.get("id"),
+                        "source": edge.get("source") or edge.get("from"),
+                        "target": edge.get("target") or edge.get("to"),
+                        "source_name": edge.get("source_name", ""),
+                        "target_name": edge.get("target_name", ""),
+                        "label": edge.get("label", ""),
+                        "relation_type": edge.get("relation_type", ""),
+                        "weight": edge.get("weight", 0),
+                        "confidence": edge.get("confidence", 1.0),
+                        "module": edge.get("module", ""),
+                        "modules": edge.get("modules", []),
+                        "is_rapid_layering": bool(edge.get("is_rapid_layering")),
+                    }
+                ]
+            edge["sub_link_ids"] = [str(edge.get("id"))] if edge.get("id") else []
+            edge["is_bidirectional"] = False
+            edge["is_merged"] = False
+            merged_edges.append(edge)
+            continue
+
+        # Multiple parallel connections exist between u and v
+        has_forward = any(
+            str(e.get("from") or e.get("source")) == u and str(e.get("to") or e.get("target")) == v
+            for e in group
+        )
+        has_backward = any(
+            str(e.get("from") or e.get("source")) == v and str(e.get("to") or e.get("target")) == u
+            for e in group
+        )
+        is_bidirectional = has_forward and has_backward
+
+        # Determine dominant primary edge:
+        # 1. Rapid layering flag
+        # 2. Monetary weight
+        # 3. Confidence score
+        # 4. Evidence count
+        sorted_group = sorted(
+            group,
+            key=lambda e: (
+                1 if e.get("is_rapid_layering") else 0,
+                float(e.get("weight") or 0.0),
+                float(e.get("confidence") or 0.0),
+                int(e.get("evidence_count") or 0),
+            ),
+            reverse=True,
+        )
+        dominant = dict(sorted_group[0])
+
+        total_weight = sum(float(e.get("weight") or 0.0) for e in group)
+        max_confidence = max(float(e.get("confidence") or 0.0) for e in group)
+        is_rl = any(bool(e.get("is_rapid_layering")) for e in group)
+        is_ext = any(bool(e.get("is_external")) for e in group)
+        total_ev_count = sum(int(e.get("evidence_count") or 0) for e in group)
+
+        # Merge modules across all sub-links
+        module_dict: dict[str, dict[str, Any]] = {}
+        for e in group:
+            mods = e.get("modules") or []
+            if not mods and e.get("module"):
+                mods = [get_module_info(e.get("module"))]
+            for m in mods:
+                key = m.get("key") or m.get("name")
+                if key not in module_dict:
+                    module_dict[key] = dict(m)
+                else:
+                    module_dict[key]["evidence_count"] = module_dict[key].get(
+                        "evidence_count", 1
+                    ) + m.get("evidence_count", 1)
+
+        sub_links = []
+        for e in group:
+            sub_links.append(
+                {
+                    "id": str(e.get("id")),
+                    "source": e.get("source") or e.get("from"),
+                    "target": e.get("target") or e.get("to"),
+                    "source_name": e.get("source_name", ""),
+                    "target_name": e.get("target_name", ""),
+                    "label": e.get("label", ""),
+                    "relation_type": e.get("relation_type", ""),
+                    "weight": e.get("weight", 0),
+                    "confidence": e.get("confidence", 1.0),
+                    "module": e.get("module", ""),
+                    "modules": e.get("modules", []),
+                    "is_rapid_layering": bool(e.get("is_rapid_layering")),
+                }
+            )
+
+        sub_link_ids = [str(e.get("id")) for e in group if e.get("id")]
+        primary_label = dominant.get("label") or dominant.get("relation_type") or "Connected"
+
+        if is_bidirectional:
+            merged_label = f"{primary_label} ⇄ ({len(group)} Links)"
+        else:
+            merged_label = f"{primary_label} + {len(group) - 1} Links"
+
+        dominant.update(
+            {
+                "weight": total_weight,
+                "confidence": max_confidence,
+                "is_rapid_layering": is_rl,
+                "is_external": is_ext,
+                "evidence_count": total_ev_count,
+                "modules": list(module_dict.values()),
+                "sub_links": sub_links,
+                "sub_link_ids": sub_link_ids,
+                "is_bidirectional": is_bidirectional,
+                "is_merged": True,
+                "merged_count": len(group),
+                "label": merged_label,
+            }
+        )
+        merged_edges.append(dominant)
+
+    return merged_edges
 
 
 def get_entity_network(
@@ -353,7 +768,7 @@ def get_entity_network(
     return {
         "root_id": str(root_entity.id),
         "nodes": list(nodes_map.values()),
-        "edges": edges_list,
+        "edges": merge_graph_edges(edges_list),
     }
 
 
@@ -458,14 +873,19 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
     Handles direct EntityRelationship UUIDs and synthetic/composite keyword interlinks.
     """
     rel = None
-    try:
-        rel = (
-            EntityRelationship.objects.select_related("source_entity", "target_entity")
-            .prefetch_related("evidence_pointers")
-            .get(id=edge_id)
-        )
-    except (EntityRelationship.DoesNotExist, ValueError, TypeError, ValidationError):
-        rel = None
+    rels: list[EntityRelationship] = []
+    rel_ids = [i.strip() for i in edge_id.split(",") if i.strip()]
+    if rel_ids:
+        try:
+            rels = list(
+                EntityRelationship.objects.filter(id__in=rel_ids)
+                .select_related("source_entity", "target_entity")
+                .prefetch_related("evidence_pointers")
+            )
+            if rels:
+                rel = rels[0]
+        except (EntityRelationship.DoesNotExist, ValueError, TypeError, ValidationError):
+            rel = None
 
     ea, eb = None, None
     keyword = ""
@@ -505,7 +925,6 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
     evidence_items: list[dict[str, Any]] = []
 
     if rel:
-        evidence_pointers = list(rel.evidence_pointers.all())
         category = "FINANCIAL"
         if rel.source_module in ["q_verify", "q_scan"] or rel.relation_type in [
             "PARTNER",
@@ -517,7 +936,13 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
         elif rel.source_module == "q_chat":
             category = "CHAT"
 
-        for ptr in evidence_pointers:
+        seen_ptr_ids: set[str] = set()
+        for r in rels or [rel]:
+            for ptr in r.evidence_pointers.all():
+                ptr_id_str = str(ptr.id)
+                if ptr_id_str in seen_ptr_ids:
+                    continue
+                seen_ptr_ids.add(ptr_id_str)
             meta: dict[str, Any] = ptr.metadata or {}
             item = {
                 "id": str(ptr.id),
@@ -572,11 +997,18 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 }
             )
 
-        tool_name = resolve_rel_tool_names(rel)
+        tool_name = resolve_rel_tool_names(rels or [rel])
+        total_w = sum(r.weight for r in rels) if rels else rel.weight
+        max_conf = max((r.confidence_score for r in rels), default=rel.confidence_score)
+        has_rl = any(
+            bool(r.metadata.get("is_rapid_layering") or r.relation_type == "RAPID_LAYERING")
+            for r in (rels or [rel])
+        )
+        has_ext = any(bool(r.metadata.get("is_external")) for r in (rels or [rel]))
         return {
             "status": "success",
             "edge": {
-                "id": str(rel.id),
+                "id": edge_id,
                 "source_id": str(rel.source_entity_id),
                 "target_id": str(rel.target_entity_id),
                 "source_name": rel.source_entity.display_name,
@@ -586,12 +1018,10 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "label": f"{tool_name}: {rel.get_relation_type_display()}",
                 "category": category,
                 "module": rel.source_module or tool_name.lower(),
-                "weight": rel.weight,
-                "confidence": rel.confidence_score,
-                "is_rapid_layering": bool(
-                    rel.metadata.get("is_rapid_layering") or rel.relation_type == "RAPID_LAYERING"
-                ),
-                "is_external": bool(rel.metadata.get("is_external")),
+                "weight": total_w,
+                "confidence": max_conf,
+                "is_rapid_layering": has_rl,
+                "is_external": has_ext,
             },
             "evidence_items": evidence_items,
             "evidence_list": evidence_items,
@@ -1075,14 +1505,15 @@ def get_mode1_keyword_graph(
         key_terms_str = (
             f" (Key terms: {', '.join(sorted(active_kw_names)[:6])})" if active_kw_names else ""
         )
+        merged_edges = merge_graph_edges(valid_edges)
         return {
             "mode": "keyword",
             "keyword": "",
             "title": "Interlinks based on keywords",
             "nodes": nodes,
-            "edges": valid_edges,
+            "edges": merged_edges,
             "total_entities": len(nodes),
-            "message": f"Showing {len(valid_edges)} interlink(s) based on keywords across {len(nodes)} entities{key_terms_str}.",
+            "message": f"Showing {len(merged_edges)} interlink(s) based on keywords across {len(nodes)} entities{key_terms_str}.",
         }
 
     # Keyword search scoped strictly to active audit
@@ -1305,14 +1736,15 @@ def get_mode1_keyword_graph(
     node_ids = {n["id"] for n in nodes}
     valid_edges = [e for e in edges if e["source"] in node_ids and e["target"] in node_ids]
 
+    merged_edges = merge_graph_edges(valid_edges)
     return {
         "mode": "keyword",
         "keyword": kw,
         "title": f"Interlinks based on keywords: {kw}",
         "nodes": nodes,
-        "edges": valid_edges,
+        "edges": merged_edges,
         "total_entities": len(nodes),
-        "message": f"Found {len(nodes)} entities and {len(valid_edges)} connections for keyword '{kw}'.",
+        "message": f"Found {len(nodes)} entities and {len(merged_edges)} connections for keyword '{kw}'.",
     }
 
 
@@ -1408,7 +1840,7 @@ def get_mode2_audit_graph(
         .prefetch_related("evidence_pointers")
     )
 
-    edges = [_format_edge(r) for r in relationships]
+    edges = merge_graph_edges([_format_edge(r) for r in relationships])
 
     return {
         "mode": "audit",
@@ -1600,7 +2032,7 @@ def get_mode3_global_graph(
         .select_related("source_entity", "target_entity")
         .prefetch_related("evidence_pointers")
     )
-    edges = [_format_edge(r) for r in internal_rels] + external_edges
+    edges = merge_graph_edges([_format_edge(r) for r in internal_rels] + external_edges)
 
     return {
         "mode": "global",

@@ -1,0 +1,62 @@
+{% comment %}
+ForensiQ Network Link Tooltip Card (Dark Glassmorphic Component)
+Used in Q-Link and network visualizations to display connection summaries,
+financial volume, entity nexus, and square boxes for originating forensic modules.
+{% endcomment %}
+<div id="{{ id|default:'qlink-edge-tooltip' }}" 
+     class="hidden absolute pointer-events-none z-30 min-w-[280px] max-w-sm rounded-2xl bg-[#120e24]/95 backdrop-blur-2xl border border-white/15 p-3.5 shadow-2xl text-white transition-opacity duration-150 {{ class }}">
+    
+    <!-- Header: Entity Nexus & Direction -->
+    <div class="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-white/10">
+        <div class="flex items-center gap-1.5 min-w-0">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
+            <span id="tooltip-nexus" class="text-xs font-black tracking-wide text-slate-100 truncate">
+                {{ nexus|default:"Entity Nexus" }}
+            </span>
+        </div>
+        <span id="tooltip-count-badge" class="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-bold text-amber-300 border border-white/10 flex-shrink-0">
+            {{ count_badge|default:"1 Link" }}
+        </span>
+    </div>
+
+    <!-- Core Details: Primary Relation & Financial Weight -->
+    <div class="space-y-1.5 mb-3">
+        <div class="flex items-baseline justify-between text-xs">
+            <span class="text-slate-400 font-medium">Relation:</span>
+            <span id="tooltip-relation" class="font-bold text-slate-200">
+                {{ relation|default:"Direct Connection" }}
+            </span>
+        </div>
+        <div class="flex items-baseline justify-between text-xs">
+            <span class="text-slate-400 font-medium">Total Volume:</span>
+            <span id="tooltip-amount" class="font-mono font-black text-emerald-400">
+                {{ amount|default:"-" }}
+            </span>
+        </div>
+        <div id="tooltip-rapid-layering-badge" class="hidden items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-[11px] font-bold text-rose-300">
+            <i class="fa-solid fa-bolt-lightning text-rose-400 animate-pulse"></i>
+            <span>Rapid Layering Intermediary</span>
+        </div>
+    </div>
+
+    <!-- Found In Forensic Modules (Square Boxes) -->
+    <div>
+        <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold mb-2 flex items-center justify-between">
+            <span>Discovered In Modules</span>
+            <span id="tooltip-modules-count" class="text-amber-400 font-mono">0</span>
+        </div>
+        <div id="tooltip-modules-container" class="grid grid-cols-3 gap-2">
+            {{ slot }}
+        </div>
+    </div>
+
+    <!-- Optional Sub-Links Details List -->
+    <div id="tooltip-sublinks-wrapper" class="hidden mt-2.5 pt-2 border-t border-white/10">
+        <div class="text-[9.5px] font-mono uppercase tracking-wider text-slate-400 font-semibold mb-1">
+            Merged Flows
+        </div>
+        <div id="tooltip-sublinks-container" class="space-y-1 max-h-24 overflow-y-auto pr-1">
+            <!-- Dynamic Sub-link items -->
+        </div>
+    </div>
+</div>
