@@ -190,32 +190,61 @@ def api_entity_detail(request: HttpRequest, entity_id: str) -> JsonResponse:
         for e in evidence
     ]
 
-    # Connected Relationships
-    out_rels = [
-        {
-            "id": str(r.id),
-            "target_id": str(r.target_entity_id),
-            "target_name": r.target_entity.display_name,
-            "type": r.relation_type,
-            "weight": r.weight,
-            "module": r.source_module,
-            "confidence": r.confidence_score,
-        }
-        for r in entity.out_relations.select_related("target_entity")[:15]
-    ]
+    def _consolidate_relations(rel_qs, is_outgoing: bool = True) -> list[dict]:
+        grouped: dict[str, list] = {}
+        for r in rel_qs:
+            cp_id = str(r.target_entity_id if is_outgoing else r.source_entity_id)
+            grouped.setdefault(cp_id, []).append(r)
 
-    in_rels = [
-        {
-            "id": str(r.id),
-            "source_id": str(r.source_entity_id),
-            "source_name": r.source_entity.display_name,
-            "type": r.relation_type,
-            "weight": r.weight,
-            "module": r.source_module,
-            "confidence": r.confidence_score,
-        }
-        for r in entity.in_relations.select_related("source_entity")[:15]
-    ]
+        consolidated = []
+        for cp_id, rels in grouped.items():
+            bank_wt = sum(float(x.weight or 0) for x in rels if x.source_module == "q_bank")
+            trail_wt = sum(float(x.weight or 0) for x in rels if x.source_module == "q_trail")
+            other_wt = sum(
+                float(x.weight or 0) for x in rels if x.source_module not in ("q_bank", "q_trail")
+            )
+            if bank_wt > 0 and trail_wt > 0:
+                total_wt = max(bank_wt, trail_wt) + other_wt
+            else:
+                total_wt = bank_wt + trail_wt + other_wt
+
+            primary = sorted(
+                rels,
+                key=lambda x: (
+                    1 if x.relation_type in ("RAPID_LAYERING", "CONDUIT_TO") else 0,
+                    float(x.weight or 0),
+                ),
+                reverse=True,
+            )[0]
+            modules = list(dict.fromkeys(x.source_module for x in rels if x.source_module))
+            cp_name = (
+                primary.target_entity.display_name
+                if is_outgoing
+                else primary.source_entity.display_name
+            )
+            item = {
+                "id": ",".join(str(x.id) for x in rels),
+                "type": primary.relation_type,
+                "weight": round(total_wt, 2),
+                "module": ", ".join(modules),
+                "confidence": max(float(x.confidence_score or 0) for x in rels),
+            }
+            if is_outgoing:
+                item["target_id"] = cp_id
+                item["target_name"] = cp_name
+            else:
+                item["source_id"] = cp_id
+                item["source_name"] = cp_name
+            consolidated.append(item)
+        return consolidated[:15]
+
+    # Connected Relationships (deduplicated across Q-Bank & Q-Trail)
+    out_rels = _consolidate_relations(
+        entity.out_relations.select_related("target_entity").all(), is_outgoing=True
+    )
+    in_rels = _consolidate_relations(
+        entity.in_relations.select_related("source_entity").all(), is_outgoing=False
+    )
 
     return JsonResponse(
         {

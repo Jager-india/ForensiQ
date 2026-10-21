@@ -4,13 +4,229 @@ Reads existing forensic records from Q-Bank, Q-Ledger, Q-Mail, Q-Trail, Q-Verify
 and automatically synthesizes them into the unified Q-Link Knowledge Graph.
 """
 
+import re
 from decimal import Decimal
 
 from django.apps import apps
 from loguru import logger
 
-from ..models import ForensicEntity
+from ..models import EntityRelationship, EvidencePointer, ForensicEntity, ForensicTimelineEvent
 from .dispatcher import emit_forensic_finding
+
+POLLUTED_RETAIL_KEYWORDS = {
+    "sal",
+    "opening",
+    "balance",
+    "indian",
+    "oil",
+    "petrol",
+    "apollo",
+    "pharmacy",
+    "guindy",
+    "tneb",
+    "electricity",
+    "bill",
+    "reliance",
+    "digital",
+    "appliances",
+    "sbi",
+    "velachery",
+    "dav",
+    "public",
+    "school",
+    "amazon",
+    "seller",
+    "pymt",
+    "-dmart",
+    "dmart",
+    "supermarket",
+    "swiggy",
+    "food",
+    "order",
+}
+
+FALSE_POSITIVE_ENTITY_NAMES = {
+    "OPENING BALANCE B",
+    "OPENING BALANCE B/F",
+    "OPENING BALANCE",
+    "CLOSING BALANCE",
+    "SAL",
+    "-DMART SUPERMARKET",
+    "DMART SUPERMARKET",
+    "TNEB ELECTRICITY BILL",
+    "INDIAN OIL PETROL",
+    "APOLLO PHARMACY GUINDY",
+    "RELIANCE DIGITAL APPLIANCES",
+    "AMAZON SELLER PYMT",
+    "DAV PUBLIC SCHOOL",
+    "SBI VELACHERY BR",
+    "SWIGGY FOOD ORDER",
+}
+
+
+def _is_accounting_balance_marker(party: str | None, narration: str | None = "") -> bool:
+    for val in (party, narration):
+        up = str(val or "").strip().upper()
+        if any(
+            m in up
+            for m in (
+                "OPENING BALANCE",
+                "CLOSING BALANCE",
+                "OPBAL",
+                "BALANCE B/F",
+                "BAL B/F",
+                "BROUGHT FORWARD",
+            )
+        ):
+            return True
+    return False
+
+
+def _normalize_counterparty_name(party: str | None, narration: str | None = "") -> str:
+    n = str(narration or "").strip()
+    if n.upper().startswith("SAL/"):
+        parts = [p.strip(" -_/") for p in n.split("/") if p.strip(" -_/")]
+        if len(parts) >= 2 and len(parts[1]) > 2 and not parts[1].isdigit():
+            return parts[1]
+    clean = str(party or "").strip(" -_/")
+    if clean.upper() == "SAL" and "/" in n:
+        parts = [p.strip(" -_/") for p in n.split("/") if p.strip(" -_/")]
+        if len(parts) >= 2 and len(parts[1]) > 2:
+            return parts[1]
+    return clean or "Unknown Counterparty"
+
+
+def _classify_counterparty_type(party_name: str, narration: str = "") -> str:
+    party_lower = party_name.lower().strip()
+    narr_lower = (narration or "").lower()
+    if "@" in party_lower:
+        return ForensicEntity.EntityType.EMAIL_ID
+    if any(
+        s in party_lower
+        for s in [
+            "industrial",
+            "industries",
+            "manufacturing",
+            "mfg",
+            "motors",
+            "corporation",
+            "company",
+            "hydro pumps",
+        ]
+    ) or narr_lower.startswith("sal/"):
+        return ForensicEntity.EntityType.COMPANY
+    if any(
+        s in party_lower
+        for s in [
+            "ltd",
+            "limited",
+            "corp",
+            "inc",
+            "llp",
+            "enterprises",
+            "solutions",
+            "pvt",
+            "private",
+            "traders",
+            "engineers",
+            "vendor",
+            "agency",
+            "supplier",
+            "logistics",
+            "supermarket",
+            "dmart",
+            "electricity",
+            "tneb",
+            "petrol",
+            "pharmacy",
+            "apollo",
+            "reliance",
+            "appliances",
+            "amazon",
+            "seller",
+            "swiggy",
+            "school",
+            "store",
+            "mart",
+        ]
+    ):
+        return ForensicEntity.EntityType.VENDOR
+    if any(
+        s in party_lower
+        for s in [
+            "bank",
+            "idfc",
+            "hdfc",
+            "icici",
+            "sbi",
+            "axis",
+            "kotak",
+            "canara",
+            "account",
+            "a/c",
+            "okaxis",
+            "oksbi",
+            "okicici",
+            "okhdfcbank",
+            "upi",
+            "velachery br",
+        ]
+    ):
+        return ForensicEntity.EntityType.BANK_ACCOUNT
+    if party_lower in ("out", "in", "tfr", "conduit", "unknown", "unknown counterparty"):
+        return ForensicEntity.EntityType.UNKNOWN
+    return ForensicEntity.EntityType.EMPLOYEE
+
+
+def _cleanup_polluted_graph_state() -> None:
+    """
+    Removes previously auto-polluted retail/accounting keywords from profiles
+    and purges false-positive retail/accounting entities and stale FundTrailPaths.
+    """
+    try:
+        if apps.is_installed("core"):
+            InvestigationProfile = apps.get_model("core", "InvestigationProfile")
+            for prof in InvestigationProfile.objects.all():
+                if prof.keywords:
+                    cleaned_kws = [
+                        k
+                        for k in prof.keywords
+                        if str(k).strip().lower() not in POLLUTED_RETAIL_KEYWORDS
+                    ]
+                    if len(cleaned_kws) != len(prof.keywords):
+                        prof.keywords = cleaned_kws
+                        prof.save(update_fields=["keywords", "updated_at"])
+
+        if apps.is_installed("q_trail"):
+            FundTrailPath = apps.get_model("q_trail", "FundTrailPath")
+            for trail in FundTrailPath.objects.all():
+                if _is_accounting_balance_marker(
+                    trail.source_entity
+                ) or _is_accounting_balance_marker(trail.destination_entity):
+                    trail.delete()
+
+        # Remove false-positive entities (OPENING BALANCE B, SAL, low-value retail merchants)
+        stale_entities = ForensicEntity.objects.filter(
+            display_name__in=FALSE_POSITIVE_ENTITY_NAMES, is_target=False
+        )
+        if stale_entities.exists():
+            stale_ids = list(stale_entities.values_list("id", flat=True))
+            ForensicTimelineEvent.objects.filter(entity_id__in=stale_ids).delete()
+            EntityRelationship.objects.filter(source_entity_id__in=stale_ids).delete()
+            EntityRelationship.objects.filter(target_entity_id__in=stale_ids).delete()
+            stale_entities.delete()
+
+        # Reset derived RAPID_LAYERING relationships from Q-Trail reconciliation so they rebuild cleanly with 48h window
+        rl_rels = EntityRelationship.objects.filter(
+            relation_type="RAPID_LAYERING", source_module="q_trail"
+        )
+        if rl_rels.exists():
+            rl_ids = list(rl_rels.values_list("id", flat=True))
+            ForensicTimelineEvent.objects.filter(relationship_id__in=rl_ids).delete()
+            EvidencePointer.objects.filter(relationship_id__in=rl_ids).delete()
+            rl_rels.delete()
+    except Exception as exc:
+        logger.debug(f"Graph cleanup skipped: {exc}")
 
 
 def sync_all_modules() -> dict[str, int]:
@@ -18,6 +234,8 @@ def sync_all_modules() -> dict[str, int]:
     Ingests all active historical data across all ForensiQ modules into Q-Link.
     Returns counts of ingested items per module.
     """
+    _cleanup_polluted_graph_state()
+
     stats = {
         "q_bank": 0,
         "q_ledger": 0,
@@ -79,7 +297,10 @@ def sync_all_modules() -> dict[str, int]:
                 if not amt or amt == Decimal("0.00"):
                     amt = txn.debit_amount or txn.credit_amount or Decimal("1.00")
 
-                party_clean = txn.party_name.strip() if txn.party_name else "Unknown Counterparty"
+                if _is_accounting_balance_marker(txn.party_name, txn.narration):
+                    continue
+
+                party_clean = _normalize_counterparty_name(txn.party_name, txn.narration)
                 party_lower = party_clean.lower()
                 narr_lower = (txn.narration or "").lower()
 
@@ -105,53 +326,7 @@ def sync_all_modules() -> dict[str, int]:
                 if not is_selective_match:
                     continue
 
-                party_lower = party_clean.lower()
-                if any(
-                    s in party_lower
-                    for s in [
-                        "ltd",
-                        "limited",
-                        "corp",
-                        "inc",
-                        "enterprises",
-                        "solutions",
-                        "pvt",
-                        "private",
-                        "traders",
-                        "industries",
-                        "engineers",
-                    ]
-                ):
-                    party_type = ForensicEntity.EntityType.VENDOR
-                elif any(
-                    s in party_lower
-                    for s in [
-                        "bank",
-                        "idfc",
-                        "hdfc",
-                        "icici",
-                        "sbi",
-                        "axis",
-                        "kotak",
-                        "canara",
-                        "account",
-                        "a/c",
-                        "okaxis",
-                        "oksbi",
-                        "okicici",
-                        "okhdfcbank",
-                        "upi",
-                    ]
-                ):
-                    party_type = ForensicEntity.EntityType.BANK_ACCOUNT
-                elif party_lower in ("out", "in", "tfr", "conduit"):
-                    party_type = ForensicEntity.EntityType.UNKNOWN
-                else:
-                    party_type = (
-                        ForensicEntity.EntityType.EMPLOYEE
-                        if "@" not in party_lower
-                        else ForensicEntity.EntityType.EMAIL_ID
-                    )
+                party_type = _classify_counterparty_type(party_clean, txn.narration or "")
 
                 emit_forensic_finding(
                     source_module="q_bank",
@@ -318,10 +493,16 @@ def sync_all_modules() -> dict[str, int]:
             FundTrailPath = apps.get_model("q_trail", "FundTrailPath")
 
             for trail in FundTrailPath.objects.all()[:100]:
+                if _is_accounting_balance_marker(
+                    trail.source_entity
+                ) or _is_accounting_balance_marker(trail.destination_entity):
+                    continue
+                src_clean = _normalize_counterparty_name(trail.source_entity)
+                dst_clean = _normalize_counterparty_name(trail.destination_entity)
                 secondaries = [
                     {
-                        "name": trail.destination_entity,
-                        "type": ForensicEntity.EntityType.UNKNOWN,
+                        "name": dst_clean,
+                        "type": _classify_counterparty_type(dst_clean),
                         "relation_type": "CONDUIT_TO"
                         if trail.hop_count > 1
                         else "TRANSFERRED_FUNDS",
@@ -331,10 +512,11 @@ def sync_all_modules() -> dict[str, int]:
                 ]
                 for hop in trail.intermediate_hops:
                     hop_name = hop.get("entity") or hop.get("node_name")
-                    if hop_name:
+                    if hop_name and not _is_accounting_balance_marker(hop_name):
+                        hop_clean = _normalize_counterparty_name(hop_name)
                         secondaries.append(
                             {
-                                "name": hop_name,
+                                "name": hop_clean,
                                 "type": ForensicEntity.EntityType.COMPANY,
                                 "relation_type": "CONDUIT_TO",
                                 "weight": float(hop.get("amount", trail.total_amount)),
@@ -346,8 +528,8 @@ def sync_all_modules() -> dict[str, int]:
                     source_module="q_trail",
                     event_type="FUND_TRAIL_STITCHED",
                     primary_entity_data={
-                        "name": trail.source_entity,
-                        "type": ForensicEntity.EntityType.UNKNOWN,
+                        "name": src_clean,
+                        "type": _classify_counterparty_type(src_clean),
                     },
                     secondary_entities_data=secondaries,
                     evidence_data={
@@ -360,31 +542,63 @@ def sync_all_modules() -> dict[str, int]:
                     },
                     occurred_at=trail.created_at,
                     timeline_title=f"Money Trail ({trail.hop_count} hops, ₹{trail.total_amount:,.2f})",
-                    timeline_description=f"Flow from {trail.source_entity} to {trail.destination_entity}",
+                    timeline_description=f"Flow from {src_clean} to {dst_clean}",
                     severity="CRITICAL" if trail.is_circular else "WARNING",
                 )
                 stats["q_trail"] += 1
 
-            # Ingest Rapid Layering Hops from Q-Trail reconciliation
+            # Ingest Rapid Layering Hops from Q-Trail reconciliation (strict 48h turnaround window, >= ₹50k)
             try:
                 from q_trail.services import analyze_profiles_money_trail
 
                 from core.models import InvestigationProfile
 
                 for prof in InvestigationProfile.objects.all():
-                    trail_res = analyze_profiles_money_trail([str(prof.id)], time_window_days=0)
+                    trail_res = analyze_profiles_money_trail(
+                        [str(prof.id)], time_window_days=2, min_amount=50000.0
+                    )
                     intermediate = trail_res.get("intermediate_transfers")
                     if intermediate is not None and not intermediate.empty:
                         for _, row in intermediate.iterrows():
-                            sender = str(row.get("Sender_Person", "")).strip()
-                            recipient = str(row.get("Recipient_Person", "")).strip()
-                            inflow_amt = float(row.get("Inflow_Amount", 0) or 0)
-                            outflow_amt = float(row.get("Outflow_Amount", 0) or 0)
+                            raw_sender = str(row.get("Sender_Person", "")).strip()
+                            raw_recipient = str(row.get("Recipient_Person", "")).strip()
+                            if _is_accounting_balance_marker(
+                                raw_sender
+                            ) or _is_accounting_balance_marker(raw_recipient):
+                                continue
+                            sender = _normalize_counterparty_name(
+                                raw_sender, str(row.get("Outflow_Narration", ""))
+                            )
+                            recipient = _normalize_counterparty_name(
+                                raw_recipient, str(row.get("Inflow_Narration", ""))
+                            )
+                            # In Q-Trail's IntermediateTransfer schema (Sender -> Intermediary -> Recipient):
+                            # Outflow_Amount/Date is Hop 1 (Sender -> Intermediary inflow),
+                            # Inflow_Amount/Date is Hop 2 (Intermediary -> Recipient outflow).
+                            origin_inflow_amt = float(row.get("Outflow_Amount", 0) or 0)
+                            forwarded_outflow_amt = float(row.get("Inflow_Amount", 0) or 0)
+                            hop_amt = forwarded_outflow_amt or origin_inflow_amt or 1.0
                             delta_hrs = float(row.get("Time_Delta_Hours", 0) or 0)
-                            inflow_ref = str(row.get("Inflow_Ref", "")).strip()
-                            outflow_ref = str(row.get("Outflow_Ref", "")).strip()
-                            inflow_date = row.get("Inflow_Date")
-                            outflow_date = row.get("Outflow_Date")
+                            if delta_hrs > 48.0:
+                                continue
+                            raw_origin_ref = str(
+                                row.get("Outflow_UTR") or row.get("Inflow_Ref") or ""
+                            ).strip()
+                            raw_forwarded_ref = str(
+                                row.get("Inflow_UTR") or row.get("Outflow_Ref") or ""
+                            ).strip()
+                            origin_ref = (
+                                ""
+                                if raw_origin_ref.lower() in ("nan", "none", "n/a", "null")
+                                else raw_origin_ref
+                            )
+                            forwarded_ref = (
+                                ""
+                                if raw_forwarded_ref.lower() in ("nan", "none", "n/a", "null")
+                                else raw_forwarded_ref
+                            )
+                            origin_inflow_date = row.get("Outflow_Date")
+                            forwarded_outflow_date = row.get("Inflow_Date")
                             primary_party = prof.full_name
 
                             dest_name = (
@@ -401,48 +615,13 @@ def sync_all_modules() -> dict[str, int]:
                             elif "indhumathi" in dest_name.lower():
                                 dest_tags = ["Design", "HR", "Metec", "Rapid Layering Hub"]
 
-                            dest_lower = dest_name.lower()
-                            if any(
-                                s in dest_lower
-                                for s in [
-                                    "ltd",
-                                    "limited",
-                                    "corp",
-                                    "inc",
-                                    "palani",
-                                    "enterprises",
-                                    "solutions",
-                                    "pvt",
-                                    "private",
-                                    "traders",
-                                    "industries",
-                                    "engineers",
-                                ]
-                            ):
-                                dest_type = ForensicEntity.EntityType.VENDOR
-                            elif any(
-                                s in dest_lower
-                                for s in [
-                                    "bank",
-                                    "idfc",
-                                    "hdfc",
-                                    "icici",
-                                    "sbi",
-                                    "axis",
-                                    "kotak",
-                                    "canara",
-                                    "account",
-                                    "a/c",
-                                    "okaxis",
-                                    "oksbi",
-                                    "okicici",
-                                    "okhdfcbank",
-                                    "upi",
-                                ]
-                            ):
-                                dest_type = ForensicEntity.EntityType.BANK_ACCOUNT
-                            else:
-                                dest_type = ForensicEntity.EntityType.UNKNOWN
+                            dest_type = _classify_counterparty_type(dest_name)
+                            hop_date = forwarded_outflow_date or origin_inflow_date
+                            rec_id = (
+                                f"{origin_ref}->{forwarded_ref}"
+                                if (origin_ref and forwarded_ref)
+                                else f"rl-{prof.id}-{dest_name}-{hop_date}-{int(hop_amt)}"
+                            )
 
                             emit_forensic_finding(
                                 source_module="q_trail",
@@ -457,7 +636,7 @@ def sync_all_modules() -> dict[str, int]:
                                         "name": dest_name,
                                         "type": dest_type,
                                         "relation_type": "RAPID_LAYERING",
-                                        "weight": outflow_amt or inflow_amt or 1.0,
+                                        "weight": hop_amt,
                                         "direction": "out",
                                         "metadata": {
                                             "is_rapid_layering": True,
@@ -470,25 +649,25 @@ def sync_all_modules() -> dict[str, int]:
                                 evidence_data={
                                     "source_module": "QTrail",
                                     "source_model": "IntermediateTransfer",
-                                    "source_record_id": f"{inflow_ref}->{outflow_ref}"
-                                    if (inflow_ref or outflow_ref)
-                                    else f"rl-{prof.id}",
+                                    "source_record_id": rec_id,
                                     "evidence_url": "/trail/",
-                                    "summary_snippet": f"Rapid Layering Hop: Inflow ₹{inflow_amt:,.2f} followed by Outflow ₹{outflow_amt:,.2f} within {delta_hrs:.1f} hrs",
-                                    "occurred_at": outflow_date or inflow_date,
+                                    "summary_snippet": f"Rapid Layering Hop: Inflow ₹{origin_inflow_amt:,.2f} (from {sender}) -> Outflow ₹{forwarded_outflow_amt:,.2f} (to {recipient}) within {delta_hrs:.1f} hrs",
+                                    "occurred_at": hop_date,
                                     "metadata": {
-                                        "date": str(outflow_date or inflow_date or ""),
-                                        "amount": outflow_amt or inflow_amt,
-                                        "ref_no": outflow_ref or inflow_ref,
+                                        "date": str(hop_date or ""),
+                                        "amount": hop_amt,
+                                        "ref_no": forwarded_ref
+                                        if forwarded_ref and forwarded_ref != "N/A"
+                                        else rec_id,
                                         "turnaround": f"{delta_hrs:.1f} hrs",
                                         "is_rapid_layering": True,
                                         "sender": sender,
                                         "recipient": recipient,
                                     },
                                 },
-                                occurred_at=outflow_date or inflow_date,
+                                occurred_at=hop_date,
                                 timeline_title=f"Rapid Layering Hop ({delta_hrs:.1f} hrs)",
-                                timeline_description=f"Inflow from {sender} (₹{inflow_amt:,.2f}) -> Outflow to {recipient} (₹{outflow_amt:,.2f}) within {delta_hrs:.1f} hours",
+                                timeline_description=f"Inflow from {sender} (₹{origin_inflow_amt:,.2f}) -> Outflow to {recipient} (₹{forwarded_outflow_amt:,.2f}) within {delta_hrs:.1f} hours",
                                 severity="CRITICAL",
                             )
                             stats["q_trail"] += 1
@@ -837,7 +1016,8 @@ def sync_all_modules() -> dict[str, int]:
                                 "source_module": "core",
                                 "source_model": "InvestigationProfile",
                                 "source_record_id": str(prof_a.id),
-                                "summary_snippet": f"Direct Keyword Nexus: {prof_a.full_name} <-> {prof_b.full_name}",
+                                "evidence_url": "/link/?mode=keyword",
+                                "summary_snippet": f"Direct Keyword Nexus: {prof_a.full_name} <-> {prof_b.full_name} (Shared Keywords: {', '.join(sorted(shared or [prof_b.full_name]))})",
                             },
                             timeline_title=f"Profile Nexus: {prof_a.full_name} & {prof_b.full_name}",
                             timeline_description=f"Direct link established through matching investigation keywords: {', '.join(shared or [prof_b.full_name])}",
@@ -852,16 +1032,77 @@ def sync_all_modules() -> dict[str, int]:
     # 7. Ingest Q-Scan Hits
     if apps.is_installed("q_scan"):
         try:
-            import re
-
             FileEvidenceHit = apps.get_model("q_scan", "FileEvidenceHit")
             for hit in FileEvidenceHit.objects.select_related("device")[:200]:
+                hit_file = getattr(hit, "filename", "") or "Endpoint_Evidence_File"
+                custodian = (
+                    hit.device.custodian_name.strip()
+                    if hit.device and hit.device.custodian_name
+                    else ""
+                )
+                ev_url = f"/scan/devices/{hit.device.id}/" if hit.device else "/scan/"
+
+                # Pattern A: Structured HR / Insurance Nominee Table ("Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha")
+                hr_nom_match = re.search(
+                    r"Employee:\s*([A-Za-z\.\s]+?)\s*\|\s*Relationship:\s*([A-Za-z\s/]+?)\s*\|\s*Nominee:\s*([A-Za-z\.\s]+?)(?:\s*\||$)",
+                    hit.snippet,
+                    re.IGNORECASE,
+                )
+                # Pattern B: Legacy Schedule ("Mr. Name ID-101 ... Nominee Spouse")
                 emp_match = re.search(
                     r"(?:Mr\.|Mrs\.|Ms\.)?\s*([A-Za-z\.\s]+?)\s+(ID-\d+)\s+.*?([A-Za-z\.\s]+?)\s+(Spouse|Husband|Wife|Son|Daughter|Father|Mother|Brother|Sister|Nominee)",
                     hit.snippet,
                     re.IGNORECASE,
                 )
-                if emp_match:
+
+                if hr_nom_match:
+                    emp_name = hr_nom_match.group(1).strip()
+                    rel_raw = hr_nom_match.group(2).strip()
+                    nom_name = hr_nom_match.group(3).strip()
+                    rel_type = (
+                        "SPOUSE"
+                        if "spouse" in rel_raw.lower() or "wife" in rel_raw.lower()
+                        else "NOMINEE"
+                    )
+                    emit_forensic_finding(
+                        source_module="q_scan",
+                        event_type="NOMINEE_RELATION_IDENTIFIED",
+                        primary_entity_data={
+                            "name": emp_name,
+                            "type": ForensicEntity.EntityType.EMPLOYEE,
+                        },
+                        secondary_entities_data=[
+                            {
+                                "name": nom_name.upper()
+                                if ForensicEntity.objects.filter(
+                                    display_name=nom_name.upper()
+                                ).exists()
+                                else nom_name,
+                                "type": ForensicEntity.EntityType.EMPLOYEE,
+                                "relation_type": rel_type,
+                                "direction": "out",
+                                "metadata": {"tags": ["Nominee", rel_raw]},
+                            }
+                        ],
+                        evidence_data={
+                            "source_module": "q_scan",
+                            "source_model": "FileEvidenceHit",
+                            "source_record_id": str(hit.id),
+                            "evidence_url": ev_url,
+                            "summary_snippet": hit.snippet[:300],
+                            "metadata": {
+                                "file_name": hit_file,
+                                "page_number": 1,
+                                "snippet": hit.snippet[:300],
+                            },
+                        },
+                        occurred_at=hit.file_modified_at or hit.detection_timestamp,
+                        timeline_title=f"HR / Insurance Nominee Nexus: {emp_name} <-> {nom_name}",
+                        timeline_description=f"{nom_name} identified as {rel_raw} of {emp_name} in {hit_file}",
+                        severity="CRITICAL",
+                    )
+                    stats["q_scan"] = stats.get("q_scan", 0) + 1
+                elif emp_match:
                     emp_name = emp_match.group(1).strip()
                     emp_id = emp_match.group(2).strip()
                     nom_name = emp_match.group(3).strip()
@@ -887,12 +1128,11 @@ def sync_all_modules() -> dict[str, int]:
                             "source_module": "q_scan",
                             "source_model": "FileEvidenceHit",
                             "source_record_id": str(hit.id),
-                            "evidence_url": f"/scan/devices/{hit.device.id}/"
-                            if hit.device
-                            else "/scan/",
+                            "evidence_url": ev_url,
                             "summary_snippet": hit.snippet[:300],
                             "metadata": {
-                                "file_name": "Sanitized_Employee_and_Nominee_Schedule.pdf",
+                                "file_name": hit_file
+                                or "Sanitized_Employee_and_Nominee_Schedule.pdf",
                                 "page_number": 1,
                                 "snippet": hit.snippet[:300],
                             },
@@ -902,6 +1142,47 @@ def sync_all_modules() -> dict[str, int]:
                         severity="WARNING",
                     )
                     stats["q_scan"] = stats.get("q_scan", 0) + 1
+                elif custodian and hit.matched_keyword:
+                    kw_target = hit.matched_keyword.strip()
+                    matched_ent = ForensicEntity.objects.filter(
+                        display_name__iexact=kw_target
+                    ).first()
+                    if matched_ent and matched_ent.display_name.lower() != custodian.lower():
+                        emit_forensic_finding(
+                            source_module="q_scan",
+                            event_type="ENDPOINT_FILE_EVIDENCE_HIT",
+                            primary_entity_data={
+                                "name": custodian,
+                                "type": ForensicEntity.EntityType.EMPLOYEE,
+                                "is_target": True,
+                            },
+                            secondary_entities_data=[
+                                {
+                                    "name": matched_ent.display_name,
+                                    "type": matched_ent.entity_type,
+                                    "relation_type": "DOCUMENT_ATTACHED",
+                                    "direction": "out",
+                                    "metadata": {"file_name": hit_file},
+                                }
+                            ],
+                            evidence_data={
+                                "source_module": "q_scan",
+                                "source_model": "FileEvidenceHit",
+                                "source_record_id": str(hit.id),
+                                "evidence_url": ev_url,
+                                "summary_snippet": f"[{hit_file}] {hit.snippet[:260]}",
+                                "metadata": {
+                                    "file_name": hit_file,
+                                    "page_number": 1,
+                                    "snippet": hit.snippet[:300],
+                                },
+                            },
+                            occurred_at=hit.file_modified_at or hit.detection_timestamp,
+                            timeline_title=f"Endpoint File Hit: {hit_file} ({matched_ent.display_name})",
+                            timeline_description=hit.snippet[:240],
+                            severity="WARNING",
+                        )
+                        stats["q_scan"] = stats.get("q_scan", 0) + 1
         except Exception as err:
             logger.warning(f"Error syncing Q-Scan in Q-Link: {err}")
 
@@ -1086,6 +1367,15 @@ def sync_all_modules() -> dict[str, int]:
                     stats["q_voice"] = stats.get("q_voice", 0) + 1
         except Exception as err:
             logger.warning(f"Error syncing Q-Voice in Q-Link: {err}")
+
+    # Re-evaluate relationship risks and entity risk_rating across all indexed entities
+    try:
+        from ..services import evaluate_relationship_risks
+
+        for ent in ForensicEntity.objects.all():
+            evaluate_relationship_risks(ent)
+    except Exception as exc:
+        logger.debug(f"Post-sync risk evaluation skipped: {exc}")
 
     logger.info(f"[Q-Link Synchronizer] Completed full sync: {stats}")
     return stats

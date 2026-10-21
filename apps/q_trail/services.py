@@ -28,7 +28,6 @@ from q_bank.models import AuditedPerson
 from core.models import InvestigationProfile
 
 from .backend.reconciliation import (
-    BANKING_NOISE_TOKENS,
     DEFAULT_MIN_TRANSACTION_THRESHOLD,
     group_intermediate_transfers_by_intermediary,
     reconcile_and_match_network,
@@ -177,47 +176,7 @@ def analyze_profiles_money_trail(
     intermediate_records_list: list[pd.DataFrame] = []
 
     # Rapid Layering (Immediate Hop Pass-Throughs per profile)
-    from core.profiles import add_keywords_to_profile
-
     from .backend.reconciliation import detect_rapid_layering_for_profile
-
-    def _extract_counterparty_keywords(raw_val: Any) -> list[str]:
-        if not raw_val:
-            return []
-        s = str(raw_val).strip()
-        if not s or s.upper() in BANKING_NOISE_TOKENS:
-            return []
-        found = []
-        for term in [
-            "palani",
-            "shanthi",
-            "silviya",
-            "kumar",
-            "sathees",
-            "indhumathi",
-            "dhanasekaran",
-            "maharajan",
-            "metec",
-        ]:
-            if term in s.lower():
-                found.append(term.title())
-        if "@" in s:
-            user_part = s.split("@")[0].strip()
-            clean_u = re.sub(r"\d+", "", user_part).strip()
-            if len(clean_u) >= 3 and clean_u.upper() not in BANKING_NOISE_TOKENS:
-                found.append(clean_u.title())
-        clean_name = re.sub(
-            r"^(?:Mr\.|Mrs\.|Ms\.|Shri\.|Smt\.|UPI/\d+/)\s*", "", s, flags=re.IGNORECASE
-        )
-        tokens = [
-            t.strip().title()
-            for t in re.split(r"[\s/_]+", clean_name)
-            if len(t.strip()) >= 3 and not t.strip().isdigit()
-        ]
-        for t in tokens:
-            if t.upper() not in BANKING_NOISE_TOKENS and t.upper() not in ("INR", "LIMITED", "LTD"):
-                found.append(t)
-        return list(dict.fromkeys(found))
 
     for pid, df in profile_dfs.items():
         if df.empty:
@@ -251,19 +210,6 @@ def analyze_profiles_money_trail(
                         else r
                     )
                 )
-
-            # Auto-propagate candidate keywords from money trail to profile keywords
-            discovered_kws = []
-            for s_val in lay_df["Sender_Person"].dropna():
-                discovered_kws.extend(_extract_counterparty_keywords(s_val))
-            for r_val in lay_df["Recipient_Person"].dropna():
-                discovered_kws.extend(_extract_counterparty_keywords(r_val))
-
-            if discovered_kws:
-                try:
-                    add_keywords_to_profile(pid, discovered_kws)
-                except Exception as exc:
-                    logger.debug(f"Auto-keyword propagation to profile {pid} bypassed: {exc}")
 
             intermediate_records_list.append(lay_df)
 

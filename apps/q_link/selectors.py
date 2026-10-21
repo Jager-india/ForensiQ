@@ -641,7 +641,30 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
         dominant = dict(sorted_group[0])
 
-        total_weight = sum(float(e.get("weight") or 0.0) for e in group)
+        # Avoid double-counting when Q_BANK (TRANSFERRED_FUNDS) and Q_TRAIL (RAPID_LAYERING / CONDUIT_TO)
+        # represent the same underlying fund movement between u and v.
+        bank_weight = sum(
+            float(e.get("weight") or 0.0)
+            for e in group
+            if str(e.get("module") or "").lower() in ("q_bank", "bank", "q_ledger", "ledger")
+        )
+        trail_weight = sum(
+            float(e.get("weight") or 0.0)
+            for e in group
+            if str(e.get("module") or "").lower() in ("q_trail", "trail")
+        )
+        other_weight = sum(
+            float(e.get("weight") or 0.0)
+            for e in group
+            if str(e.get("module") or "").lower()
+            not in ("q_bank", "bank", "q_ledger", "ledger", "q_trail", "trail")
+        )
+        if bank_weight > 0 and trail_weight > 0:
+            total_weight = max(bank_weight, trail_weight)
+        elif bank_weight > 0 or trail_weight > 0:
+            total_weight = bank_weight + trail_weight
+        else:
+            total_weight = other_weight or max(float(e.get("weight") or 0.0) for e in group)
         max_confidence = max(float(e.get("confidence") or 0.0) for e in group)
         is_rl = any(bool(e.get("is_rapid_layering")) for e in group)
         is_ext = any(bool(e.get("is_external")) for e in group)
@@ -900,8 +923,13 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 keyword = parts[3] if len(parts) >= 4 else ""
                 ea = ForensicEntity.objects.filter(id=src_candidate).first()
                 eb = ForensicEntity.objects.filter(id=tgt_candidate).first()
-        elif edge_id.startswith("kw-"):
-            cleaned = edge_id.replace("kw-edge-", "").replace("kw-", "")
+        elif edge_id.startswith("kw-") or edge_id.startswith("ext-"):
+            cleaned = (
+                edge_id.replace("kw-edge-", "")
+                .replace("kw-", "")
+                .replace("ext-edge-", "")
+                .replace("ext-", "")
+            )
             parts = cleaned.split("-")
             if len(parts) >= 2:
                 src_candidate = parts[0]
@@ -944,41 +972,53 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 if ptr_id_str in seen_ptr_ids:
                     continue
                 seen_ptr_ids.add(ptr_id_str)
-            meta: dict[str, Any] = ptr.metadata or {}
-            item = {
-                "id": str(ptr.id),
-                "source_module": ptr.source_module,
-                "source_model": ptr.source_model,
-                "record_id": ptr.source_record_id,
-                "evidence_url": ptr.evidence_url,
-                "summary": ptr.summary_snippet,
-                "occurred_at": ptr.occurred_at.strftime("%Y-%m-%d %H:%M")
-                if ptr.occurred_at
-                else None,
-                # Financial payload
-                "amount": meta.get("amount") or rel.weight,
-                "debit_amount": meta.get("debit_amount"),
-                "credit_amount": meta.get("credit_amount"),
-                "direction": meta.get("direction", "out"),
-                "narration": meta.get("narration") or ptr.summary_snippet,
-                "ref_no": meta.get("ref_no") or ptr.source_record_id,
-                "account_no": meta.get("account_no", ""),
-                "turnaround": meta.get("turnaround", ""),
-                "is_rapid_layering": bool(
-                    meta.get("is_rapid_layering") or rel.metadata.get("is_rapid_layering")
-                ),
-                # Document payload
-                "file_name": meta.get("file_name") or ptr.summary_snippet,
-                "page_number": meta.get("page_number", 1),
-                "snippet": meta.get("snippet") or ptr.summary_snippet,
-                # Voice payload
-                "audio_file": meta.get("file_name", ""),
-                "audio_timestamp": meta.get("audio_timestamp", "00:00"),
-                "transcript_snippet": meta.get("snippet") or ptr.summary_snippet,
-                "audio_url": meta.get("audio_url", ""),
-                "metadata": meta,
-            }
-            evidence_items.append(item)
+                meta: dict[str, Any] = ptr.metadata or {}
+                src_mod_lower = (ptr.source_module or "").strip().lower()
+                is_doc_ptr = bool(
+                    meta.get("file_name")
+                    or src_mod_lower in ("q_scan", "scan", "q_verify", "verify", "archivus")
+                )
+                is_voice_ptr = bool(
+                    meta.get("audio_timestamp")
+                    or meta.get("audio_url")
+                    or src_mod_lower in ("q_voice", "voice")
+                )
+                item = {
+                    "id": str(ptr.id),
+                    "source_module": ptr.source_module,
+                    "source_model": ptr.source_model,
+                    "record_id": ptr.source_record_id,
+                    "evidence_url": ptr.evidence_url,
+                    "summary": ptr.summary_snippet,
+                    "occurred_at": ptr.occurred_at.strftime("%Y-%m-%d %H:%M")
+                    if ptr.occurred_at
+                    else None,
+                    # Financial payload
+                    "amount": meta.get("amount") or r.weight,
+                    "debit_amount": meta.get("debit_amount"),
+                    "credit_amount": meta.get("credit_amount"),
+                    "direction": meta.get("direction", "out"),
+                    "narration": meta.get("narration") or ptr.summary_snippet,
+                    "ref_no": meta.get("ref_no") or ptr.source_record_id,
+                    "account_no": meta.get("account_no", ""),
+                    "turnaround": meta.get("turnaround", ""),
+                    "is_rapid_layering": bool(
+                        meta.get("is_rapid_layering") or r.metadata.get("is_rapid_layering")
+                    ),
+                    # Document payload (populated only for actual document/file pointers)
+                    "file_name": meta.get("file_name", "") if is_doc_ptr else "",
+                    "page_number": meta.get("page_number", 1) if is_doc_ptr else None,
+                    "snippet": meta.get("snippet") or ptr.summary_snippet,
+                    # Voice payload (populated only for actual voice/audio pointers)
+                    "audio_file": meta.get("file_name", "") if is_voice_ptr else "",
+                    "audio_timestamp": meta.get("audio_timestamp", "00:00") if is_voice_ptr else "",
+                    "transcript_snippet": (meta.get("snippet") or ptr.summary_snippet)
+                    if is_voice_ptr
+                    else "",
+                    "audio_url": meta.get("audio_url", "") if is_voice_ptr else "",
+                    "metadata": meta,
+                }
+                evidence_items.append(item)
 
         if not evidence_items:
             evidence_items.append(
@@ -993,13 +1033,30 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                     "is_rapid_layering": bool(rel.metadata.get("is_rapid_layering")),
                     "turnaround": rel.metadata.get("turnaround", ""),
                     "snippet": f"Correlation established via {rel.source_module} ({rel.get_relation_type_display()})",
-                    "page_number": 1,
-                    "audio_timestamp": "00:00",
+                    "file_name": "",
+                    "page_number": None,
+                    "audio_timestamp": "",
                 }
             )
 
         tool_name = resolve_rel_tool_names(rels or [rel])
-        total_w = sum(r.weight for r in rels) if rels else rel.weight
+        rel_group = rels or [rel]
+        bank_w = sum(
+            float(r.weight or 0.0)
+            for r in rel_group
+            if (r.source_module or "").lower() in ("q_bank", "bank", "q_ledger", "ledger")
+        )
+        trail_w = sum(
+            float(r.weight or 0.0)
+            for r in rel_group
+            if (r.source_module or "").lower() in ("q_trail", "trail")
+        )
+        if bank_w > 0 and trail_w > 0:
+            total_w = max(bank_w, trail_w)
+        elif bank_w > 0 or trail_w > 0:
+            total_w = bank_w + trail_w
+        else:
+            total_w = sum(r.weight for r in rel_group)
         max_conf = max((r.confidence_score for r in rels), default=rel.confidence_score)
         has_rl = any(
             bool(r.metadata.get("is_rapid_layering") or r.relation_type == "RAPID_LAYERING")
@@ -1519,6 +1576,7 @@ def get_mode1_keyword_graph(
 
     # Keyword search scoped strictly to active audit
     kw_lower = kw.lower()
+    kw_compact = re.sub(r"[\s_-]+", "", kw_lower)
     matched_nodes = {str(te.id): te for te in target_entities}
     edges = []
     edge_set = set()
@@ -1529,9 +1587,17 @@ def get_mode1_keyword_graph(
         if c.id in target_entity_ids or c.id in doc_node_ids:
             continue
         matched = False
-        if kw_lower in c.display_name.lower():
+        c_name_low = c.display_name.lower()
+        c_name_compact = re.sub(r"[\s_-]+", "", c_name_low)
+        if kw_lower in c_name_low or (len(kw_compact) >= 4 and kw_compact in c_name_compact):
             matched = True
-        elif any(kw_lower in al.alias_name.lower() for al in c.aliases.all()):
+        elif any(
+            kw_lower in al.alias_name.lower()
+            or (
+                len(kw_compact) >= 4 and kw_compact in re.sub(r"[\s_-]+", "", al.alias_name.lower())
+            )
+            for al in c.aliases.all()
+        ):
             matched = True
         elif any(kw_lower in str(t).lower() for t in c.tags):
             matched = True
@@ -1541,7 +1607,16 @@ def get_mode1_keyword_graph(
                     for ptr in r.evidence_pointers.all():
                         snip = (ptr.summary_snippet or "").lower()
                         meta_str = str(ptr.metadata or {}).lower()
-                        if kw_lower in snip or kw_lower in meta_str:
+                        snip_compact = re.sub(r"[\s_-]+", "", snip)
+                        meta_compact = re.sub(r"[\s_-]+", "", meta_str)
+                        if (
+                            kw_lower in snip
+                            or kw_lower in meta_str
+                            or (
+                                len(kw_compact) >= 4
+                                and (kw_compact in snip_compact or kw_compact in meta_compact)
+                            )
+                        ):
                             other_entity_match = any(
                                 kw_lower == other_ent.display_name.lower() and other_ent.id != c.id
                                 for other_ent in allowed_entities_dict.values()
@@ -2077,13 +2152,17 @@ def get_graph_overview(
 
 def get_link_dashboard_metrics() -> dict[str, int]:
     """
-    Returns global entity, relationship, evidence pointer, and unacknowledged alert counts.
+    Returns global entity, merged relationship, evidence pointer, and active alert counts.
     """
+    raw_pairs = EntityRelationship.objects.values_list("source_entity_id", "target_entity_id")
+    merged_pairs = {tuple(sorted((str(u), str(v)))) for u, v in raw_pairs}
+    unack_count = RelationshipAlert.objects.filter(is_acknowledged=False).count()
+    total_alerts = unack_count or RelationshipAlert.objects.count()
     return {
         "total_entities": ForensicEntity.objects.count(),
-        "total_relationships": EntityRelationship.objects.count(),
+        "total_relationships": len(merged_pairs) or EntityRelationship.objects.count(),
         "total_evidence": EvidencePointer.objects.count(),
-        "unack_alerts": RelationshipAlert.objects.filter(is_acknowledged=False).count(),
+        "unack_alerts": total_alerts,
     }
 
 

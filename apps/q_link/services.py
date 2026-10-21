@@ -5,7 +5,6 @@ timeline event aggregation, and automated risk alert evaluations.
 All database mutations are strictly encapsulated in atomic transactions.
 """
 
-import logging
 import re
 from datetime import datetime
 from typing import Any
@@ -13,6 +12,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from loguru import logger
 from rapidfuzz import fuzz
 
 from config import LEGAL_SUFFIXES
@@ -25,8 +25,6 @@ from .models import (
     ForensicTimelineEvent,
     RelationshipAlert,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def clean_entity_name(name: str) -> str:
@@ -113,15 +111,27 @@ def resolve_or_create_entity(
 
     if exact_entity:
         updated_fields = []
-        if (
-            entity_type != ForensicEntity.EntityType.UNKNOWN
-            and exact_entity.entity_type == ForensicEntity.EntityType.UNKNOWN
+        if entity_type != ForensicEntity.EntityType.UNKNOWN and (
+            exact_entity.entity_type == ForensicEntity.EntityType.UNKNOWN
+            or (
+                exact_entity.entity_type == ForensicEntity.EntityType.EMPLOYEE
+                and not exact_entity.is_target
+                and entity_type
+                in (
+                    ForensicEntity.EntityType.VENDOR,
+                    ForensicEntity.EntityType.COMPANY,
+                    ForensicEntity.EntityType.BANK_ACCOUNT,
+                )
+            )
         ):
             exact_entity.entity_type = entity_type
             updated_fields.append("entity_type")
         if is_target and not exact_entity.is_target:
             exact_entity.is_target = True
             updated_fields.append("is_target")
+        if risk_rating and risk_rating > exact_entity.risk_rating:
+            exact_entity.risk_rating = risk_rating
+            updated_fields.append("risk_rating")
         if metadata:
             curr_meta = dict(exact_entity.metadata or {})
             curr_meta.update(metadata)
@@ -252,18 +262,9 @@ def create_or_update_relationship(
         },
     )
 
-    if not created:
-        # Increment edge weight (e.g. cumulative transaction volume or communication count)
-        relationship.weight += weight
-        relationship.confidence_score = max(relationship.confidence_score, confidence_score)
-        if metadata:
-            merged_meta = dict(relationship.metadata)
-            merged_meta.update(metadata)
-            relationship.metadata = merged_meta
-        relationship.save(update_fields=["weight", "confidence_score", "metadata", "updated_at"])
-
-    # Attach evidence pointer if provided
+    # Attach evidence pointer if provided (and determine if this record is already counted)
     evidence_pointer: EvidencePointer | None = None
+    already_recorded = False
     if evidence_data:
         src_mod = source_module or evidence_data.get("source_module", "core")
         src_model = evidence_data.get("source_model", "UnknownModel")
@@ -273,20 +274,31 @@ def create_or_update_relationship(
         ev_time = occurred_at or evidence_data.get("occurred_at") or timezone.now()
 
         # Deduplicate evidence pointers across repeated synchronizations
-        existing_pointer = EvidencePointer.objects.filter(
-            relationship=relationship,
-            source_module=src_mod,
-            source_record_id=src_rec_id,
-        ).first()
+        existing_pointer = (
+            EvidencePointer.objects.filter(
+                relationship=relationship,
+                source_module=src_mod,
+                source_record_id=src_rec_id,
+            ).first()
+            if src_rec_id
+            else None
+        )
 
         if existing_pointer:
+            already_recorded = True
             update_fields = []
-            if ev_url and not existing_pointer.evidence_url:
+            if ev_url and existing_pointer.evidence_url != ev_url:
                 existing_pointer.evidence_url = ev_url
                 update_fields.append("evidence_url")
-            if summary and not existing_pointer.summary_snippet:
+            if summary and existing_pointer.summary_snippet != summary:
                 existing_pointer.summary_snippet = summary
                 update_fields.append("summary_snippet")
+            new_ev_meta = evidence_data.get("metadata")
+            if new_ev_meta:
+                merged_ev_meta = dict(existing_pointer.metadata or {})
+                merged_ev_meta.update(new_ev_meta)
+                existing_pointer.metadata = merged_ev_meta
+                update_fields.append("metadata")
             if update_fields:
                 existing_pointer.save(update_fields=update_fields)
             evidence_pointer = existing_pointer
@@ -301,6 +313,17 @@ def create_or_update_relationship(
                 occurred_at=ev_time,
                 metadata=evidence_data.get("metadata", {}),
             )
+
+    if not created:
+        # Increment edge weight only when this is a newly ingested evidence record or standalone call
+        if not already_recorded:
+            relationship.weight += weight
+        relationship.confidence_score = max(relationship.confidence_score, confidence_score)
+        if metadata:
+            merged_meta = dict(relationship.metadata or {})
+            merged_meta.update(metadata)
+            relationship.metadata = merged_meta
+        relationship.save(update_fields=["weight", "confidence_score", "metadata", "updated_at"])
 
     # Evaluate automated alerts for involved entities
     evaluate_relationship_risks(source_entity)
@@ -474,6 +497,36 @@ def evaluate_relationship_risks(entity: ForensicEntity) -> list[RelationshipAler
                             }
                         ],
                     )
+                    alerts_created.append(alert)
+
+        # 4. Update entity risk_rating based on alerts and relationship severity
+        computed_risk = entity.risk_rating
+        top_alert = (
+            RelationshipAlert.objects.filter(primary_entity=entity).order_by("-risk_score").first()
+        )
+        if top_alert and top_alert.risk_score > computed_risk:
+            computed_risk = top_alert.risk_score
+
+        for rel in all_rels:
+            r_type = (rel.relation_type or "").upper()
+            r_meta = rel.metadata or {}
+            if r_type == "RAPID_LAYERING" or r_meta.get("is_rapid_layering"):
+                computed_risk = max(computed_risk, 80 if entity.is_target else 72)
+            elif r_type in (
+                "CONDUIT_TO",
+                "EMPLOYEE_VENDOR_NEXUS",
+                "PARTNER",
+                "SPOUSE",
+                "WIFE",
+                "NOMINEE",
+            ):
+                computed_risk = max(computed_risk, 75 if entity.is_target else 65)
+            elif r_type == "TRANSFERRED_FUNDS" and float(rel.weight or 0) >= 500000:
+                computed_risk = max(computed_risk, 70 if entity.is_target else 60)
+
+        if computed_risk > entity.risk_rating:
+            entity.risk_rating = computed_risk
+            entity.save(update_fields=["risk_rating", "updated_at"])
     except Exception as exc:
         logger.debug(f"Alert evaluation skipped on entity {entity.display_name}: {exc}")
 

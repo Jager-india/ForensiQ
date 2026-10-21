@@ -923,22 +923,59 @@ def detect_rapid_layering_for_profile(
     if inflows.empty or outflows.empty:
         return pd.DataFrame()
 
+    def _is_balance_marker(text_val: str) -> bool:
+        up = str(text_val or "").strip().upper()
+        if not up:
+            return False
+        return any(
+            m in up
+            for m in (
+                "OPENING BALANCE",
+                "CLOSING BALANCE",
+                "OPBAL",
+                "BALANCE B/F",
+                "BAL B/F",
+                "BROUGHT FORWARD",
+            )
+        )
+
     def _clean_party(name_val, party_name_val, vpa_val, narr_val):
+        n = str(narr_val or "").strip()
+        if (
+            _is_balance_marker(n)
+            or _is_balance_marker(name_val)
+            or _is_balance_marker(party_name_val)
+        ):
+            return ""
+        # Extract employer name from salary narrations like SAL/APEX INDUSTRIAL/EMP-REG-1042/JAN26
+        if n.upper().startswith("SAL/"):
+            sal_parts = [p.strip(" -_/") for p in n.split("/") if p.strip(" -_/")]
+            if len(sal_parts) >= 2 and len(sal_parts[1]) > 2 and not sal_parts[1].isdigit():
+                return sal_parts[1]
         for candidate in [name_val, party_name_val]:
-            cand_str = str(candidate or "").strip()
-            if cand_str and cand_str.upper() not in BANKING_NOISE_TOKENS and len(cand_str) >= 2:
+            cand_str = str(candidate or "").strip(" -_/")
+            if (
+                cand_str
+                and cand_str.upper() not in BANKING_NOISE_TOKENS
+                and cand_str.upper() != "SAL"
+                and len(cand_str) >= 2
+            ):
                 return cand_str
         vpa_str = str(vpa_val or "").strip()
         if vpa_str and vpa_str.upper() not in BANKING_NOISE_TOKENS and "@" in vpa_str:
             return vpa_str
         # Fallback to narration extraction
-        n = str(narr_val or "").strip()
         if "/" in n or "-" in n:
-            tokens = [t.strip() for t in re.split(r"[/_-]", n) if t.strip()]
+            tokens = [t.strip(" -_/") for t in re.split(r"[/_-]", n) if t.strip(" -_/")]
             for tok in tokens:
                 if "@" in tok:
                     return tok
-                if len(tok) > 2 and not tok.isdigit() and tok.upper() not in BANKING_NOISE_TOKENS:
+                if (
+                    len(tok) > 2
+                    and not tok.isdigit()
+                    and tok.upper() not in BANKING_NOISE_TOKENS
+                    and tok.upper() != "SAL"
+                ):
                     return tok
         return "Unknown Counterparty"
 
@@ -957,6 +994,8 @@ def detect_rapid_layering_for_profile(
             in_row.get("Counterparty_VPA"),
             in_row.get("Narration"),
         )
+        if not in_party:
+            continue
 
         candidate_outs = []
         for out_idx, out_row in outflows.iterrows():
@@ -969,6 +1008,8 @@ def detect_rapid_layering_for_profile(
                 out_row.get("Counterparty_VPA"),
                 out_row.get("Narration"),
             )
+            if not out_party:
+                continue
 
             if (
                 in_party.lower() == out_party.lower()

@@ -86,6 +86,10 @@ def emit_forensic_finding(
             src = primary_entity if direction == "out" else secondary_entity
             tgt = secondary_entity if direction == "out" else primary_entity
 
+            rel_meta = {"event_type": event_type}
+            if isinstance(sec_data.get("metadata"), dict):
+                rel_meta.update(sec_data["metadata"])
+
             rel, ev_ptr = create_or_update_relationship(
                 source_entity=src,
                 target_entity=tgt,
@@ -95,7 +99,7 @@ def emit_forensic_finding(
                 source_module=source_module,
                 evidence_data=evidence_data,
                 occurred_at=event_time,
-                metadata={"event_type": event_type},
+                metadata=rel_meta,
             )
             created_relationships.append(rel)
 

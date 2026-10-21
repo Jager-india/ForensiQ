@@ -374,45 +374,7 @@
                 <div id="qlink-canvas" class="w-full h-[760px] bg-[#0c0915] relative transition-colors duration-200"></div>
 
                 <!-- Floating Glassmorphic Edge Hover Tooltip with Module Square-Boxes -->
-                <div id="qlink-edge-tooltip"
-                     class="hidden absolute pointer-events-none z-30 min-w-[280px] max-w-[340px] rounded-2xl bg-[#120e24]/95 backdrop-blur-2xl border border-white/15 p-3.5 shadow-2xl text-white transition-opacity duration-100">
-                    <!-- Header: Entity Nexus -->
-                    <div class="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-white/10">
-                        <div class="flex items-center gap-1.5 min-w-0">
-                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
-                            <span id="tooltip-nexus" class="text-xs font-black tracking-wide text-slate-100 truncate">—</span>
-                        </div>
-                        <span id="tooltip-count-badge" class="px-1.5 py-0.5 rounded-md bg-white/10 text-[10px] font-mono font-bold text-amber-300 border border-white/10 flex-shrink-0">1 Link</span>
-                    </div>
-                    <!-- Core Details -->
-                    <div class="space-y-1.5 mb-3">
-                        <div class="flex items-baseline justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Relation:</span>
-                            <span id="tooltip-relation" class="font-bold text-slate-200 text-right max-w-[180px] truncate">—</span>
-                        </div>
-                        <div class="flex items-baseline justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Total Volume:</span>
-                            <span id="tooltip-amount" class="font-mono font-black text-emerald-400">—</span>
-                        </div>
-                        <div id="tooltip-rapid-layering-badge" class="hidden items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/20 border border-rose-500/40 text-[11px] font-bold text-rose-300">
-                            <i class="fa-solid fa-bolt-lightning text-rose-400 animate-pulse"></i>
-                            <span>Rapid Layering Intermediary</span>
-                        </div>
-                    </div>
-                    <!-- Module Square Boxes -->
-                    <div>
-                        <div class="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold mb-2 flex items-center justify-between">
-                            <span>Discovered In</span>
-                            <span id="tooltip-modules-count" class="text-amber-400 font-mono">0</span>
-                        </div>
-                        <div id="tooltip-modules-container" class="grid grid-cols-3 gap-1.5"></div>
-                    </div>
-                    <!-- Merged Sub-Links -->
-                    <div id="tooltip-sublinks-wrapper" class="hidden mt-2.5 pt-2 border-t border-white/10">
-                        <div class="text-[9.5px] font-mono uppercase tracking-wider text-slate-400 font-semibold mb-1.5">Merged Flows</div>
-                        <div id="tooltip-sublinks-container" class="space-y-1 max-h-20 overflow-y-auto pr-1"></div>
-                    </div>
-                </div>
+                <c-tooltip_card />
 
                 <!-- Floating Glassmorphic Bottom-Left Controls (Tier 1 Navigation + Tier 2 Filters) -->
                 <div class="absolute bottom-6 left-6 z-20 flex flex-col gap-2 p-2 rounded-2xl bg-[#120e24]/90 dark:bg-[#120e24]/90 backdrop-blur-xl border border-white/10 shadow-2xl pointer-events-auto">
@@ -1121,10 +1083,13 @@
                 ${isTarget ? `
                     <!-- Primary Audit Profile Outer Dashed Crown Ring -->
                     <circle cx="${cx}" cy="${cy}" r="${crownR}" fill="#0c0915" fill-opacity="0.9" stroke="${accentColor}" stroke-width="1.8" stroke-dasharray="6 3" opacity="0.82" />
+                ` : isExternal ? `
+                    <!-- External Vault Entity Dashed Ring -->
+                    <circle cx="${cx}" cy="${cy}" r="39" fill="#0c0915" fill-opacity="0.85" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="4 3" opacity="0.85" />
                 ` : ''}
 
                 <!-- Outer Concentric Aura Ring (Opaque dark fill masks inner edge line shaft) -->
-                <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="#0c0915" fill-opacity="0.92" stroke="${outerRingStroke}" stroke-width="${isTarget ? '1.8' : '1.5'}" opacity="${outerRingOpacity}" />
+                <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="#0c0915" fill-opacity="0.92" stroke="${isExternal ? '#8b5cf6' : outerRingStroke}" stroke-width="${isTarget ? '1.8' : '1.5'}" opacity="${outerRingOpacity}" />
 
                 <!-- Center Node Circle (Dark Background + Colored Stroke Ring) -->
                 <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="#130f1e" stroke="${accentColor}" stroke-width="${strokeWidth}" />
@@ -1136,6 +1101,10 @@
                     <!-- Primary Audit Profile Top Badge -->
                     <rect x="${cx - 32}" y="${cy - crownR - 9}" width="64" height="16" rx="8" fill="${accentColor}" stroke="#0c0915" stroke-width="1.2" />
                     <text x="${cx}" y="${cy - crownR + 2}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8.5" font-weight="800" letter-spacing="0.6" fill="#0c0915">PROFILE</text>
+                ` : isExternal ? `
+                    <!-- External Vault Top Badge -->
+                    <rect x="${cx - 28}" y="${cy - 48}" width="56" height="15" rx="7.5" fill="#8b5cf6" stroke="#0c0915" stroke-width="1.1" />
+                    <text x="${cx}" y="${cy - 38}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8" font-weight="800" letter-spacing="0.5" fill="#ffffff">VAULT</text>
                 ` : ''}
 
                 <!-- Opaque Name Backdrop Pill (Prevents edges from cutting through entity text) -->
@@ -1173,6 +1142,7 @@
 
                 return {
                     id: n.id,
+                    cleanLabel: String(n.label || "Entity"),
                     shape: "image",
                     image: defaultImage,
                     size: nodeSize,
@@ -1205,6 +1175,7 @@
         function formatEdges(edges) {
             return edges.map((e) => {
                 const isRapidLayering = Boolean(e.is_rapid_layering || (e.relation_type === "RAPID_LAYERING") || (e.weight && Number(e.weight) >= 10000000));
+                const isExternal = Boolean(e.is_external);
                 const relType = String(e.relation_type || "").toUpperCase();
 
                 let edgeColor = "#10b981"; // emerald green default
@@ -1215,7 +1186,15 @@
                 let fontBg = "rgba(12, 9, 21, 0.9)";
                 let fontStroke = "rgba(255, 255, 255, 0.12)";
 
-                if (isRapidLayering) {
+                if (isExternal) {
+                    edgeColor = "#8b5cf6"; // Violet for cross-audit Global Vault matches
+                    highlightColor = "#a78bfa";
+                    edgeDashes = [5, 4];
+                    edgeWidth = 2.2;
+                    fontColor = "#c4b5fd";
+                    fontBg = "rgba(139, 92, 246, 0.18)";
+                    fontStroke = "#8b5cf6";
+                } else if (isRapidLayering) {
                     edgeColor = "#ef4444"; // Glowing Red for Rapid Layering
                     highlightColor = "#f43f5e";
                     edgeDashes = [6, 4];
@@ -1244,9 +1223,10 @@
                         .join(' ');
                 }
 
-                if (isRapidLayering) {
+                const isExplicitContextualLabel = /^(Bank|Doc|Profile|Voice|Chat|Verify|Vault Match|Trail):/i.test(rawLabel);
+                if (isRapidLayering && currentOperationalMode !== 'keyword' && !isExplicitContextualLabel) {
                     let amtStr = "";
-                    if (e.weight) {
+                    if (e.weight && Number(e.weight) >= 100) {
                         const wt = Number(e.weight);
                         amtStr = wt >= 10000000 ? ` · ₹${(wt / 10000000).toFixed(1)} Cr` : (wt >= 100000 ? ` · ₹${(wt / 100000).toFixed(1)} L` : ` · ₹${wt.toLocaleString('en-IN')}`);
                     }
@@ -1537,8 +1517,8 @@
                 const v = Number(w);
                 if (v >= 10000000) return "₹" + (v / 10000000).toFixed(2) + " Cr";
                 if (v >= 100000) return "₹" + (v / 100000).toFixed(2) + " L";
-                if (v >= 1000) return "₹" + v.toLocaleString("en-IN");
-                return v.toFixed(2);
+                if (v >= 100) return "₹" + v.toLocaleString("en-IN");
+                return (Number.isInteger(v) ? v : v.toFixed(1)) + "x Nexus";
             }
 
             function buildModuleBoxes(modules) {
@@ -1600,8 +1580,10 @@
                 const raw = edge.raw || {};
 
                 // Nexus header
-                const srcName = raw.source_name || (graphNodes && graphNodes.get(edge.from) ? graphNodes.get(edge.from).label.split("\n")[0] : "Entity A");
-                const tgtName = raw.target_name || (graphNodes && graphNodes.get(edge.to) ? graphNodes.get(edge.to).label.split("\n")[0] : "Entity B");
+                const fromNodeObj = graphNodes ? graphNodes.get(edge.from) : null;
+                const toNodeObj = graphNodes ? graphNodes.get(edge.to) : null;
+                const srcName = raw.source_name || (fromNodeObj ? String(fromNodeObj.cleanLabel || (fromNodeObj.raw && fromNodeObj.raw.label) || "Entity A").split("\n")[0] : "Entity A");
+                const tgtName = raw.target_name || (toNodeObj ? String(toNodeObj.cleanLabel || (toNodeObj.raw && toNodeObj.raw.label) || "Entity B").split("\n")[0] : "Entity B");
                 const nexus = `${srcName} → ${tgtName}`;
                 const isBidir = Boolean(raw.is_bidirectional);
                 const isMerged = Boolean(raw.is_merged);
@@ -1957,8 +1939,8 @@
                         const toNode = graphNodes ? graphNodes.get(raw.target || raw.to) : null;
                         edge = {
                             id: edgeId,
-                            source_name: fromNode ? fromNode.label.split('\n')[0] : (raw.source || 'Entity A'),
-                            target_name: toNode ? toNode.label.split('\n')[0] : (raw.target || 'Entity B'),
+                            source_name: fromNode ? String(fromNode.cleanLabel || (fromNode.raw && fromNode.raw.label) || 'Entity A').split('\n')[0] : (raw.source || 'Entity A'),
+                            target_name: toNode ? String(toNode.cleanLabel || (toNode.raw && toNode.raw.label) || 'Entity B').split('\n')[0] : (raw.target || 'Entity B'),
                             relation_type: raw.relation_type || 'KEYWORD_INTERLINK',
                             relation_type_display: raw.label || 'Keyword Interlink',
                             category: 'DOCUMENT',
@@ -1994,7 +1976,7 @@
                         <div class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1">
                             <div class="flex items-center gap-1.5 font-bold text-rose-400">
                                 <i class="fa-solid fa-bolt-lightning animate-pulse"></i>
-                                <span>RAPID LAYERING DETECTED (&lt; 24h Turnaround)</span>
+                                <span>RAPID LAYERING DETECTED (&lt; 48h Turnaround)</span>
                             </div>
                             <p class="text-[11px] text-slate-300">
                                 Funds received were dispersed to the downstream counterparty in rapid succession, characteristic of illicit intermediary layering.
@@ -2002,6 +1984,11 @@
                         </div>
                     `;
                 }
+
+                const edgeWeightVal = Number(edge.weight || 0);
+                const formattedEdgeWeight = edgeWeightVal >= 100
+                    ? `₹${edgeWeightVal.toLocaleString('en-IN')}`
+                    : `${edgeWeightVal || 1}x Nexus`;
 
                 let html = `
                     ${rlBanner}
@@ -2018,7 +2005,7 @@
                         </div>
                         <div class="flex items-center justify-between text-xs pt-1">
                             <span class="text-theme-muted">Weight / Amount:</span>
-                            <span class="font-mono font-bold text-amber-600 dark:text-amber-400">₹${Number(edge.weight || 0).toLocaleString('en-IN')}</span>
+                            <span class="font-mono font-bold text-amber-600 dark:text-amber-400">${formattedEdgeWeight}</span>
                         </div>
                         <div class="flex items-center justify-between text-xs">
                             <span class="text-theme-muted">Confidence Score:</span>
@@ -2041,8 +2028,9 @@
                 } else {
                     items.forEach((ev, idx) => {
                         let specificFields = "";
+                        const evMod = String(ev.source_module || "").toUpperCase();
 
-                        if (edge.category === "FINANCIAL" || ev.narration || ev.debit_amount || ev.credit_amount) {
+                        if (evMod === "Q_BANK" || evMod === "Q_TRAIL" || ev.narration || ev.debit_amount || ev.credit_amount || ev.ref_no || ev.turnaround) {
                             specificFields = `
                                 <div class="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-theme-border font-mono">
                                     ${ev.date ? `<div><span class="text-theme-muted block text-[10px]">Date</span><span class="text-theme-text font-medium">${ev.date}</span></div>` : ''}
@@ -2061,7 +2049,7 @@
                             `;
                         }
 
-                        if (ev.file_name || ev.page_number || edge.category === "DOCUMENT") {
+                        if (ev.file_name || ev.page_number || evMod === "Q_SCAN" || evMod === "Q_VERIFY") {
                             specificFields += `
                                 <div class="space-y-1.5 pt-1 border-t border-theme-border text-[11px]">
                                     <div class="flex items-center justify-between">
@@ -2079,7 +2067,7 @@
                             `;
                         }
 
-                        if (edge.category === "VOICE" || ev.audio_file || ev.audio_timestamp) {
+                        if (ev.audio_file || ev.audio_url || evMod === "Q_VOICE") {
                             specificFields += `
                                 <div class="space-y-1.5 pt-1 border-t border-theme-border text-[11px]">
                                     <div class="flex items-center justify-between">
@@ -2495,7 +2483,7 @@
                 return;
             }
             const matching = graphNodes.get({
-                filter: item => item.label.toLowerCase().includes(q)
+                filter: item => String(item.cleanLabel || (item.raw && item.raw.label) || "").toLowerCase().includes(q)
             });
             if (matching.length > 0) {
                 networkInstance.focus(matching[0].id, { scale: 1.2, animation: true });
@@ -2533,16 +2521,12 @@
                 graphEdges.forEach(edge => {
                     const r = edge.raw || {};
                     const relType = String(r.relation_type || r.label || edge.label || "").toUpperCase();
-                    if (relType.includes("COMM") || relType.includes("CHAT") || relType.includes("MAIL") || relType.includes("INTERCEPT") || relType.includes("VOICE") || relType.includes("AUDIO")) {
-                        matchingEdgeNodeIds.add(edge.from);
-                        matchingEdgeNodeIds.add(edge.to);
-                    }
-                });
-            } else if (filterType === "BANKS") {
-                graphEdges.forEach(edge => {
-                    const r = edge.raw || {};
-                    const relType = String(r.relation_type || r.label || edge.label || "").toUpperCase();
-                    if (relType.includes("TRANSFER") || relType.includes("FINANCIAL") || relType.includes("LAYERING") || relType.includes("BENEFICIARY") || relType.includes("NEXUS")) {
+                    const mods = (r.modules || []).map(m => String(m.key || m.short_name || "").toLowerCase());
+                    if (
+                        relType.includes("COMM") || relType.includes("CHAT") || relType.includes("MAIL") ||
+                        relType.includes("INTERCEPT") || relType.includes("VOICE") || relType.includes("AUDIO") ||
+                        mods.includes("q_voice") || mods.includes("q_chat") || mods.includes("voice") || mods.includes("chat")
+                    ) {
                         matchingEdgeNodeIds.add(edge.from);
                         matchingEdgeNodeIds.add(edge.to);
                     }
@@ -2551,7 +2535,12 @@
                 graphEdges.forEach(edge => {
                     const r = edge.raw || {};
                     const relType = String(r.relation_type || r.label || edge.label || "").toUpperCase();
-                    if (relType.includes("DOC") || relType.includes("FILE") || relType.includes("PARTNER") || relType.includes("DEED")) {
+                    const mods = (r.modules || []).map(m => String(m.key || m.short_name || "").toLowerCase());
+                    if (
+                        relType.includes("DOC") || relType.includes("FILE") || relType.includes("PARTNER") ||
+                        relType.includes("DEED") || relType.includes("SPOUSE") || relType.includes("NOMINEE") ||
+                        mods.includes("q_scan") || mods.includes("q_verify") || mods.includes("scan") || mods.includes("verify")
+                    ) {
                         matchingEdgeNodeIds.add(edge.from);
                         matchingEdgeNodeIds.add(edge.to);
                     }
@@ -2569,7 +2558,7 @@
                 if (filterType === "BANKS" || filterType === "BANK_ACCOUNT") {
                     isMatch = nType === "BANK_ACCOUNT" || nType === "ACCOUNT" || label.includes("bank") || label.includes("a/c") || label.includes("hdfc") || label.includes("axis") || label.includes("sbi") || label.includes("meridian");
                 } else if (filterType === "TARGETS" || filterType === "EMPLOYEE") {
-                    isMatch = Boolean(raw.is_target) || nType === "EMPLOYEE" || nType === "SUSPECT" || (raw.risk || 0) >= 50 || label.includes("target") || label.includes("suspect");
+                    isMatch = Boolean(raw.is_target || raw.is_root);
                 } else if (filterType === "COMMS") {
                     isMatch = nType === "EMAIL_ID" || nType === "PHONE" || nType === "INTERCEPT" || nType === "COMM" || label.includes("mail") || label.includes("chat") || label.includes("intercept") || label.includes("thread");
                 } else if (filterType === "FILES" || filterType === "DOCUMENT") {
@@ -2678,12 +2667,14 @@
                         const item = document.createElement("div");
                         item.className = "p-2 rounded bg-theme-subtle border border-theme-border flex items-center justify-between text-[11px] cursor-pointer hover:border-amber-500/50 transition";
                         item.onclick = () => inspectEdge(r.id);
+                        const wtVal = Number(r.weight || 0);
+                        const wtText = wtVal >= 100 ? `₹${wtVal.toLocaleString('en-IN')}` : `${wtVal || 1}x Nexus`;
                         item.innerHTML = `
                             <div>
                                 <span class="font-bold text-theme-text">${r.target_name || r.source_name}</span>
                                 <span class="text-theme-muted block text-[10px]">${r.type} (${r.module})</span>
                             </div>
-                            <span class="text-amber-600 dark:text-amber-400 font-mono text-[10px]">₹${r.weight ? Number(r.weight).toLocaleString('en-IN') : '1'}</span>
+                            <span class="text-amber-600 dark:text-amber-400 font-mono text-[10px]">${wtText}</span>
                         `;
                         relList.appendChild(item);
                     });
@@ -2828,11 +2819,11 @@
                 }
 
                 let formatted = text
-                    .replace(/### (.*)/g, '<h4 class="font-bold text-sm text-amber-500 dark:text-amber-400 mt-2">$1</h4>')
                     .replace(/#### (.*)/g, '<h5 class="font-bold text-xs text-theme-text mt-1.5">$1</h5>')
+                    .replace(/### (.*)/g, '<h4 class="font-bold text-sm text-amber-500 dark:text-amber-400 mt-2">$1</h4>')
                     .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                     .replace(/`([^`]+)`/g, '<code class="bg-theme-surface px-1 py-0.5 rounded text-amber-600 dark:text-amber-300 text-[10px]">$1</code>')
-                    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-cyan-600 dark:text-cyan-400 font-semibold underline hover:text-cyan-500">$1</a>')
+                    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-cyan-600 dark:text-cyan-400 font-semibold underline hover:text-cyan-500">$1</a>')
                     .replace(/\n/g, '<br/>');
 
                 bubble.innerHTML = `
