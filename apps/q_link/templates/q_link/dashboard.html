@@ -922,14 +922,13 @@
                 .replace(/'/g, '&apos;');
         }
 
-        // Generate Modern Card Node SVG (Matching Image 2 Reference)
-        // Generate Circular Glowing Node SVG (Matching Reference Design)
+        // Generate Circular Glowing Node SVG (Centered at cx=120, cy=105 so edges & arrows align with the circle)
         function generateNodeSvg(n, state = "normal") {
             // Entity classification
             let nType = String(n.type || "").toUpperCase();
             const label = String(n.label || "Entity");
             const labelLower = label.toLowerCase();
-            
+
             if (!nType || nType === "UNKNOWN" || nType === "PROFILE") {
                 if (labelLower.includes("ltd") || labelLower.includes("limited") || labelLower.includes("corp") || labelLower.includes("inc") || labelLower.includes("traders") || labelLower.includes("industries") || labelLower.includes("engineers") || labelLower.includes("vendor")) {
                     nType = "VENDOR";
@@ -951,7 +950,7 @@
             const profCat = n.metadata && (n.metadata.category || n.metadata.category_code);
             const tags = n.tags || (n.metadata && n.metadata.tags) || [];
             const isSubstantiated = tags.some(t => String(t).toLowerCase() === "substantiated") || Boolean(n.metadata && n.metadata.is_substantiated);
-            const isTarget = Boolean(n.is_target);
+            const isTarget = Boolean(n.is_target || n.is_root);
             const isExternal = Boolean(n.is_external);
             const riskRating = Number(n.risk || 0);
             const isRapidLayering = Boolean(n.metadata && n.metadata.is_rapid_layering) || riskRating >= 80;
@@ -985,7 +984,10 @@
                 } else {
                     accentColor = "#f97316"; // Orange
                 }
-            } else if (isTarget || isRapidLayering || riskRating >= 70 || labelLower.includes("suspect") || labelLower.includes("target")) {
+            } else if (isTarget) {
+                iconKind = "user";
+                accentColor = "#f59e0b"; // Prominent Gold/Amber-Orange for Primary Audit Profiles
+            } else if (isRapidLayering || riskRating >= 70 || labelLower.includes("suspect") || labelLower.includes("target")) {
                 iconKind = "user";
                 accentColor = (riskRating >= 80 || isRapidLayering) ? "#ef4444" : "#f97316"; // Coral / Red-Orange
             } else {
@@ -993,81 +995,98 @@
                 iconKind = "user";
             }
 
+            // Circle geometry centered at (cx=120, cy=105) inside 240x210 viewBox
+            const cx = 120;
+            const cy = 105;
+            const innerR = isTarget ? 31 : 26;
+            const outerR = isTarget ? 38 : 33;
+            const crownR = isTarget ? 43 : 0;
+            const iconScale = isTarget ? 1.28 : 1.08;
+
             glowColor = accentColor;
             let opacity = 1.0;
-            let glowRadius = isHighRiskVendor ? 40 : 34;
-            let glowOpacity = isHighRiskVendor ? 0.6 : 0.35;
-            let strokeWidth = 2.2;
+            let glowRadius = isTarget ? 52 : (isHighRiskVendor ? 42 : 36);
+            let glowOpacity = isTarget ? 0.55 : (isHighRiskVendor ? 0.55 : 0.36);
+            let strokeWidth = isTarget ? 2.8 : 2.2;
             let outerRingStroke = accentColor;
-            let outerRingOpacity = 0.45;
+            let outerRingOpacity = isTarget ? 0.65 : 0.45;
 
             if (state === "selected") {
                 accentColor = "#f59e0b"; // Gold / Amber on selection
                 glowColor = "#f59e0b";
-                glowRadius = 46;
+                glowRadius = isTarget ? 58 : 46;
                 glowOpacity = 0.75;
-                strokeWidth = 2.8;
+                strokeWidth = isTarget ? 3.2 : 2.8;
                 outerRingOpacity = 0.85;
             } else if (state === "dimmed") {
                 opacity = 0.18;
                 glowOpacity = 0.08;
             }
 
-            // Embedded vector icons centered in circle (center at cx=120, cy=38)
+            // Embedded vector icons centered at (cx=120, cy=105) with dynamic scale
+            const iconTransform = `translate(${cx}, ${cy}) scale(${iconScale}) translate(-11, -11)`;
             let iconSvg = "";
             if (iconKind === "bank") {
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <path d="M11 2L2 7h18L11 2z M4 9v6h2.5V9H4z M9.25 9v6h2.5V9h-2.5z M14.5 9v6h2.5V9h-2.5z M2 17h18v2H2v-2z" fill="${accentColor}"/>
                 </g>`;
             } else if (iconKind === "factory") {
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <path d="M2 19h18v1.5H2V19z M3 19V10l5 3.5V10l5 3.5V5h4v14H3z" fill="${accentColor}"/>
                 </g>`;
             } else if (iconKind === "desktop") {
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <rect x="2.5" y="3.5" width="17" height="11" rx="1.5" fill="none" stroke="${accentColor}" stroke-width="1.8"/>
                     <path d="M8 18.5h6 M11 14.5v4" stroke="${accentColor}" stroke-width="1.8" stroke-linecap="round"/>
                 </g>`;
             } else if (iconKind === "file") {
-                iconSvg = `<g transform="translate(110, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <path d="M4 2h7l5 5v12a1.5 1.5 0 0 1-1.5 1.5H4a1.5 1.5 0 0 1-1.5-1.5V3.5A1.5 1.5 0 0 1 4 2z" fill="none" stroke="${accentColor}" stroke-width="1.8"/>
                     <path d="M11 2v5h5 M7 11h6 M7 14h4" stroke="${accentColor}" stroke-width="1.4" stroke-linecap="round"/>
                 </g>`;
             } else if (iconKind === "intercept") {
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <rect x="8.5" y="3" width="5" height="10" rx="2.5" fill="${accentColor}"/>
                     <path d="M5 9.5a6 6 0 0 0 12 0 M11 15.5v3 M7.5 18.5h7" stroke="${accentColor}" stroke-width="1.8" stroke-linecap="round" fill="none"/>
                 </g>`;
             } else if (iconKind === "comm") {
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <rect x="2.5" y="4.5" width="17" height="12" rx="2" fill="none" stroke="${accentColor}" stroke-width="1.8"/>
                     <path d="M3 6.5l8 5.5 8-5.5" stroke="${accentColor}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
                 </g>`;
             } else {
                 // User / Target / Suspect
-                iconSvg = `<g transform="translate(109, 27)">
+                iconSvg = `<g transform="${iconTransform}">
                     <circle cx="11" cy="6" r="3.8" fill="${accentColor}"/>
                     <path d="M4 19v-2.2c0-2.4 2.8-4.3 7-4.3s7 1.9 7 4.3V19H4z" fill="${accentColor}"/>
                 </g>`;
             }
 
-            // Clean title and sub-label typography formatting
+            // Clean title and sub-label typography formatting positioned below the centered circle
             let line1 = label;
             let line2 = "";
-            let pillY = 90;
+            const nameBaseY = isTarget ? 160 : 152;
+            let pillY = isTarget ? 174 : 166;
 
             if (label.includes(": ")) {
                 const parts = label.split(": ");
                 line1 = parts[0] + ":";
                 line2 = parts.slice(1).join(": ");
-                pillY = 98;
+                pillY = isTarget ? 182 : 174;
             } else if (label.length > 18 && label.includes(" ")) {
                 const words = label.split(" ");
                 const mid = Math.ceil(words.length / 2);
                 line1 = words.slice(0, mid).join(" ");
                 line2 = words.slice(mid).join(" ");
-                pillY = 98;
+                pillY = isTarget ? 182 : 174;
             }
+
+            const nameFontSize = isTarget ? 13.5 : 12.2;
+            const maxLineLen = Math.max(line1.length, line2.length);
+            const nameBoxW = Math.min(220, Math.max(isTarget ? 68 : 56, maxLineLen * (nameFontSize * 0.6) + 18));
+            const nameBoxX = cx - (nameBoxW / 2);
+            const nameBoxY = line2 ? (nameBaseY - 15) : (nameBaseY - 13);
+            const nameBoxH = line2 ? 31 : 20;
 
             // Sub-label pill string (e.g. "14 Mar 2026 · 23:41" or "14 Mar 2026 · 23:41 98% conf.")
             let rawTime = n.timestamp || "14 Mar 2026 · 23:41";
@@ -1078,55 +1097,76 @@
                 pillText = `94% ${rawTime}`;
             }
 
-            const pillW = Math.min(190, Math.max(90, pillText.length * 6.0 + 16));
-            const pillX = 120 - (pillW / 2);
+            const pillW = Math.min(200, Math.max(96, pillText.length * 6.2 + 18));
+            const pillX = cx - (pillW / 2);
 
             const filterId = "glow-" + String(n.id || "0").replace(/[^a-zA-Z0-9]/g, "");
 
             const svg = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="240" height="130" viewBox="0 0 240 130" opacity="${opacity}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="240" height="210" viewBox="0 0 240 210" opacity="${opacity}">
                 <defs>
                     <filter id="${filterId}" x="-40%" y="-40%" width="180%" height="180%">
                         <feGaussianBlur in="SourceGraphic" stdDeviation="6"/>
                     </filter>
                     <radialGradient id="grad-${filterId}" cx="50%" cy="50%" r="50%">
                         <stop offset="0%" stop-color="${glowColor}" stop-opacity="${glowOpacity * 1.3}"/>
-                        <stop offset="60%" stop-color="${glowColor}" stop-opacity="${glowOpacity * 0.4}"/>
+                        <stop offset="60%" stop-color="${glowColor}" stop-opacity="${glowOpacity * 0.45}"/>
                         <stop offset="100%" stop-color="${glowColor}" stop-opacity="0"/>
                     </radialGradient>
                 </defs>
 
                 <!-- Ambient Radial Glow Halo Behind Circular Node -->
-                <circle cx="120" cy="38" r="${glowRadius}" fill="url(#grad-${filterId})" />
+                <circle cx="${cx}" cy="${cy}" r="${glowRadius}" fill="url(#grad-${filterId})" />
 
-                <!-- Outer Concentric Aura Ring -->
-                <circle cx="120" cy="38" r="33" fill="none" stroke="${outerRingStroke}" stroke-width="1.3" opacity="${outerRingOpacity}" />
+                ${isTarget ? `
+                    <!-- Primary Audit Profile Outer Dashed Crown Ring -->
+                    <circle cx="${cx}" cy="${cy}" r="${crownR}" fill="#0c0915" fill-opacity="0.9" stroke="${accentColor}" stroke-width="1.8" stroke-dasharray="6 3" opacity="0.82" />
+                ` : ''}
+
+                <!-- Outer Concentric Aura Ring (Opaque dark fill masks inner edge line shaft) -->
+                <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="#0c0915" fill-opacity="0.92" stroke="${outerRingStroke}" stroke-width="${isTarget ? '1.8' : '1.5'}" opacity="${outerRingOpacity}" />
 
                 <!-- Center Node Circle (Dark Background + Colored Stroke Ring) -->
-                <circle cx="120" cy="38" r="25" fill="#130f1e" stroke="${accentColor}" stroke-width="${strokeWidth}" />
+                <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="#130f1e" stroke="${accentColor}" stroke-width="${strokeWidth}" />
 
                 <!-- Centered Vector Icon -->
                 ${iconSvg}
 
+                ${isTarget ? `
+                    <!-- Primary Audit Profile Top Badge -->
+                    <rect x="${cx - 32}" y="${cy - crownR - 9}" width="64" height="16" rx="8" fill="${accentColor}" stroke="#0c0915" stroke-width="1.2" />
+                    <text x="${cx}" y="${cy - crownR + 2}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8.5" font-weight="800" letter-spacing="0.6" fill="#0c0915">PROFILE</text>
+                ` : ''}
+
+                <!-- Opaque Name Backdrop Pill (Prevents edges from cutting through entity text) -->
+                <rect x="${nameBoxX}" y="${nameBoxY}" width="${nameBoxW}" height="${nameBoxH}" rx="7" fill="rgba(12, 9, 21, 0.94)" stroke="${isTarget ? accentColor : 'rgba(255, 255, 255, 0.16)'}" stroke-opacity="${isTarget ? '0.55' : '1'}" stroke-width="${isTarget ? '1.1' : '0.8'}" />
+
                 <!-- Primary Entity Label -->
                 ${line2 ? `
-                    <text x="120" y="76" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12.5" font-weight="700" fill="#ffffff">${escapeXml(line1)}</text>
-                    <text x="120" y="90" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12.5" font-weight="700" fill="#ffffff">${escapeXml(line2)}</text>
+                    <text x="${cx}" y="${nameBaseY - 2}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line1)}</text>
+                    <text x="${cx}" y="${nameBaseY + 13}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line2)}</text>
                 ` : `
-                    <text x="120" y="80" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700" fill="#ffffff">${escapeXml(line1)}</text>
+                    <text x="${cx}" y="${nameBaseY + 1}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line1)}</text>
                 `}
 
                 <!-- Translucent Metadata Sub-label Pill -->
-                <rect x="${pillX}" y="${pillY}" width="${pillW}" height="18" rx="9" fill="rgba(16, 12, 28, 0.92)" stroke="rgba(255, 255, 255, 0.18)" stroke-width="0.8" />
-                <text x="120" y="${pillY + 12.5}" text-anchor="middle" font-family="'JetBrains Mono', monospace, -apple-system, sans-serif" font-size="9" font-weight="500" fill="rgba(255, 255, 255, 0.82)">${escapeXml(pillText)}</text>
+                <rect x="${pillX}" y="${pillY}" width="${pillW}" height="18" rx="9" fill="rgba(16, 12, 28, 0.94)" stroke="rgba(255, 255, 255, 0.2)" stroke-width="0.8" />
+                <text x="${cx}" y="${pillY + 12.5}" text-anchor="middle" font-family="'JetBrains Mono', monospace, -apple-system, sans-serif" font-size="9.2" font-weight="500" fill="rgba(255, 255, 255, 0.86)">${escapeXml(pillText)}</text>
             </svg>`.trim();
 
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
         }
 
         // Format nodes into modern circular glowing objects with embedded SVGs
+        // Primary Audit Profiles (is_target / is_root) are rendered moderately larger (size: 66 vs 56)
         function formatNodes(nodes) {
             return nodes.map(n => {
+                const isPrimaryProfile = Boolean(n.is_target || n.is_root);
+                const nodeSize = isPrimaryProfile ? 66 : 56;
+                const svgOuterR = isPrimaryProfile ? 43 : 33;
+                // Exact circular border radius in canvas units (SVG half-height = 105)
+                const circleBorderRadius = Math.round(svgOuterR * (nodeSize / 105)) + 2;
+
                 const defaultImage = generateNodeSvg(n, "normal");
                 const selectedImage = generateNodeSvg(n, "selected");
                 const dimmedImage = generateNodeSvg(n, "dimmed");
@@ -1135,13 +1175,28 @@
                     id: n.id,
                     shape: "image",
                     image: defaultImage,
-                    size: 52,
+                    size: nodeSize,
+                    circleBorderRadius: circleBorderRadius,
                     title: `${n.label || 'Entity'}\nType: ${n.type || 'Entity'}\nRisk: ${n.risk || 0}/100`,
                     raw: n,
                     defaultImage: defaultImage,
                     selectedImage: selectedImage,
                     dimmedImage: dimmedImage
                 };
+            });
+        }
+
+        // Override Vis.js rectangular image border calculation so arrowheads land cleanly on the circular profile ring
+        function applyCircularNodeBorders() {
+            if (!networkInstance || !networkInstance.body || !networkInstance.body.nodes) return;
+            Object.values(networkInstance.body.nodes).forEach(visNode => {
+                if (!visNode || !visNode.shape) return;
+                const nodeData = graphNodes ? graphNodes.get(visNode.id) : null;
+                const borderR = (nodeData && nodeData.circleBorderRadius) ? nodeData.circleBorderRadius : 28;
+                const borderFn = function () { return borderR; };
+                visNode.distanceToBorder = borderFn;
+                visNode.shape.distanceToBorder = borderFn;
+                visNode.shape._distanceToBorder = borderFn;
             });
         }
 
@@ -1273,15 +1328,15 @@
                     enabled: true,
                     solver: "forceAtlas2Based",
                     forceAtlas2Based: {
-                        gravitationalConstant: -180,
-                        centralGravity: 0.005,
-                        springLength: 260,
-                        springConstant: 0.04,
-                        damping: 0.5,
-                        avoidOverlap: 1.0
+                        gravitationalConstant: -135,
+                        centralGravity: 0.012,
+                        springLength: 185,
+                        springConstant: 0.055,
+                        damping: 0.55,
+                        avoidOverlap: 0.75
                     },
                     stabilization: {
-                        iterations: 150,
+                        iterations: 180,
                         updateInterval: 25
                     }
                 },
@@ -1297,6 +1352,8 @@
             };
 
             networkInstance = new vis.Network(container, { nodes: graphNodes, edges: graphEdges }, options);
+            applyCircularNodeBorders();
+            networkInstance.on("beforeDrawing", applyCircularNodeBorders);
             updateModeBanner(data);
 
             // Once stabilized, freeze physics to guarantee 60fps, 0% idle CPU, and eliminate jitter/hangs
@@ -1305,6 +1362,7 @@
                 isPhysicsEnabled = false;
                 const btnTxt = document.getElementById("text-physics");
                 if (btnTxt) btnTxt.innerText = "Unfreeze";
+                resetGraphView(false);
             });
 
             // Direct 60fps Canvas Pan and Pointer-Centered Wheel Zoom Controller
@@ -1686,6 +1744,7 @@
             graphEdges.clear();
             graphNodes.add(formattedNodes);
             graphEdges.add(formattedEdges);
+            applyCircularNodeBorders();
             updateModeBanner(data);
 
             networkInstance.setOptions({ physics: { enabled: true } });
@@ -1693,9 +1752,8 @@
             networkInstance.once("stabilizationIterationsDone", function () {
                 networkInstance.setOptions({ physics: { enabled: false } });
                 isPhysicsEnabled = false;
+                resetGraphView(true);
             });
-
-            resetGraphView();
         }
 
         // Highlight 1st and 2nd degree connected paths and dim unrelated nodes
@@ -2392,11 +2450,18 @@
             }
         }
 
-        // Reset Graph View
-        function resetGraphView() {
-            if (networkInstance) {
-                networkInstance.fit({ animation: { duration: 600, easingFunction: "easeInOutQuad" } });
-            }
+        // Reset Graph View (Fit to viewport + slight 1.25x default zoom-in)
+        function resetGraphView(animate = true) {
+            if (!networkInstance) return;
+            networkInstance.fit({ animation: false });
+            const fittedPos = networkInstance.getViewPosition();
+            const fittedScale = networkInstance.getScale();
+            const targetScale = Math.min(2.5, fittedScale * 1.25);
+            networkInstance.moveTo({
+                position: fittedPos,
+                scale: targetScale,
+                animation: animate ? { duration: 450, easingFunction: "easeInOutQuad" } : false
+            });
         }
 
         // Canvas Zoom Helpers (Matching Floating Controls)
@@ -2859,6 +2924,7 @@
             graphEdges.clear();
             graphNodes.add(formattedNodes);
             graphEdges.add(formattedEdges);
+            applyCircularNodeBorders();
         }
 
         // Initialize on DOM ready

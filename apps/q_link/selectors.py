@@ -392,6 +392,7 @@ def _format_node(
             if t not in raw_tags:
                 raw_tags.append(t)
 
+    prof = None
     try:
         from core.models import InvestigationProfile
 
@@ -481,7 +482,7 @@ def _format_node(
         "is_external": is_external or entity.is_external,
         "tags": raw_tags,
         "risk": entity.risk_rating,
-        "is_target": entity.is_target,
+        "is_target": bool(entity.is_target or prof is not None),
         "category": entity.category,
         "timestamp": formatted_date or "14 Mar 2026 · 23:41",
         "metadata": entity.metadata or {},
