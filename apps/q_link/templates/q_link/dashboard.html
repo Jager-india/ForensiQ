@@ -7,6 +7,11 @@
 
     <style>
         #qlink-canvas {
+            background-color: #FAF7FB !important;
+            background-image: radial-gradient(rgba(80, 45, 85, 0.16) 1.25px, transparent 1.25px) !important;
+            background-size: 28px 28px !important;
+        }
+        .dark #qlink-canvas {
             background-color: #0c0915 !important;
             background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1.25px, transparent 1.25px) !important;
             background-size: 28px 28px !important;
@@ -248,47 +253,47 @@
     <div class="space-y-4 w-full">
 
         <!-- Knowledge Graph Canvas Container (Full Width Edge-to-Edge) -->
-        <div class="bg-[#0e0a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden relative">
+        <div class="bg-theme-surface dark:bg-[#0e0a1a] border border-theme-border dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden relative">
             
             <!-- Sleek Graph Container Header Bar (Matching Image Reference) -->
-            <div class="p-3.5 bg-[#0e0a1a] border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
+            <div class="p-3.5 bg-theme-surface dark:bg-[#0e0a1a] border-b border-theme-border dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
                 
                 <!-- Left Audit & Mode Status Pills -->
                 <div class="flex flex-wrap items-center gap-2.5">
                     <!-- Live Sync Pill with Pulsing Green Dot -->
-                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold tracking-wider">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold tracking-wider">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
                         <span>LIVE SYNC</span>
                     </span>
 
                     <!-- Active Audit Pill -->
-                    <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-200">
-                        <span class="text-slate-400 font-sans">Audit:</span>
-                        <span class="font-bold text-amber-400 font-mono">{{ active_audit.name|default:"2026-WB-01" }}</span>
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10 text-xs font-mono text-theme-text dark:text-slate-200">
+                        <span class="text-theme-muted dark:text-slate-400 font-sans">Audit:</span>
+                        <span class="font-bold text-amber-600 dark:text-amber-400 font-mono">{{ active_audit.name|default:"2026-WB-01" }}</span>
                     </div>
 
                     <!-- Operational Mode Dropdown Switcher Pill -->
                     <div class="relative" x-data="{ modeOpen: false }">
                         <button @click="modeOpen = !modeOpen" @click.away="modeOpen = false" type="button"
-                            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-slate-200 transition cursor-pointer">
-                            <span class="text-slate-400">Mode:</span>
-                            <span id="active-mode-label" class="font-bold text-white">{% if mode == 'keyword' %}Keyword Interlinks{% elif mode == 'global' %}Global Vault{% else %}Full Audit Topology{% endif %}</span>
-                            <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform" :class="{ 'rotate-180': modeOpen }"></i>
+                            class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 hover:bg-theme-border dark:hover:bg-white/10 border border-theme-border dark:border-white/10 text-xs font-medium text-theme-text dark:text-slate-200 transition cursor-pointer">
+                            <span class="text-theme-muted dark:text-slate-400">Mode:</span>
+                            <span id="active-mode-label" class="font-bold text-theme-text dark:text-white">{% if mode == 'keyword' %}Keyword Interlinks{% elif mode == 'global' %}Global Vault{% else %}Full Audit Topology{% endif %}</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-theme-muted dark:text-slate-400 transition-transform" :class="{ 'rotate-180': modeOpen }"></i>
                         </button>
-                        <div x-show="modeOpen" x-transition class="absolute left-0 top-full mt-1.5 w-52 rounded-xl bg-[#151124] border border-white/15 shadow-2xl p-1.5 z-30 text-xs space-y-1">
+                        <div x-show="modeOpen" x-transition class="absolute left-0 top-full mt-1.5 w-52 rounded-xl bg-theme-surface dark:bg-[#151124] border border-theme-border dark:border-white/15 shadow-2xl p-1.5 z-30 text-xs space-y-1">
                             <button type="button" @click="modeOpen = false; switchOperationalMode('audit')"
-                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-slate-200 flex items-center gap-2 cursor-pointer">
-                                <i class="fa-solid fa-folder-tree text-emerald-400 text-xs"></i>
+                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-theme-subtle dark:hover:bg-white/10 text-theme-text dark:text-slate-200 flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-folder-tree text-emerald-500 dark:text-emerald-400 text-xs"></i>
                                 <span>Full Audit Topology</span>
                             </button>
                             <button type="button" @click="modeOpen = false; switchOperationalMode('keyword')"
-                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-slate-200 flex items-center gap-2 cursor-pointer">
-                                <i class="fa-solid fa-link text-amber-400 text-xs"></i>
+                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-theme-subtle dark:hover:bg-white/10 text-theme-text dark:text-slate-200 flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-link text-amber-500 dark:text-amber-400 text-xs"></i>
                                 <span>Keyword Interlinks</span>
                             </button>
                             <button type="button" @click="modeOpen = false; switchOperationalMode('global')"
-                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-slate-200 flex items-center gap-2 cursor-pointer">
-                                <i class="fa-solid fa-vault text-cyan-400 text-xs"></i>
+                                class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-theme-subtle dark:hover:bg-white/10 text-theme-text dark:text-slate-200 flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-vault text-cyan-500 dark:text-cyan-400 text-xs"></i>
                                 <span>Global Vault</span>
                             </button>
                         </div>
@@ -296,10 +301,10 @@
 
                     <!-- Mode 1 / General Keyword Search Input -->
                     <div class="relative flex items-center" id="keyword-search-container">
-                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-theme-muted dark:text-slate-400"></i>
                         <input type="text" id="mode1-keyword-search" value="{{ keyword }}" placeholder="Search entities or keywords..."
                             onkeydown="if(event.key==='Enter'){ executeKeywordSearch(); }"
-                            class="bg-white/5 border border-white/10 text-xs text-slate-200 pl-8 pr-16 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-44 sm:w-56" />
+                            class="bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10 text-xs text-theme-text dark:text-slate-200 pl-8 pr-16 py-1.5 rounded-lg focus:outline-none focus:border-amber-400 transition w-44 sm:w-56" />
                         <button type="button" onclick="executeKeywordSearch()"
                             class="absolute right-1 top-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] font-bold transition cursor-pointer">
                             Search
@@ -310,29 +315,29 @@
                 <!-- Right 4 Metric Stat Badges & Workstation Controls -->
                 <div class="flex items-center gap-2.5 flex-wrap">
                     <!-- Badge 1: ENTITIES -->
-                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
-                        <i class="fa-solid fa-sitemap text-slate-400 text-sm"></i>
+                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10">
+                        <i class="fa-solid fa-sitemap text-theme-muted dark:text-slate-400 text-sm"></i>
                         <div>
-                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-slate-400 leading-none">ENTITIES</span>
-                            <span class="text-sm font-black font-mono text-white leading-tight" id="badge-stat-entities">{{ total_entities }}</span>
+                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-theme-muted dark:text-slate-400 leading-none">ENTITIES</span>
+                            <span class="text-sm font-black font-mono text-theme-text dark:text-white leading-tight" id="badge-stat-entities">{{ total_entities }}</span>
                         </div>
                     </div>
 
                     <!-- Badge 2: CORRELATED EDGES -->
-                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
-                        <i class="fa-solid fa-share-nodes text-slate-400 text-sm"></i>
+                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10">
+                        <i class="fa-solid fa-share-nodes text-theme-muted dark:text-slate-400 text-sm"></i>
                         <div>
-                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-slate-400 leading-none">CORRELATED EDGES</span>
-                            <span class="text-sm font-black font-mono text-white leading-tight" id="badge-stat-edges">{{ total_relationships }}</span>
+                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-theme-muted dark:text-slate-400 leading-none">CORRELATED EDGES</span>
+                            <span class="text-sm font-black font-mono text-theme-text dark:text-white leading-tight" id="badge-stat-edges">{{ total_relationships }}</span>
                         </div>
                     </div>
 
                     <!-- Badge 3: CODED TRACES -->
-                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10">
-                        <i class="fa-regular fa-file-lines text-slate-400 text-sm"></i>
+                    <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10">
+                        <i class="fa-regular fa-file-lines text-theme-muted dark:text-slate-400 text-sm"></i>
                         <div>
-                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-slate-400 leading-none">CODED TRACES</span>
-                            <span class="text-sm font-black font-mono text-white leading-tight" id="badge-stat-traces">{{ total_evidence }}</span>
+                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-theme-muted dark:text-slate-400 leading-none">CODED TRACES</span>
+                            <span class="text-sm font-black font-mono text-theme-text dark:text-white leading-tight" id="badge-stat-traces">{{ total_evidence }}</span>
                         </div>
                     </div>
 
@@ -340,27 +345,27 @@
                     <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/30">
                         <i class="fa-solid fa-triangle-exclamation text-rose-500 text-sm animate-pulse"></i>
                         <div>
-                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-rose-300 leading-none">PRIORITY FLAGS</span>
-                            <span class="text-sm font-black font-mono text-rose-400 leading-tight" id="badge-stat-flags">{{ unack_alerts }}</span>
+                            <span class="block text-[9.5px] uppercase font-mono font-bold tracking-wider text-rose-600 dark:text-rose-300 leading-none">PRIORITY FLAGS</span>
+                            <span class="text-sm font-black font-mono text-rose-600 dark:text-rose-400 leading-tight" id="badge-stat-flags">{{ unack_alerts }}</span>
                         </div>
                     </div>
 
                     <!-- Slide-over Workstation Triggers -->
-                    <div class="h-6 w-px bg-white/10 hidden md:block"></div>
+                    <div class="h-6 w-px bg-theme-border dark:bg-white/10 hidden md:block"></div>
                     <div class="flex items-center gap-1.5">
                         <button type="button" onclick="openWorkstationDrawer('inspector')"
-                            class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer" title="Entity Inspector">
-                            <i class="fa-solid fa-address-card text-cyan-400"></i>
+                            class="px-2.5 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 hover:bg-theme-border dark:hover:bg-white/10 text-theme-text dark:text-slate-200 border border-theme-border dark:border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer" title="Entity Inspector">
+                            <i class="fa-solid fa-address-card text-cyan-500 dark:text-cyan-400"></i>
                             <span class="hidden xl:inline">Inspector</span>
                         </button>
                         <button type="button" onclick="openWorkstationDrawer('copilot')"
-                            class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer" title="Forensic Copilot">
-                            <i class="fa-solid fa-robot text-amber-400"></i>
+                            class="px-2.5 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 hover:bg-theme-border dark:hover:bg-white/10 text-theme-text dark:text-slate-200 border border-theme-border dark:border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer" title="Forensic Copilot">
+                            <i class="fa-solid fa-robot text-amber-500 dark:text-amber-400"></i>
                             <span class="hidden xl:inline">Copilot</span>
                         </button>
                         <button type="button" onclick="openWorkstationDrawer('alerts')"
-                            class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer relative" title="Alerts Center">
-                            <i class="fa-solid fa-bell text-rose-400"></i>
+                            class="px-2.5 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 hover:bg-theme-border dark:hover:bg-white/10 text-theme-text dark:text-slate-200 border border-theme-border dark:border-white/10 flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer relative" title="Alerts Center">
+                            <i class="fa-solid fa-bell text-rose-500 dark:text-rose-400"></i>
                             {% if unack_alerts > 0 %}
                                 <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
                             {% endif %}
@@ -371,59 +376,59 @@
 
             <!-- Vis.js Graph Rendering Container with Matrix Dot Grid -->
             <div class="relative w-full overflow-hidden">
-                <div id="qlink-canvas" class="w-full h-[760px] bg-[#0c0915] relative transition-colors duration-200"></div>
+                <div id="qlink-canvas" class="w-full h-[760px] bg-theme-surface dark:bg-[#0c0915] relative transition-colors duration-200"></div>
 
                 <!-- Floating Glassmorphic Edge Hover Tooltip with Module Square-Boxes -->
                 <c-tooltip_card />
 
                 <!-- Floating Glassmorphic Bottom-Left Controls (Tier 1 Navigation + Tier 2 Filters) -->
-                <div class="absolute bottom-6 left-6 z-20 flex flex-col gap-2 p-2 rounded-2xl bg-[#120e24]/90 dark:bg-[#120e24]/90 backdrop-blur-xl border border-white/10 shadow-2xl pointer-events-auto">
+                <div class="absolute bottom-6 left-6 z-20 flex flex-col gap-2 p-2 rounded-2xl bg-white/95 dark:bg-[#120e24]/90 backdrop-blur-xl border border-theme-border dark:border-white/10 shadow-2xl pointer-events-auto">
                     <!-- Tier 1: Canvas Navigation Controls -->
                     <div class="flex items-center gap-1">
-                        <button type="button" onclick="resetGraphView()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer" title="Fit to Viewport">
+                        <button type="button" onclick="resetGraphView()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Fit to Viewport">
                             <i class="fa-solid fa-up-down-left-right text-xs"></i>
                         </button>
-                        <button type="button" onclick="zoomIn()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer" title="Zoom In">
+                        <button type="button" onclick="zoomIn()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Zoom In">
                             <i class="fa-solid fa-magnifying-glass-plus text-xs"></i>
                         </button>
-                        <button type="button" onclick="zoomOut()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer" title="Zoom Out">
+                        <button type="button" onclick="zoomOut()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Zoom Out">
                             <i class="fa-solid fa-magnifying-glass-minus text-xs"></i>
                         </button>
-                        <button type="button" onclick="resetGraphView()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer" title="Reset View">
+                        <button type="button" onclick="resetGraphView()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Reset View">
                             <i class="fa-solid fa-expand text-xs"></i>
                         </button>
-                        <div class="w-px h-4 bg-white/15 mx-0.5"></div>
-                        <button type="button" onclick="resetNetworkHighlight()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-white/10 transition cursor-pointer" title="Clear Selection">
+                        <div class="w-px h-4 bg-theme-border dark:bg-white/15 mx-0.5"></div>
+                        <button type="button" onclick="resetNetworkHighlight()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Clear Selection">
                             <i class="fa-solid fa-xmark text-xs"></i>
                         </button>
-                        <div class="w-px h-4 bg-white/15 mx-0.5"></div>
-                        <button id="btn-toggle-labels" type="button" onclick="toggleAllEdgeLabels()" class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-amber-400 hover:bg-white/10 transition cursor-pointer" title="Toggle Edge Labels">
+                        <div class="w-px h-4 bg-theme-border dark:bg-white/15 mx-0.5"></div>
+                        <button id="btn-toggle-labels" type="button" onclick="toggleAllEdgeLabels()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Toggle Edge Labels">
                             <i id="icon-toggle-labels" class="fa-regular fa-tag text-xs"></i>
                         </button>
                     </div>
 
                     <!-- Tier 2: Category Filter Pills -->
-                    <div class="flex items-center gap-1.5 pt-1 border-t border-white/10">
+                    <div class="flex items-center gap-1.5 pt-1 border-t border-theme-border dark:border-white/10">
                         <button type="button" onclick="setEntityFilter('ALL', this)" class="qlink-filter-pill px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer bg-amber-500 text-slate-950 shadow-xs">
                             All
                         </button>
-                        <button type="button" onclick="setEntityFilter('BANKS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer">
+                        <button type="button" onclick="setEntityFilter('BANKS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer">
                             Banks
                         </button>
-                        <button type="button" onclick="setEntityFilter('TARGETS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer">
+                        <button type="button" onclick="setEntityFilter('TARGETS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer">
                             Targets
                         </button>
-                        <button type="button" onclick="setEntityFilter('COMMS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer">
+                        <button type="button" onclick="setEntityFilter('COMMS', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer">
                             Comms
                         </button>
-                        <button type="button" onclick="setEntityFilter('FILES', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-white/10 transition cursor-pointer">
+                        <button type="button" onclick="setEntityFilter('FILES', this)" class="qlink-filter-pill px-2.5 py-1 rounded-lg text-xs font-medium text-theme-muted dark:text-slate-300 hover:text-theme-text dark:hover:text-white hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer">
                             Files
                         </button>
                     </div>
                 </div>
 
                 <!-- Floating Glassmorphic Bottom-Right Legend (Matching Reference Image) -->
-                <div class="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-4 px-4 py-2 rounded-full bg-[#120e24]/90 dark:bg-[#120e24]/90 backdrop-blur-xl border border-white/10 shadow-2xl text-xs font-medium text-slate-200 pointer-events-auto">
+                <div class="absolute bottom-6 right-6 z-20 hidden sm:flex items-center gap-4 px-4 py-2 rounded-full bg-white/95 dark:bg-[#120e24]/90 backdrop-blur-xl border border-theme-border dark:border-white/10 shadow-2xl text-xs font-medium text-theme-text dark:text-slate-200 pointer-events-auto">
                     <div class="flex items-center gap-1.5">
                         <span class="w-2.5 h-2.5 rounded-full bg-[#06b6d4] shadow-xs shadow-[#06b6d4]/50"></span>
                         <span>Bank</span>
@@ -1063,6 +1068,16 @@
             const pillX = cx - (pillW / 2);
 
             const filterId = "glow-" + String(n.id || "0").replace(/[^a-zA-Z0-9]/g, "");
+            const dark = isDarkMode();
+            const outerRingFill = dark ? "#0c0915" : "#FAF7FB";
+            const innerCircleFill = dark ? "#130f1e" : "#FFFFFF";
+            const badgeBorderStroke = dark ? "#0c0915" : "#FFFFFF";
+            const namePillBg = dark ? "rgba(12, 9, 21, 0.94)" : "rgba(255, 255, 255, 0.96)";
+            const namePillBorder = isTarget ? accentColor : (dark ? "rgba(255, 255, 255, 0.16)" : "#D8CBE0");
+            const nameTextFill = dark ? "#ffffff" : "#1B1221";
+            const subPillBg = dark ? "rgba(16, 12, 28, 0.94)" : "rgba(237, 231, 240, 0.96)";
+            const subPillBorder = dark ? "rgba(255, 255, 255, 0.2)" : "#D8CBE0";
+            const subTextFill = dark ? "rgba(255, 255, 255, 0.86)" : "#594961";
 
             const svg = `
             <svg xmlns="http://www.w3.org/2000/svg" width="240" height="210" viewBox="0 0 240 210" opacity="${opacity}">
@@ -1082,45 +1097,45 @@
 
                 ${isTarget ? `
                     <!-- Primary Audit Profile Outer Dashed Crown Ring -->
-                    <circle cx="${cx}" cy="${cy}" r="${crownR}" fill="#0c0915" fill-opacity="0.9" stroke="${accentColor}" stroke-width="1.8" stroke-dasharray="6 3" opacity="0.82" />
+                    <circle cx="${cx}" cy="${cy}" r="${crownR}" fill="${outerRingFill}" fill-opacity="0.9" stroke="${accentColor}" stroke-width="1.8" stroke-dasharray="6 3" opacity="0.82" />
                 ` : isExternal ? `
                     <!-- External Vault Entity Dashed Ring -->
-                    <circle cx="${cx}" cy="${cy}" r="39" fill="#0c0915" fill-opacity="0.85" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="4 3" opacity="0.85" />
+                    <circle cx="${cx}" cy="${cy}" r="39" fill="${outerRingFill}" fill-opacity="0.85" stroke="#8b5cf6" stroke-width="1.6" stroke-dasharray="4 3" opacity="0.85" />
                 ` : ''}
 
-                <!-- Outer Concentric Aura Ring (Opaque dark fill masks inner edge line shaft) -->
-                <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="#0c0915" fill-opacity="0.92" stroke="${isExternal ? '#8b5cf6' : outerRingStroke}" stroke-width="${isTarget ? '1.8' : '1.5'}" opacity="${outerRingOpacity}" />
+                <!-- Outer Concentric Aura Ring (Opaque fill masks inner edge line shaft) -->
+                <circle cx="${cx}" cy="${cy}" r="${outerR}" fill="${outerRingFill}" fill-opacity="0.92" stroke="${isExternal ? '#8b5cf6' : outerRingStroke}" stroke-width="${isTarget ? '1.8' : '1.5'}" opacity="${outerRingOpacity}" />
 
-                <!-- Center Node Circle (Dark Background + Colored Stroke Ring) -->
-                <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="#130f1e" stroke="${accentColor}" stroke-width="${strokeWidth}" />
+                <!-- Center Node Circle (Surface Background + Colored Stroke Ring) -->
+                <circle cx="${cx}" cy="${cy}" r="${innerR}" fill="${innerCircleFill}" stroke="${accentColor}" stroke-width="${strokeWidth}" />
 
                 <!-- Centered Vector Icon -->
                 ${iconSvg}
 
                 ${isTarget ? `
                     <!-- Primary Audit Profile Top Badge -->
-                    <rect x="${cx - 32}" y="${cy - crownR - 9}" width="64" height="16" rx="8" fill="${accentColor}" stroke="#0c0915" stroke-width="1.2" />
+                    <rect x="${cx - 32}" y="${cy - crownR - 9}" width="64" height="16" rx="8" fill="${accentColor}" stroke="${badgeBorderStroke}" stroke-width="1.2" />
                     <text x="${cx}" y="${cy - crownR + 2}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8.5" font-weight="800" letter-spacing="0.6" fill="#0c0915">PROFILE</text>
                 ` : isExternal ? `
                     <!-- External Vault Top Badge -->
-                    <rect x="${cx - 28}" y="${cy - 48}" width="56" height="15" rx="7.5" fill="#8b5cf6" stroke="#0c0915" stroke-width="1.1" />
+                    <rect x="${cx - 28}" y="${cy - 48}" width="56" height="15" rx="7.5" fill="#8b5cf6" stroke="${badgeBorderStroke}" stroke-width="1.1" />
                     <text x="${cx}" y="${cy - 38}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8" font-weight="800" letter-spacing="0.5" fill="#ffffff">VAULT</text>
                 ` : ''}
 
                 <!-- Opaque Name Backdrop Pill (Prevents edges from cutting through entity text) -->
-                <rect x="${nameBoxX}" y="${nameBoxY}" width="${nameBoxW}" height="${nameBoxH}" rx="7" fill="rgba(12, 9, 21, 0.94)" stroke="${isTarget ? accentColor : 'rgba(255, 255, 255, 0.16)'}" stroke-opacity="${isTarget ? '0.55' : '1'}" stroke-width="${isTarget ? '1.1' : '0.8'}" />
+                <rect x="${nameBoxX}" y="${nameBoxY}" width="${nameBoxW}" height="${nameBoxH}" rx="7" fill="${namePillBg}" stroke="${namePillBorder}" stroke-opacity="${isTarget ? '0.65' : '1'}" stroke-width="${isTarget ? '1.1' : '0.8'}" />
 
                 <!-- Primary Entity Label -->
                 ${line2 ? `
-                    <text x="${cx}" y="${nameBaseY - 2}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line1)}</text>
-                    <text x="${cx}" y="${nameBaseY + 13}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line2)}</text>
+                    <text x="${cx}" y="${nameBaseY - 2}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="${nameTextFill}">${escapeXml(line1)}</text>
+                    <text x="${cx}" y="${nameBaseY + 13}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize - 1}" font-weight="${isTarget ? '800' : '700'}" fill="${nameTextFill}">${escapeXml(line2)}</text>
                 ` : `
-                    <text x="${cx}" y="${nameBaseY + 1}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize}" font-weight="${isTarget ? '800' : '700'}" fill="#ffffff">${escapeXml(line1)}</text>
+                    <text x="${cx}" y="${nameBaseY + 1}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize}" font-weight="${isTarget ? '800' : '700'}" fill="${nameTextFill}">${escapeXml(line1)}</text>
                 `}
 
                 <!-- Translucent Metadata Sub-label Pill -->
-                <rect x="${pillX}" y="${pillY}" width="${pillW}" height="18" rx="9" fill="rgba(16, 12, 28, 0.94)" stroke="rgba(255, 255, 255, 0.2)" stroke-width="0.8" />
-                <text x="${cx}" y="${pillY + 12.5}" text-anchor="middle" font-family="'JetBrains Mono', monospace, -apple-system, sans-serif" font-size="9.2" font-weight="500" fill="rgba(255, 255, 255, 0.86)">${escapeXml(pillText)}</text>
+                <rect x="${pillX}" y="${pillY}" width="${pillW}" height="18" rx="9" fill="${subPillBg}" stroke="${subPillBorder}" stroke-width="0.8" />
+                <text x="${cx}" y="${pillY + 12.5}" text-anchor="middle" font-family="'JetBrains Mono', monospace, -apple-system, sans-serif" font-size="9.2" font-weight="500" fill="${subTextFill}">${escapeXml(pillText)}</text>
             </svg>`.trim();
 
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -1173,6 +1188,7 @@
         // Format edges — straight arrows (smooth: false), labels hidden by default for clean map.
         // Server-side merge_graph_edges() already consolidates parallel/bidirectional pairs.
         function formatEdges(edges) {
+            const dark = isDarkMode();
             return edges.map((e) => {
                 const isRapidLayering = Boolean(e.is_rapid_layering || (e.relation_type === "RAPID_LAYERING") || (e.weight && Number(e.weight) >= 10000000));
                 const isExternal = Boolean(e.is_external);
@@ -1182,36 +1198,36 @@
                 let highlightColor = "#34d399";
                 let edgeDashes = false;
                 let edgeWidth = 1.8;
-                let fontColor = "#94a3b8";
-                let fontBg = "rgba(12, 9, 21, 0.9)";
-                let fontStroke = "rgba(255, 255, 255, 0.12)";
+                let fontColor = dark ? "#94a3b8" : "#334155";
+                let fontBg = dark ? "rgba(12, 9, 21, 0.9)" : "rgba(255, 255, 255, 0.94)";
+                let fontStroke = dark ? "rgba(255, 255, 255, 0.12)" : "#D8CBE0";
 
                 if (isExternal) {
                     edgeColor = "#8b5cf6"; // Violet for cross-audit Global Vault matches
                     highlightColor = "#a78bfa";
                     edgeDashes = [5, 4];
                     edgeWidth = 2.2;
-                    fontColor = "#c4b5fd";
-                    fontBg = "rgba(139, 92, 246, 0.18)";
+                    fontColor = dark ? "#c4b5fd" : "#6d28d9";
+                    fontBg = dark ? "rgba(139, 92, 246, 0.18)" : "rgba(245, 243, 255, 0.96)";
                     fontStroke = "#8b5cf6";
                 } else if (isRapidLayering) {
                     edgeColor = "#ef4444"; // Glowing Red for Rapid Layering
                     highlightColor = "#f43f5e";
                     edgeDashes = [6, 4];
                     edgeWidth = 2.8;
-                    fontColor = "#fca5a5";
-                    fontBg = "rgba(239, 68, 68, 0.22)";
+                    fontColor = dark ? "#fca5a5" : "#b91c1c";
+                    fontBg = dark ? "rgba(239, 68, 68, 0.22)" : "rgba(254, 242, 242, 0.96)";
                     fontStroke = "#ef4444";
                 } else if (relType.includes("SUSPECT") || relType.includes("NEXUS") || relType.includes("TARGET") || (e.weight && Number(e.weight) > 500000)) {
                     edgeColor = "#f97316"; // Orange for suspect/nexus relations
                     highlightColor = "#fb923c";
                     edgeWidth = 2.0;
-                    fontColor = "#fdba74";
+                    fontColor = dark ? "#fdba74" : "#c2410c";
                 } else if (relType.includes("COMM") || relType.includes("CHAT") || relType.includes("MAIL") || relType.includes("VOICE") || relType.includes("AUDIO")) {
                     edgeColor = "#06b6d4"; // Cyan for comms/voice
                     highlightColor = "#22d3ee";
                     edgeWidth = 1.8;
-                    fontColor = "#67e8f9";
+                    fontColor = dark ? "#67e8f9" : "#0e7490";
                 }
 
                 // Clean label formatting: convert SCREAMING_SNAKE_CASE to Title Case
@@ -1308,15 +1324,15 @@
                     enabled: true,
                     solver: "forceAtlas2Based",
                     forceAtlas2Based: {
-                        gravitationalConstant: -135,
-                        centralGravity: 0.012,
-                        springLength: 185,
-                        springConstant: 0.055,
-                        damping: 0.55,
-                        avoidOverlap: 0.75
+                        gravitationalConstant: -260,
+                        centralGravity: 0.01,
+                        springLength: 230,
+                        springConstant: 0.035,
+                        damping: 0.6,
+                        avoidOverlap: 1.0
                     },
                     stabilization: {
-                        iterations: 180,
+                        iterations: 220,
                         updateInterval: 25
                     }
                 },
@@ -1805,10 +1821,10 @@
             document.querySelectorAll(".qlink-filter-pill").forEach(el => {
                 if (el.innerText.trim().toUpperCase() === "ALL") {
                     el.classList.add("bg-amber-500", "text-slate-950", "font-bold");
-                    el.classList.remove("text-slate-300");
+                    el.classList.remove("text-theme-muted", "dark:text-slate-300", "text-slate-300");
                 } else {
                     el.classList.remove("bg-amber-500", "text-slate-950", "font-bold");
-                    el.classList.add("text-slate-300");
+                    el.classList.add("text-theme-muted", "dark:text-slate-300");
                 }
             });
 
@@ -2497,12 +2513,12 @@
         function setEntityFilter(type, btnElement) {
             document.querySelectorAll(".qlink-filter-pill, .filter-chip").forEach(el => {
                 el.classList.remove("bg-amber-500", "text-slate-950", "font-bold");
-                el.classList.add("text-slate-300");
+                el.classList.add("text-theme-muted", "dark:text-slate-300");
             });
             const targetBtn = btnElement || (window.event ? window.event.target.closest("button") : null);
             if (targetBtn) {
                 targetBtn.classList.add("bg-amber-500", "text-slate-950", "font-bold");
-                targetBtn.classList.remove("text-slate-300");
+                targetBtn.classList.remove("text-theme-muted", "dark:text-slate-300", "text-slate-300");
             }
 
             if (!graphNodes || !graphEdges) return;
@@ -2897,9 +2913,13 @@
             }
         }
 
-        // Re-render graph when theme changes to update node/edge colors
+        // Re-render graph when theme changes to update node/edge colors while preserving node coordinates
         function refreshGraphTheme() {
             if (!networkInstance || !graphNodes || !graphEdges) return;
+
+            const currentPositions = networkInstance.getPositions();
+            const currentViewPos = networkInstance.getViewPosition();
+            const currentScale = networkInstance.getScale();
 
             // Collect raw data from current datasets
             const rawNodes = [];
@@ -2907,15 +2927,24 @@
             const rawEdges = [];
             graphEdges.forEach(e => { if (e.raw) rawEdges.push(e.raw); });
 
-            // Re-format with new theme colors
-            const formattedNodes = formatNodes(rawNodes);
+            // Re-format with new theme colors and preserve exact (x, y) coordinates so nodes never collapse
+            const formattedNodes = formatNodes(rawNodes).map(fn => {
+                const pos = currentPositions[fn.id];
+                if (pos && typeof pos.x === "number" && typeof pos.y === "number") {
+                    return { ...fn, x: pos.x, y: pos.y };
+                }
+                return fn;
+            });
             const formattedEdges = formatEdges(rawEdges);
 
-            graphNodes.clear();
-            graphEdges.clear();
-            graphNodes.add(formattedNodes);
-            graphEdges.add(formattedEdges);
+            graphNodes.update(formattedNodes);
+            graphEdges.update(formattedEdges);
             applyCircularNodeBorders();
+            networkInstance.moveTo({
+                position: currentViewPos,
+                scale: currentScale,
+                animation: false
+            });
         }
 
         // Initialize on DOM ready
