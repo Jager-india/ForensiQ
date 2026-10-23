@@ -2838,3 +2838,95 @@ class ActiveAuditHomepageTests(TestCase):
         self.assertIn('data-is-used="true"', html)
         self.assertIn("READY", html)
         self.assertIn("Source: Q-Bank (Data ready)", html)
+
+
+class CoreAddProfileKeywordApiTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="auditor_kw", password="password")
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        self.prof1 = InvestigationProfile.objects.create(
+            full_name="Venkatesan C",
+            department="Procurement",
+            keywords=["existing_kw"],
+        )
+        self.prof2 = InvestigationProfile.objects.create(
+            full_name="Maharajan S",
+            department="Operations",
+            keywords=[],
+        )
+
+    def test_single_keyword_promotion_success(self):
+        url = reverse("api_add_profile_keyword")
+        res = self.client.post(
+            url,
+            data=json.dumps({"profile_id": str(self.prof1.id), "keyword": "Sri Mirra Engineers"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["keyword"], "Sri Mirra Engineers")
+        self.prof1.refresh_from_db()
+        self.assertIn("Sri Mirra Engineers", self.prof1.keywords)
+        self.assertIn("existing_kw", self.prof1.keywords)
+
+    def test_single_keyword_by_profile_name(self):
+        url = reverse("api_add_profile_keyword")
+        res = self.client.post(
+            url,
+            data=json.dumps({"profile_id": "Maharajan S", "keyword": "Balamurugan"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.prof2.refresh_from_db()
+        self.assertIn("Balamurugan", self.prof2.keywords)
+
+    def test_batch_keyword_promotion_success(self):
+        url = reverse("api_add_profile_keyword")
+        items = [
+            {"profile_id": str(self.prof1.id), "keyword": "ARR Enterprises"},
+            {"profile_id": str(self.prof1.id), "keyword": "Pasupathy"},
+            {"profile_id": str(self.prof2.id), "keyword": "Senthamilkannan"},
+        ]
+        res = self.client.post(
+            url,
+            data=json.dumps({"items": items}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["total_added"], 3)
+        self.prof1.refresh_from_db()
+        self.prof2.refresh_from_db()
+        self.assertIn("ARR Enterprises", self.prof1.keywords)
+        self.assertIn("Pasupathy", self.prof1.keywords)
+        self.assertIn("Senthamilkannan", self.prof2.keywords)
+
+    def test_missing_params_error(self):
+        url = reverse("api_add_profile_keyword")
+        res = self.client.post(
+            url,
+            data=json.dumps({"keyword": "test"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_nonexistent_profile_error(self):
+        import uuid
+
+        url = reverse("api_add_profile_keyword")
+        res = self.client.post(
+            url,
+            data=json.dumps({"profile_id": str(uuid.uuid4()), "keyword": "test"}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 404)

@@ -150,6 +150,95 @@ def seed_verify():
     ]
 
     for d in docs_data:
+        raw_meta = {
+            "software": d["software"],
+            "author": d["author"],
+            "created": str(d["meta_created"]),
+            "modified": str(d["meta_modified"]),
+        }
+        if d["filename"] == "Apex_Logistics_Master_Agreement_2026.pdf":
+            raw_meta["ner_entities"] = [
+                {
+                    "name": "Apex Logistics Pvt Ltd",
+                    "entity_type": "COMPANY",
+                    "role": "Contracting Partner",
+                    "count": 4,
+                    "confidence": 0.95,
+                },
+                {
+                    "name": "Marcus Vance",
+                    "entity_type": "PERSON",
+                    "role": "Authorized Signatory",
+                    "count": 2,
+                    "confidence": 0.92,
+                },
+                {
+                    "name": "C. Venkatesan",
+                    "entity_type": "PERSON",
+                    "role": "Managing Partner",
+                    "count": 3,
+                    "confidence": 0.94,
+                },
+            ]
+        elif d["filename"] == "Valens_Trust_Escrow_Wire_Instruction.pdf":
+            raw_meta["ner_entities"] = [
+                {
+                    "name": "Valens Trust Bank",
+                    "entity_type": "COMPANY",
+                    "role": "Escrow Agent",
+                    "count": 3,
+                    "confidence": 0.96,
+                },
+                {
+                    "name": "S. Maharajan",
+                    "entity_type": "PERSON",
+                    "role": "Beneficiary",
+                    "count": 2,
+                    "confidence": 0.91,
+                },
+                {
+                    "name": "Silviya Remigius",
+                    "entity_type": "PERSON",
+                    "role": "Nominee Account Holder",
+                    "count": 2,
+                    "confidence": 0.89,
+                },
+            ]
+        elif d["filename"] == "Titan_Consulting_Fee_Addendum_Scanned.png":
+            raw_meta["ner_entities"] = [
+                {
+                    "name": "Titan Consulting LLC",
+                    "entity_type": "COMPANY",
+                    "role": "Sub-Contractor",
+                    "count": 2,
+                    "confidence": 0.90,
+                },
+                {
+                    "name": "Dhanasekaran",
+                    "entity_type": "PERSON",
+                    "role": "Signatory",
+                    "count": 1,
+                    "confidence": 0.93,
+                },
+            ]
+        elif d["filename"] == "Q2_Logistics_Tender_Scoring_Matrix.xlsx":
+            raw_meta["ner_entities"] = [
+                {
+                    "name": "Arun Verma",
+                    "entity_type": "PERSON",
+                    "role": "Committee Reviewer",
+                    "count": 2,
+                    "confidence": 0.88,
+                },
+                {
+                    "name": "Indhumathi",
+                    "entity_type": "PERSON",
+                    "role": "Vendor Evaluator",
+                    "count": 1,
+                    "confidence": 0.87,
+                },
+            ]
+
         VerifiedDocument.objects.update_or_create(
             case=case1,
             filename=d["filename"],
@@ -174,12 +263,7 @@ def seed_verify():
                 "has_structural_anomaly": d["incremental"] > 0,
                 "anomalies": d["anomalies"],
                 "summary": d["summary"],
-                "raw_metadata": {
-                    "software": d["software"],
-                    "author": d["author"],
-                    "created": str(d["meta_created"]),
-                    "modified": str(d["meta_modified"]),
-                },
+                "raw_metadata": raw_meta,
             },
         )
 

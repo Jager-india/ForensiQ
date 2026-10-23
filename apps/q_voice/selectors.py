@@ -268,6 +268,55 @@ def get_recording_by_id(recording_id: str | uuid.UUID) -> AudioRecording | None:
         return None
 
 
+def get_latest_completed_recording() -> AudioRecording | None:
+    """
+    Returns the most recent completed recording.
+    """
+    return (
+        AudioRecording.objects.filter(
+            transcription_status=AudioRecording.TranscriptionStatus.COMPLETED
+        )
+        .prefetch_related("segments")
+        .first()
+    )
+
+
+def get_metrics_for_recording(recording: AudioRecording) -> dict[str, Any]:
+    """
+    Calculates HUD metrics (identities, financial terms, suspicious parameters) for an active recording.
+    """
+    timeline = get_combined_timeline_for_recording(recording)
+    identities_cnt = 0
+    financial_cnt = 0
+    suspicious_cnt = 0
+
+    for item in timeline:
+        for det in item.get("detections_detail", []):
+            t = det.get("type", "")
+            if t == "identity":
+                identities_cnt += 1
+            elif t == "financial":
+                financial_cnt += 1
+            elif t == "suspicious":
+                suspicious_cnt += 1
+
+    mins, secs = divmod(recording.duration_seconds, 60)
+    hrs, mins = divmod(mins, 60)
+    if hrs > 0:
+        duration_fmt = f"{hrs:02d}h {mins:02d}m {secs:02d}s"
+    else:
+        duration_fmt = f"{mins:02d}m {secs:02d}s"
+
+    return {
+        "identities_count": identities_cnt,
+        "financial_count": financial_cnt,
+        "suspicious_count": suspicious_cnt,
+        "total_segments": len(timeline),
+        "duration_formatted": duration_fmt,
+        "risk_score": recording.risk_score,
+    }
+
+
 def get_combined_timeline_for_recording(recording: AudioRecording) -> list[dict[str, Any]]:
     """
     Builds the standardized combined timeline format for the active recording.

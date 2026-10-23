@@ -104,6 +104,18 @@
         </div>
     </div>
 
+    <!-- Suggested Keywords & Discovered Entities -->
+    {% if suggested_entities %}
+    <script>
+        window.verifySuggestedEntitiesData = {{ suggested_entities_json|safe }};
+        window.verifyAnalyzedProfilesData = {{ analyzed_profiles_json|safe }};
+    </script>
+    <c-suggested_entities
+        title="Suggested Document Entities & Legal Parties"
+        subtitle="Candidate deed partners, corporate signatories, kinship relatives, and proper nouns detected in verified documents. Approve to promote into profile investigation keywords."
+        source="verify" />
+    {% endif %}
+
     <!-- Filter Toolbar -->
     <div class="mb-4 p-4 rounded-xl bg-theme-surface border border-theme-border flex flex-wrap items-center justify-between gap-3">
         <div class="flex flex-wrap items-center gap-3 flex-1">

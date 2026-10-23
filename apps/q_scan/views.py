@@ -199,6 +199,35 @@ def device_detail_view(request: HttpRequest, device_id: str) -> HttpResponse:
         custodian_name=device.custodian_name, request=request
     )
 
+    from core.audits import get_active_audit
+    from core.models import InvestigationProfile
+
+    from .services import extract_suggested_entities_for_scan
+
+    active_audit = get_active_audit(request)
+    if active_audit:
+        profiles_qs = active_audit.profiles.filter(status="ACTIVE")
+    else:
+        profiles_qs = InvestigationProfile.objects.filter(status="ACTIVE")
+
+    analyzed_profiles = [
+        {
+            "id": str(p.id),
+            "name": p.full_name,
+            "department": p.department or "Auditee",
+            "keywords_count": len(p.keywords or []),
+        }
+        for p in profiles_qs
+    ]
+
+    recent_hits = list(device.hits.all()[:100])
+    suggested_entities = extract_suggested_entities_for_scan(
+        hits=recent_hits,
+        custodian_name=device.custodian_name,
+        analyzed_profiles=analyzed_profiles,
+        existing_keywords=active_profile_keywords,
+    )
+
     return render(
         request,
         "q_scan/device_detail.html",
@@ -207,6 +236,10 @@ def device_detail_view(request: HttpRequest, device_id: str) -> HttpResponse:
             "total_hits": total_hits,
             "custodian_devices": custodian_devices,
             "active_profile_keywords": active_profile_keywords,
+            "suggested_entities": suggested_entities,
+            "suggested_entities_json": json.dumps(suggested_entities),
+            "analyzed_profiles": analyzed_profiles,
+            "analyzed_profiles_json": json.dumps(analyzed_profiles),
         },
     )
 

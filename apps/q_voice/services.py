@@ -394,3 +394,42 @@ def delete_custodian_recordings(custodian_name: str) -> int:
         qs.delete()
         logger.info(f"Deleted {count} audio recording(s) for custodian '{custodian_name}'")
     return count
+
+
+def extract_suggested_entities_for_voice(
+    timeline: list[dict[str, Any]],
+    custodian_name: str = "",
+    analyzed_profiles: list[dict[str, Any]] | None = None,
+    existing_keywords: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Extracts suggested counterparties and entities from Q-Voice transcript timeline segments,
+    defaulting to the auditee profile matching the audio recording's custodian.
+    """
+    from core.entity_extractor import extract_entities_from_transcript_segments
+
+    default_pid = ""
+    default_pname = custodian_name
+    if analyzed_profiles:
+        matched = next(
+            (
+                p
+                for p in analyzed_profiles
+                if p["name"].strip().lower() == custodian_name.strip().lower()
+            ),
+            None,
+        )
+        if matched:
+            default_pid = str(matched["id"])
+            default_pname = matched["name"]
+        elif analyzed_profiles:
+            default_pid = str(analyzed_profiles[0]["id"])
+            default_pname = analyzed_profiles[0]["name"]
+
+    return extract_entities_from_transcript_segments(
+        segments=timeline,
+        custodian_name=custodian_name,
+        default_profile_id=default_pid,
+        default_profile_name=default_pname,
+        existing_keywords=existing_keywords,
+    )

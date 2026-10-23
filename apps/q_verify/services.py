@@ -460,3 +460,49 @@ def perform_document_search(
         doc.save(update_fields=["matched_keywords", "raw_metadata"])
 
     return doc
+
+
+def extract_suggested_entities_for_verify(
+    case_or_documents: Any,
+    custodian_name: str = "",
+    analyzed_profiles: list[dict[str, Any]] | None = None,
+    existing_keywords: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Extracts candidate legal partners, counterparties, and proper nouns from Q-Verify case documents,
+    defaulting to the auditee profile matching the verification case's custodian.
+    """
+    from core.entity_extractor import extract_entities_from_case_documents
+
+    default_pid = ""
+    default_pname = custodian_name
+    if analyzed_profiles:
+        matched = next(
+            (
+                p
+                for p in analyzed_profiles
+                if p["name"].strip().lower() == custodian_name.strip().lower()
+            ),
+            None,
+        )
+        if matched:
+            default_pid = str(matched["id"])
+            default_pname = matched["name"]
+        elif analyzed_profiles:
+            default_pid = str(analyzed_profiles[0]["id"])
+            default_pname = analyzed_profiles[0]["name"]
+
+    if hasattr(case_or_documents, "documents"):
+        docs = list(case_or_documents.documents.all())
+    elif isinstance(case_or_documents, (list, tuple)):
+        docs = list(case_or_documents)
+    else:
+        docs = []
+
+    return extract_entities_from_case_documents(
+        documents=docs,
+        custodian_name=custodian_name,
+        default_profile_id=default_pid,
+        default_profile_name=default_pname,
+        existing_keywords=existing_keywords,
+    )

@@ -120,6 +120,38 @@ def case_detail_view(request: HttpRequest, case_id: str) -> HttpResponse:
 
     custodian_cases = get_custodian_verification_cases(case.custodian_name)
 
+    import json
+
+    from core.audits import get_active_audit
+    from core.models import InvestigationProfile
+    from core.profiles import get_profile_keywords
+
+    from .services import extract_suggested_entities_for_verify
+
+    active_audit = get_active_audit(request)
+    if active_audit:
+        profiles_qs = active_audit.profiles.filter(status="ACTIVE")
+    else:
+        profiles_qs = InvestigationProfile.objects.filter(status="ACTIVE")
+
+    analyzed_profiles = [
+        {
+            "id": str(p.id),
+            "name": p.full_name,
+            "department": p.department or "Auditee",
+            "keywords_count": len(p.keywords or []),
+        }
+        for p in profiles_qs
+    ]
+
+    profile_keywords = get_profile_keywords(custodian_name=case.custodian_name, request=request)
+    suggested_entities = extract_suggested_entities_for_verify(
+        case_or_documents=case,
+        custodian_name=case.custodian_name,
+        analyzed_profiles=analyzed_profiles,
+        existing_keywords=profile_keywords,
+    )
+
     return render(
         request,
         "q_verify/case_detail.html",
@@ -128,6 +160,10 @@ def case_detail_view(request: HttpRequest, case_id: str) -> HttpResponse:
             "summary": summary,
             "chart_html": chart_html,
             "custodian_cases": custodian_cases,
+            "suggested_entities": suggested_entities,
+            "suggested_entities_json": json.dumps(suggested_entities),
+            "analyzed_profiles": analyzed_profiles,
+            "analyzed_profiles_json": json.dumps(analyzed_profiles),
         },
     )
 

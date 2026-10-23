@@ -511,3 +511,42 @@ def ingest_document_for_scan(
 
     logger.info("Successfully ingested schedule document '{}' with {} hits", filename, len(batch))
     return device
+
+
+def extract_suggested_entities_for_scan(
+    hits: list[Any] | Any,
+    custodian_name: str = "",
+    analyzed_profiles: list[dict[str, Any]] | None = None,
+    existing_keywords: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Extracts candidate counterparties and entities from Q-Scan file evidence hits,
+    defaulting to the auditee profile matching the scanned device's custodian.
+    """
+    from core.entity_extractor import extract_entities_from_scan_hits
+
+    default_pid = ""
+    default_pname = custodian_name
+    if analyzed_profiles:
+        matched = next(
+            (
+                p
+                for p in analyzed_profiles
+                if p["name"].strip().lower() == custodian_name.strip().lower()
+            ),
+            None,
+        )
+        if matched:
+            default_pid = str(matched["id"])
+            default_pname = matched["name"]
+        elif analyzed_profiles:
+            default_pid = str(analyzed_profiles[0]["id"])
+            default_pname = analyzed_profiles[0]["name"]
+
+    return extract_entities_from_scan_hits(
+        hits=hits,
+        custodian_name=custodian_name,
+        default_profile_id=default_pid,
+        default_profile_name=default_pname,
+        existing_keywords=existing_keywords,
+    )

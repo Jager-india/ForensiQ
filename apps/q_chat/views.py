@@ -127,6 +127,37 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
     profile_keywords = get_profile_keywords(custodian_name=custodian_name, request=request)
     profile_keywords_str = ", ".join(profile_keywords) if profile_keywords else ""
 
+    import json
+
+    from core.audits import get_active_audit
+    from core.models import InvestigationProfile
+
+    from .services import extract_suggested_entities_for_chat
+
+    active_audit = get_active_audit(request)
+    if active_audit:
+        profiles_qs = active_audit.profiles.filter(status="ACTIVE")
+    else:
+        profiles_qs = InvestigationProfile.objects.filter(status="ACTIVE")
+
+    analyzed_profiles = [
+        {
+            "id": str(p.id),
+            "name": p.full_name,
+            "department": p.department or "Auditee",
+            "keywords_count": len(p.keywords or []),
+        }
+        for p in profiles_qs
+    ]
+
+    suggested_entities = extract_suggested_entities_for_chat(
+        messages=messages_data.get("data", []) or messages_data.get("messages", []),
+        participants=participants,
+        custodian_name=custodian_name,
+        analyzed_profiles=analyzed_profiles,
+        existing_keywords=profile_keywords,
+    )
+
     context = {
         "custodian": custodian_info,
         "custodian_name": custodian_name,
@@ -135,6 +166,10 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
         "selected_channel_id": str(selected_channel.id) if selected_channel else "",
         "profile_keywords": profile_keywords,
         "profile_keywords_str": profile_keywords_str,
+        "suggested_entities": suggested_entities,
+        "suggested_entities_json": json.dumps(suggested_entities),
+        "analyzed_profiles": analyzed_profiles,
+        "analyzed_profiles_json": json.dumps(analyzed_profiles),
         "view_metrics": {
             "total_messages": view_total_messages,
             "flagged_messages": view_flagged_messages,

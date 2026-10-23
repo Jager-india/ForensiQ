@@ -364,7 +364,11 @@ class QVoiceServicesAndSelectorsTests(TestCase):
 
 class QVoiceViewsTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="voice_views_user", password="password")
         self.client = Client()
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -487,7 +491,11 @@ Speaker 2: Understood, concealing the invoice margin now
 
 class QVoiceCustodianProfileTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="voice_cust_user", password="password")
         self.client = Client()
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -613,6 +621,14 @@ class QVoiceCustodianProfileTests(TestCase):
         # Scoped metrics
         scoped_metrics = get_metrics_for_custodian("Rajesh Sharma", recording_id=self.rec2.id)
         self.assertEqual(scoped_metrics["total_segments"], 1)
+
+    def test_custodian_detail_suggested_entities_in_context(self):
+        res = self.client.get(
+            reverse("q_voice:custodian_detail", kwargs={"custodian_name": "Rajesh Sharma"})
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("suggested_entities", res.context)
+        self.assertIn("analyzed_profiles", res.context)
 
     def test_custodian_detail_view(self):
         # Combined view

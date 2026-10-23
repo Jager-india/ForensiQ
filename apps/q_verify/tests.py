@@ -31,7 +31,11 @@ from .services import create_verification_case, ingest_and_verify_document
 
 class QVerifyUnitTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="verify_unit_user", password="password")
         self.client = Client()
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -513,9 +517,17 @@ class QVerifyUnitTests(TestCase):
 
 class DocumentSearchTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
         from core.models import InvestigationProfile
 
         from .models import VerificationCase, VerifiedDocument
+
+        self.user = User.objects.create_user(username="doc_search_user", password="password")
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
 
         self.profile = InvestigationProfile.objects.create(
             full_name="Test Target", email="test@target.com", keywords=["Confidential", "Secret"]
@@ -558,9 +570,12 @@ class DocumentSearchTests(TestCase):
     def test_document_search_api_view(self):
         import json
 
+        from django.contrib.auth.models import User
         from django.test import Client
 
+        u = User.objects.create_user(username="search_user_doc", password="password")
         c = Client()
+        c.force_login(u)
         session = c.session
         session["portal_authenticated"] = True
         session.save()
@@ -814,6 +829,11 @@ class DocumentSearchTests(TestCase):
             self.assertIn("Sri Mirra Engineers", profile.keywords)
 
     def test_document_detail_and_search_api_views_ner(self):
+        from django.contrib.auth.models import User
+
+        if not hasattr(self, "user"):
+            self.user = User.objects.create_user(username="ner_search_user", password="password")
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -862,3 +882,14 @@ class DocumentSearchTests(TestCase):
         data_search = resp_search.json()
         self.assertIn("ner_entities", data_search)
         self.assertEqual(data_search["ner_entities"][0]["name"], "Dhanasekaran")
+
+    def test_case_detail_suggested_entities_in_context(self):
+        case = create_verification_case(
+            case_ref="CASE-ENT-001",
+            case_title="Entity Verification Audit",
+            custodian_name="Venkat",
+        )
+        res = self.client.get(reverse("q_verify:case_detail", kwargs={"case_id": str(case.id)}))
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("suggested_entities", res.context)
+        self.assertIn("analyzed_profiles", res.context)

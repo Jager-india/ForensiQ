@@ -4,7 +4,7 @@ Business logic orchestrating chat ingestion, thread reconstruction, and risk cla
 """
 
 import uuid
-from typing import BinaryIO, TextIO
+from typing import Any, BinaryIO, TextIO
 
 from django.db import transaction
 from django.db.models import Q
@@ -160,3 +160,44 @@ def delete_custodian_channels(custodian_name: str) -> int:
     qs.delete()
     logger.info(f"Deleted {count} chat channels for custodian '{custodian_name}'")
     return count
+
+
+def extract_suggested_entities_for_chat(
+    messages: list[dict[str, Any]],
+    participants: list[dict[str, Any]] | None = None,
+    custodian_name: str = "",
+    analyzed_profiles: list[dict[str, Any]] | None = None,
+    existing_keywords: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Extracts candidate counterparties and mentioned entities from Q-Chat messages and participants,
+    defaulting to the auditee profile matching the chat's custodian.
+    """
+    from core.entity_extractor import extract_entities_from_chat_messages
+
+    default_pid = ""
+    default_pname = custodian_name
+    if analyzed_profiles:
+        matched = next(
+            (
+                p
+                for p in analyzed_profiles
+                if p["name"].strip().lower() == custodian_name.strip().lower()
+            ),
+            None,
+        )
+        if matched:
+            default_pid = str(matched["id"])
+            default_pname = matched["name"]
+        elif analyzed_profiles:
+            default_pid = str(analyzed_profiles[0]["id"])
+            default_pname = analyzed_profiles[0]["name"]
+
+    return extract_entities_from_chat_messages(
+        messages=messages,
+        participants=participants,
+        custodian_name=custodian_name,
+        default_profile_id=default_pid,
+        default_profile_name=default_pname,
+        existing_keywords=existing_keywords,
+    )

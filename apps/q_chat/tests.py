@@ -23,6 +23,14 @@ from .services import ingest_chat_export_file
 
 class QChatForensicTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="chat_test_user", password="password")
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
         self.raw_whatsapp = (
             "24/04/2024, 10:15 - Arun Kumar: Good morning team, please check the quote for tender L1.\n"
             "24/04/2024, 10:16 - Rajesh M: Received. Can we discuss the commission cut off the record?\n"
@@ -392,3 +400,11 @@ class QChatForensicTests(TestCase):
         self.assertIn("?q=cash", content)
         self.assertIn("Hit:", content)
         self.assertIn("Profile Keyword Registry", content)
+
+    def test_custodian_detail_suggested_entities_in_context(self):
+        res = self.client.get(
+            reverse("q_chat:custodian_detail", kwargs={"custodian_name": "Arun Kumar"})
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("suggested_entities", res.context)
+        self.assertIn("analyzed_profiles", res.context)

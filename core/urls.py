@@ -34,6 +34,11 @@ urlpatterns = [
     ),
     path("profiles/active/", views.set_active_profile_view, name="set_active_profile"),
     path("api/profiles/", views.profile_list_api_view, name="api_profiles"),
+    path(
+        "api/profiles/add-keyword/",
+        views.add_profile_keyword_api_view,
+        name="api_add_profile_keyword",
+    ),
     path("audits/create/", views.create_audit_view, name="create_audit"),
     path(
         "audits/<uuid:audit_id>/map-profiles/",

@@ -1,0 +1,326 @@
+<c-vars
+    title="Suggested Keywords & Discovered Entities"
+    subtitle="Candidate persons, partners, kinship relatives, and corporate entities discovered in forensic evidence. Approve to promote into profile investigation keywords."
+    source="general"
+/>
+
+<script>
+function suggestedEntitiesComponent(sourceName) {
+    return {
+        isExpanded: true,
+        filter: 'all',
+        dismissed: new Set(),
+        loadingItems: new Set(),
+        addedKeywords: new Set(),
+        entities: (window[sourceName + 'SuggestedEntitiesData'] || window.suggestedEntitiesData || []),
+        analyzedProfiles: (window.analyzedProfilesData || window[sourceName + 'AnalyzedProfilesData'] || []),
+        selectedProfiles: {},
+        isAddingAll: false,
+
+        init() {
+            var self = this;
+            (this.entities || []).forEach(function(e) {
+                if (e.is_already_keyword) {
+                    self.addedKeywords.add(e.id);
+                }
+                self.selectedProfiles[e.id] = e.associated_profile_id || (self.analyzedProfiles[0] ? self.analyzedProfiles[0].id : '');
+            });
+        },
+
+        get visibleItems() {
+            var self = this;
+            return (this.entities || []).filter(function(e) {
+                if (self.dismissed.has(e.id)) return false;
+                if (self.filter === 'unadded') return !self.addedKeywords.has(e.id);
+                if (self.filter === 'person') return e.category === 'PERSON' || e.category === 'AUDITEE' || e.category === 'PARTNER' || e.category === 'SPEAKER';
+                if (self.filter === 'org') return e.category === 'ORGANIZATION';
+                if (self.filter === 'kinship') return e.category === 'KINSHIP' || e.category === 'RELATED_PARTY';
+                if (self.filter === 'digital') return e.category === 'DIGITAL_ID';
+                return true;
+            });
+        },
+
+        get unaddedCount() {
+            var self = this;
+            return (this.entities || []).filter(function(e) {
+                return !self.dismissed.has(e.id) && !self.addedKeywords.has(e.id);
+            }).length;
+        },
+
+        dismiss(id) {
+            this.dismissed.add(id);
+        },
+
+        async addKeyword(e) {
+            if (this.addedKeywords.has(e.id) || this.loadingItems.has(e.id)) return;
+            this.loadingItems.add(e.id);
+            try {
+                var profileId = this.selectedProfiles[e.id] || e.associated_profile_id;
+                var csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                var res = await fetch('{% url 'api_add_profile_keyword' %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        profile_id: profileId,
+                        keyword: e.name,
+                    })
+                });
+                var data = await res.json();
+                if (data.status === 'success') {
+                    this.addedKeywords.add(e.id);
+                    e.is_already_keyword = true;
+                    window.dispatchEvent(new CustomEvent('profile-keyword-added', {
+                        detail: { name: e.name, profileId: profileId }
+                    }));
+                } else {
+                    alert(data.message || 'Failed to add keyword.');
+                }
+            } catch (err) {
+                console.error('Error adding profile keyword:', err);
+                alert('Connection error while adding keyword.');
+            } finally {
+                this.loadingItems.delete(e.id);
+            }
+        },
+
+        async addAllUnadded() {
+            var self = this;
+            var unadded = (this.entities || []).filter(function(e) {
+                return !self.dismissed.has(e.id) && !self.addedKeywords.has(e.id);
+            });
+            if (!unadded.length || this.isAddingAll) return;
+            this.isAddingAll = true;
+            try {
+                var items = unadded.map(function(e) {
+                    return {
+                        profile_id: self.selectedProfiles[e.id] || e.associated_profile_id,
+                        keyword: e.name,
+                    };
+                });
+                var csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                var res = await fetch('{% url 'api_add_profile_keyword' %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ items: items })
+                });
+                var data = await res.json();
+                if (data.status === 'success') {
+                    unadded.forEach(function(e) {
+                        self.addedKeywords.add(e.id);
+                        e.is_already_keyword = true;
+                    });
+                    window.dispatchEvent(new CustomEvent('profile-keyword-added', {
+                        detail: { batch: true, count: unadded.length }
+                    }));
+                } else {
+                    alert(data.message || 'Failed to batch add keywords.');
+                }
+            } catch (err) {
+                console.error('Error batch adding profile keywords:', err);
+                alert('Connection error during batch addition.');
+            } finally {
+                this.isAddingAll = false;
+            }
+        }
+    };
+}
+</script>
+
+<div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
+     x-data="suggestedEntitiesComponent('{{ source }}')">
+
+    <!-- Header Bar: Click to Expand / Collapse -->
+    <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border-b border-theme-border">
+        <button type="button" @click="isExpanded = !isExpanded"
+                data-testid="suggested-entities-toggle"
+                class="flex items-center gap-3 text-left cursor-pointer select-none">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">
+                <i class="fa-solid fa-user-tag"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
+                    <span>{{ title }}</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-theme-subtle text-theme-muted font-normal"
+                          x-text="(entities || []).length + ' Discovered'"></span>
+                    <template x-if="unaddedCount > 0">
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold"
+                              x-text="unaddedCount + ' Unapproved'"></span>
+                    </template>
+                </h3>
+                <p class="text-xs text-theme-muted mt-0.5">{{ subtitle }}</p>
+            </div>
+        </button>
+
+        <div class="flex items-center gap-2">
+            <!-- Batch Approve All Action -->
+            <template x-if="unaddedCount > 0">
+                <button type="button"
+                        @click="addAllUnadded()"
+                        :disabled="isAddingAll"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 transition cursor-pointer shadow-xs disabled:opacity-50">
+                    <i class="fa-solid" :class="isAddingAll ? 'fa-spinner fa-spin' : 'fa-check-double'"></i>
+                    <span x-text="isAddingAll ? 'Promoting All...' : 'Approve All (' + unaddedCount + ')'"></span>
+                </button>
+            </template>
+
+            <!-- Toggle Arrow -->
+            <button type="button" @click="isExpanded = !isExpanded"
+                    class="w-7 h-7 rounded-lg flex items-center justify-center text-theme-muted hover:text-theme-text hover:bg-theme-subtle transition cursor-pointer">
+                <i class="fa-solid fa-chevron-down text-sm transition-transform duration-200"
+                   :class="{ 'rotate-180': isExpanded }"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Collapsible Content -->
+    <div x-show="isExpanded" x-cloak class="p-4 sm:p-5 space-y-4">
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-1.5 p-1 rounded-lg bg-theme-subtle border border-theme-border font-medium">
+                <button type="button" @click="filter = 'all'"
+                        :class="filter === 'all' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    All (<span x-text="(entities || []).filter(function(e) { return !dismissed.has(e.id); }).length"></span>)
+                </button>
+                <button type="button" @click="filter = 'unadded'"
+                        :class="filter === 'unadded' ? 'bg-theme-surface text-amber-500 font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Unapproved (<span x-text="unaddedCount"></span>)
+                </button>
+                <button type="button" @click="filter = 'person'"
+                        :class="filter === 'person' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Persons / Partners
+                </button>
+                <button type="button" @click="filter = 'org'"
+                        :class="filter === 'org' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Companies
+                </button>
+                <button type="button" @click="filter = 'kinship'"
+                        :class="filter === 'kinship' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Kinship / Relatives
+                </button>
+                <button type="button" @click="filter = 'digital'"
+                        :class="filter === 'digital' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    UPI / Phone
+                </button>
+            </div>
+
+            <div class="text-[11px] text-theme-muted font-sans italic">
+                <i class="fa-solid fa-shield-halved text-amber-500"></i> Discovered entities added as keywords are monitored across all ForensiQ surveillance modules.
+            </div>
+        </div>
+
+        <!-- Suggestions Grid -->
+        <template x-if="visibleItems.length > 0">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                <template x-for="e in visibleItems" :key="e.id">
+                    <div class="border rounded-xl p-4 transition-all flex flex-col justify-between gap-3 relative"
+                         :class="addedKeywords.has(e.id) ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-theme-border hover:border-theme-border-strong bg-theme-surface shadow-xs'">
+
+                        <!-- Top Row: Name, Category & Dismiss -->
+                        <div>
+                            <div class="flex items-start justify-between gap-2 mb-1.5">
+                                <div class="min-w-0 pr-2">
+                                    <h4 class="font-bold text-sm text-theme-text font-mono truncate" :title="e.name" x-text="e.name"></h4>
+                                    <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <template x-if="e.category === 'ORGANIZATION'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/25 font-mono">
+                                                <i class="fa-solid fa-building text-[9px]"></i> Corporate
+                                            </span>
+                                        </template>
+                                        <template x-if="e.category === 'PERSON' || e.category === 'PARTNER'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/25 font-mono">
+                                                <i class="fa-solid fa-user text-[9px]"></i> Individual
+                                            </span>
+                                        </template>
+                                        <template x-if="e.category === 'KINSHIP' || e.category === 'RELATED_PARTY'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/25 font-mono">
+                                                <i class="fa-solid fa-people-roof text-[9px]"></i> Kinship / Relative
+                                            </span>
+                                        </template>
+                                        <template x-if="e.category === 'DIGITAL_ID'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/25 font-mono">
+                                                <i class="fa-solid fa-fingerprint text-[9px]"></i> Identifier
+                                            </span>
+                                        </template>
+                                        <template x-if="e.category === 'CONVERSATION' || e.category === 'SPEAKER' || e.category === 'CHAT_PARTNER'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-500/10 text-teal-400 border border-teal-500/25 font-mono">
+                                                <i class="fa-solid fa-comments text-[9px]"></i> Mentioned Party
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Dismiss Button -->
+                                <button type="button" @click="dismiss(e.id)"
+                                        title="Dismiss this suggestion"
+                                        class="text-theme-muted hover:text-rose-500 transition p-1 cursor-pointer">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+
+                            <!-- Reason / Occurrence Context -->
+                            <p class="text-xs text-theme-muted leading-relaxed line-clamp-2 mt-2 font-sans" x-text="e.reason"></p>
+                        </div>
+
+                        <!-- Bottom Controls: Target Auditee Selector & Add Button -->
+                        <div class="pt-3 border-t border-theme-border/60 flex flex-col gap-2">
+                            <div class="flex items-center justify-between gap-2 text-xs">
+                                <span class="text-[11px] text-theme-muted font-medium shrink-0">Target Auditee:</span>
+                                <select x-model="selectedProfiles[e.id]"
+                                        :disabled="addedKeywords.has(e.id)"
+                                        class="text-xs py-1 px-2 rounded-lg bg-theme-subtle border border-theme-border text-theme-text font-medium truncate max-w-[170px] focus:outline-hidden focus:border-amber-500 cursor-pointer disabled:opacity-50">
+                                    <template x-for="p in analyzedProfiles" :key="p.id">
+                                        <option :value="p.id"
+                                                :selected="p.id === selectedProfiles[e.id]"
+                                                x-text="p.name + (p.department ? ' (' + p.department + ')' : '')"></option>
+                                    </template>
+                                </select>
+                            </div>
+
+                            <button type="button"
+                                    @click="addKeyword(e)"
+                                    :disabled="addedKeywords.has(e.id) || loadingItems.has(e.id)"
+                                    :class="addedKeywords.has(e.id) ? 'bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 cursor-default' : 'bg-theme-subtle hover:bg-amber-500 hover:text-slate-950 text-theme-text border border-theme-border cursor-pointer'"
+                                    class="w-full py-1.5 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-2xs">
+                                <template x-if="loadingItems.has(e.id)">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <i class="fa-solid fa-spinner fa-spin text-xs"></i> Adding...
+                                    </span>
+                                </template>
+                                <template x-if="!loadingItems.has(e.id) && addedKeywords.has(e.id)">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <i class="fa-solid fa-check text-xs"></i> Added as Keyword
+                                    </span>
+                                </template>
+                                <template x-if="!loadingItems.has(e.id) && !addedKeywords.has(e.id)">
+                                    <span class="inline-flex items-center gap-1.5">
+                                        <i class="fa-solid fa-plus text-xs"></i> Add as Keyword
+                                    </span>
+                                </template>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Empty State -->
+        <template x-if="visibleItems.length === 0">
+            <div class="py-8 text-center text-theme-muted border border-dashed border-theme-border rounded-xl">
+                <i class="fa-solid fa-clipboard-check text-2xl mb-2 text-theme-muted"></i>
+                <p class="text-xs font-medium">No candidate entities found or all suggestions have been reviewed.</p>
+            </div>
+        </template>
+    </div>
+</div>

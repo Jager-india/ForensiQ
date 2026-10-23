@@ -99,6 +99,18 @@
         </div>
     </div>
 
+    <!-- Suggested Keywords & Discovered Entities -->
+    {% if suggested_entities %}
+    <script>
+        window.chatSuggestedEntitiesData = {{ suggested_entities_json|safe }};
+        window.chatAnalyzedProfilesData = {{ analyzed_profiles_json|safe }};
+    </script>
+    <c-suggested_entities
+        title="Suggested Chat Keywords & Counterparties"
+        subtitle="Candidate persons, partners, corporate entities, and conversational contacts detected in chat threads. Approve to promote into profile investigation keywords."
+        source="chat" />
+    {% endif %}
+
     <!-- Main Forensic Workspace -->
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
 

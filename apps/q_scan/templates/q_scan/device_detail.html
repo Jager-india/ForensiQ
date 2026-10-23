@@ -69,6 +69,18 @@
             variant="emerald" />
     </div>
 
+    <!-- Suggested Keywords & Discovered Entities -->
+    {% if suggested_entities %}
+    <script>
+        window.scanSuggestedEntitiesData = {{ suggested_entities_json|safe }};
+        window.scanAnalyzedProfilesData = {{ analyzed_profiles_json|safe }};
+    </script>
+    <c-suggested_entities
+        title="Suggested Endpoint Scan Entities & Filenames"
+        subtitle="Candidate persons, partners, corporate entities, and file mention candidates detected in endpoint scan data. Approve to promote into profile investigation keywords."
+        source="scan" />
+    {% endif %}
+
     <!-- Evidence Hits Table -->
     <c-card title="Evidence Findings for {{ device.hostname }}"  icon="fa-solid fa-file-shield" icon_color="text-teal-400">
         {% if active_profile_keywords %}

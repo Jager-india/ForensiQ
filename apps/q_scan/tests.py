@@ -356,8 +356,11 @@ class QScanDjangoServiceAndViewsTests(TestCase):
     """
 
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="scan_test_user", password="password")
         self.client = Client()
-        # Authenticate session
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -700,3 +703,22 @@ class QScanDjangoServiceAndViewsTests(TestCase):
         page_fuzz = get_paginated_evidence_hits(search="budgt", threshold=70)
         self.assertEqual(len(page_fuzz["data"]), 1)
         self.assertEqual(page_fuzz["data"][0]["filename"], "budget_draft.xlsx")
+
+    def test_device_detail_suggested_entities_in_context(self):
+        device = ScannedDevice.objects.create(
+            hostname="WS-ENT-01",
+            scan_title="Entity Scan",
+            custodian_name="Venkat",
+            drive_letter="C:\\",
+        )
+        FileEvidenceHit.objects.create(
+            device=device,
+            filename="Balamurugan_Deed.pdf",
+            file_path="C:\\Docs\\Balamurugan_Deed.pdf",
+            matched_keyword="deed",
+            snippet="Payment for ARR Enterprises",
+        )
+        res = self.client.get(reverse("q_scan:device_detail", kwargs={"device_id": str(device.id)}))
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("suggested_entities", res.context)
+        self.assertIn("analyzed_profiles", res.context)

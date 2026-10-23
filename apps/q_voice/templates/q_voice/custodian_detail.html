@@ -245,6 +245,18 @@
             </div>
         </div>
 
+        <!-- Suggested Keywords & Discovered Entities -->
+        {% if suggested_entities %}
+        <script>
+            window.voiceSuggestedEntitiesData = {{ suggested_entities_json|safe }};
+            window.voiceAnalyzedProfilesData = {{ analyzed_profiles_json|safe }};
+        </script>
+        <c-suggested_entities
+            title="Suggested Voice Keywords & Discovered Entities"
+            subtitle="Candidate persons, partners, corporate entities, and conversational mentions detected in recorded voice calls. Approve to promote into profile investigation keywords."
+            source="voice" />
+        {% endif %}
+
         <!-- ============================================================ -->
         <!-- 4. INTERACTIVE HORIZONTAL TIMELINE RESOLUTION TRACK -->
         <!-- ============================================================ -->

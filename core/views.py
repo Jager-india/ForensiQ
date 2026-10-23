@@ -9,6 +9,7 @@ from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from loguru import logger
 
 from config import ALLOWED_KEYWORDS_EXTENSIONS, MAX_KEYWORDS_FILE_SIZE
 
@@ -22,6 +23,7 @@ from .audits import (
     update_audit,
 )
 from .manuals import get_manual_by_key, get_user_manuals
+from .models import InvestigationProfile
 from .modules import get_discovered_modules
 from .profiles import (
     add_keywords_to_profile,
@@ -29,6 +31,7 @@ from .profiles import (
     create_investigation_profile,
     extract_keywords_from_file,
     get_all_profiles,
+    get_profile_by_id,
     set_active_profile,
     update_investigation_profile,
 )
@@ -390,6 +393,107 @@ def add_profile_keywords_view(request: HttpRequest, profile_id: str) -> JsonResp
         return JsonResponse({"status": "error", "message": str(err)}, status=404)
     except Exception as err:
         return JsonResponse({"status": "error", "message": str(err)}, status=500)
+
+
+@require_POST
+def add_profile_keyword_api_view(request: HttpRequest) -> JsonResponse:
+    """
+    Unified API endpoint across all ForensiQ analytical modules (Q-Voice, Q-Chat,
+    Q-Scan, Q-Verify, Q-Trail) to promote discovered entities as profile keywords.
+    Supports single keyword promotion or batch promotion.
+    """
+    is_json = (
+        request.content_type == "application/json"
+        or request.headers.get("x-requested-with") == "XMLHttpRequest"
+    )
+    if is_json and request.body:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except Exception:
+            payload = {}
+    else:
+        payload = request.POST
+
+    # 1. Batch promotion support
+    items = payload.get("items")
+    if items and isinstance(items, list):
+        grouped_by_pid: dict[str, list[str]] = {}
+        for item in items:
+            pid = str(item.get("profile_id", "")).strip()
+            kw = str(item.get("keyword", "")).strip()
+            if pid and kw:
+                grouped_by_pid.setdefault(pid, []).append(kw)
+
+        total_added = 0
+        results = []
+        for raw_pid, kws in grouped_by_pid.items():
+            prof = get_profile_by_id(raw_pid)
+            if not prof:
+                prof = InvestigationProfile.objects.filter(full_name__iexact=raw_pid).first()
+            if not prof:
+                continue
+
+            prev_len = len(prof.keywords or [])
+            updated_prof = add_keywords_to_profile(prof.id, kws)
+            added = len(updated_prof.keywords or []) - prev_len
+            total_added += max(0, added)
+            results.append(
+                {
+                    "profile_id": str(updated_prof.id),
+                    "profile_name": updated_prof.full_name,
+                    "added_count": added,
+                    "keywords_count": len(updated_prof.keywords or []),
+                }
+            )
+
+        return JsonResponse(
+            {
+                "status": "success",
+                "message": f"Successfully promoted {total_added} keyword(s).",
+                "total_added": total_added,
+                "results": results,
+            }
+        )
+
+    # 2. Single keyword support
+    profile_id = payload.get("profile_id")
+    keyword = payload.get("keyword")
+
+    if not profile_id or not keyword:
+        return JsonResponse(
+            {"status": "error", "message": "Both profile_id and keyword are required."},
+            status=400,
+        )
+
+    clean_kw = str(keyword).strip()
+    clean_pid = str(profile_id).strip()
+
+    prof = get_profile_by_id(clean_pid)
+    if not prof:
+        prof = InvestigationProfile.objects.filter(full_name__iexact=clean_pid).first()
+
+    if not prof:
+        return JsonResponse(
+            {"status": "error", "message": f"Investigation profile not found for '{clean_pid}'."},
+            status=404,
+        )
+
+    try:
+        updated_prof = add_keywords_to_profile(prof.id, [clean_kw])
+        return JsonResponse(
+            {
+                "status": "success",
+                "message": f"Keyword '{clean_kw}' added to profile {updated_prof.full_name}.",
+                "keyword": clean_kw,
+                "profile_id": str(updated_prof.id),
+                "profile_name": updated_prof.full_name,
+                "keywords_count": len(updated_prof.keywords or []),
+                "keywords": updated_prof.keywords or [],
+            }
+        )
+    except Exception as exc:
+        logger.warning(f"Failed to add keyword to profile: {exc}")
+        return JsonResponse({"status": "error", "message": str(exc)}, status=500)
 
 
 @require_POST

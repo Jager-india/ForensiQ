@@ -145,6 +145,34 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
 
     profile_keywords = get_profile_keywords(custodian_name=custodian_name, request=request)
 
+    from core.audits import get_active_audit
+    from core.models import InvestigationProfile
+
+    from .services import extract_suggested_entities_for_voice
+
+    active_audit = get_active_audit(request)
+    if active_audit:
+        profiles_qs = active_audit.profiles.filter(status="ACTIVE")
+    else:
+        profiles_qs = InvestigationProfile.objects.filter(status="ACTIVE")
+
+    analyzed_profiles = [
+        {
+            "id": str(p.id),
+            "name": p.full_name,
+            "department": p.department or "Auditee",
+            "keywords_count": len(p.keywords or []),
+        }
+        for p in profiles_qs
+    ]
+
+    suggested_entities = extract_suggested_entities_for_voice(
+        timeline=timeline,
+        custodian_name=custodian_name,
+        analyzed_profiles=analyzed_profiles,
+        existing_keywords=profile_keywords,
+    )
+
     context: dict[str, Any] = {
         "custodian": custodian_info,
         "custodian_name": custodian_name,
@@ -157,6 +185,10 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
         "all_recordings": get_all_recordings(),
         "voice_endpoint": get_voice_api_endpoint(),
         "profile_keywords": profile_keywords,
+        "suggested_entities": suggested_entities,
+        "suggested_entities_json": json.dumps(suggested_entities),
+        "analyzed_profiles": analyzed_profiles,
+        "analyzed_profiles_json": json.dumps(analyzed_profiles),
     }
 
     return render(request, "q_voice/custodian_detail.html", context)
