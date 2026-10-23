@@ -179,7 +179,11 @@ def get_discovered_modules():
         else:
             features = []
 
-        href = getattr(config, "module_url", None) or default_spec.get("href") or "/demo/tabulator/"
+        href = (
+            getattr(config, "module_url", None)
+            or default_spec.get("href")
+            or f"/{app_name.replace('q_', '')}/"
+        )
         order = getattr(config, "module_order", None) or default_spec.get("order") or idx + 1
 
         modules.append(

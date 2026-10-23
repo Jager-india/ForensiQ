@@ -6,7 +6,6 @@ Routes requests, validates parameters, and coordinates selectors & services.
 import csv
 import io
 import json
-import uuid
 import zipfile
 from pathlib import Path
 
@@ -385,24 +384,13 @@ def download_tool_file_view(request: HttpRequest, filename: str) -> HttpResponse
     return FileResponse(open(target_path, "rb"), as_attachment=True, filename=filename)
 
 
-def _format_size(size_bytes: int) -> str:
-    size = float(size_bytes)
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size < 1024.0:
-            return f"{size:.2f} {unit}"
-        size /= 1024.0
-    return f"{size:.2f} PB"
-
-
 @require_POST
 def scan_directory_view(request: HttpRequest) -> HttpResponse:
     """
-    Executes a high-speed disk scan on a specified directory path using HighPerformanceDiskScanner,
-    automatically searching for active profile keywords and ingesting matching findings.
+    Executes a high-speed disk scan on a specified directory path,
+    delegating scanner orchestration and CSV ingestion to services.py.
     """
-    import tempfile
-
-    from .backend.disk_scanner import HighPerformanceDiskScanner
+    from .services import run_live_directory_scan
 
     target_dir = request.POST.get("target_dir", "").strip()
     if not target_dir or not Path(target_dir).exists():
@@ -434,42 +422,27 @@ def scan_directory_view(request: HttpRequest) -> HttpResponse:
                 keywords_set.add(kw.strip())
 
     if not keywords_set:
-        keywords_set.update(
-            ["Silviya", "Shanthi", "Palani", "kickback", "confidential", "invoice", "salary"]
+        messages.error(
+            request,
+            "No search keywords specified. Provide keywords or select an investigation profile with registered keywords.",
         )
-
-    temp_csv = Path(tempfile.gettempdir()) / f"q_scan_{uuid.uuid4().hex[:8]}.csv"
+        return redirect("q_scan:dashboard")
 
     try:
-        scanner = HighPerformanceDiskScanner(
-            target_directories=[target_dir],
+        device, scan_stats = run_live_directory_scan(
+            target_dir=target_dir,
             keywords=sorted(keywords_set),
-            output_csv_path=temp_csv,
-            search_contents=True,
-        )
-        scan_stats = scanner.run_scan()
-
-        device = ingest_scan_csv_file(
-            csv_file_obj_or_path=temp_csv,
             hostname=hostname,
             scan_title=scan_title,
             custodian_name=custodian_name,
             drive_letter=drive_letter,
         )
-
         messages.success(
             request,
             f"Live scan completed in {scan_stats.get('elapsed_seconds', 0)}s! Screened {scan_stats.get('files_examined', 0)} files, identified {device.total_matches_found} keyword findings.",
         )
         return redirect("q_scan:device_detail", device_id=device.id)
-
     except Exception as exc:
         logger.error(f"Error executing live directory scan on {target_dir}: {exc}")
         messages.error(request, f"Scan failed: {exc}")
         return redirect("q_scan:dashboard")
-    finally:
-        if temp_csv.exists():
-            try:
-                temp_csv.unlink()
-            except Exception as exc:
-                logger.debug(f"Temp scan CSV cleanup bypassed: {exc}")

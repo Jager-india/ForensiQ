@@ -843,10 +843,11 @@ class QTrailViewTests(TestCase):
     """Tests for Q-Trail views, dashboard rendering, and API endpoint."""
 
     def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="276980", password="forensiq2026")
         self.client = Client()
-        session = self.client.session
-        session["portal_authenticated"] = True
-        session.save()
+        self.client.force_login(self.user)
         self.person_a = AuditedPerson.objects.create(full_name="Auditee One", department="Sales")
         self.person_b = AuditedPerson.objects.create(full_name="Auditee Two", department="Ops")
 
@@ -1256,9 +1257,11 @@ class QTrailAuditScopingTests(TestCase):
             profile_ids=[str(self.prof1.id), str(self.prof2.id)],
         )
 
-        session = self.client.session
-        session["portal_authenticated"] = True
-        session.save()
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="276980", password="forensiq2026")
+        self.client = Client()
+        self.client.force_login(self.user)
 
     def test_get_available_profiles_scoped_by_audit_id(self):
         all_profiles = get_available_profiles_for_trail(audit_id=None)
@@ -1793,7 +1796,7 @@ class QTrailMinimumThresholdTests(TestCase):
             narr = generate_loop_forensic_narrative(loop_data)
             self.assertIn("Comprehensive", narr)
 
-        # Fallback when urlopen raises exception
+        # Offline status when urlopen raises exception (no deterministic fallback)
         with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
             fallback = generate_loop_forensic_narrative(loop_data)
-            self.assertIn("Capital initiated from 'Person A'", fallback)
+            self.assertIn("offline", fallback.lower())

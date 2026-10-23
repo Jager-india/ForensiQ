@@ -8,6 +8,7 @@ import re
 from decimal import Decimal
 
 from django.apps import apps
+from django.db import transaction
 from loguru import logger
 
 from ..models import EntityRelationship, EvidencePointer, ForensicEntity, ForensicTimelineEvent
@@ -178,6 +179,7 @@ def _classify_counterparty_type(party_name: str, narration: str = "") -> str:
     return ForensicEntity.EntityType.EMPLOYEE
 
 
+@transaction.atomic
 def _cleanup_polluted_graph_state() -> None:
     """
     Removes previously auto-polluted retail/accounting keywords from profiles
@@ -610,10 +612,6 @@ def sync_all_modules() -> dict[str, int]:
                                 continue
 
                             dest_tags = ["Rapid Layering"]
-                            if "palani" in dest_name.lower():
-                                dest_tags = ["Vendor", "Rapid Layering"]
-                            elif "indhumathi" in dest_name.lower():
-                                dest_tags = ["Design", "HR", "Metec", "Rapid Layering Hub"]
 
                             dest_type = _classify_counterparty_type(dest_name)
                             hop_date = forwarded_outflow_date or origin_inflow_date
@@ -1217,47 +1215,6 @@ def sync_all_modules() -> dict[str, int]:
                             severity="INFO",
                         )
 
-            # Sync Specific Vendor Mentions (e.g. Palani)
-            for ch in ChatChannel.objects.all()[:50]:
-                for msg in ChatMessage.objects.filter(channel=ch, message_text__icontains="Palani")[
-                    :10
-                ]:
-                    sender = msg.sender_name
-                    emit_forensic_finding(
-                        source_module="q_chat",
-                        event_type="VENDOR_MENTION_IN_CHAT",
-                        primary_entity_data={
-                            "name": sender,
-                            "type": ForensicEntity.EntityType.EMPLOYEE,
-                        },
-                        secondary_entities_data=[
-                            {
-                                "name": "Emor Palani",
-                                "type": ForensicEntity.EntityType.VENDOR,
-                                "relation_type": "SUBMITTED_INVOICE",
-                                "direction": "in",
-                                "metadata": {
-                                    "mention": msg.message_text,
-                                    "tags": ["Vendor", "Rapid Layering"],
-                                },
-                            }
-                        ],
-                        evidence_data={
-                            "source_module": "q_chat",
-                            "source_model": "ChatMessage",
-                            "source_record_id": str(msg.id),
-                            "summary_snippet": msg.message_text,
-                            "metadata": {
-                                "file_name": "WhatsApp_Chat_Export.txt",
-                                "snippet": msg.message_text,
-                            },
-                        },
-                        timeline_title="Chat Mention: Emor Palani Invoice",
-                        timeline_description=f"{sender} mentioned: '{msg.message_text}'",
-                        severity="WARNING",
-                    )
-                    stats["q_chat"] = stats.get("q_chat", 0) + 1
-
             # Sync Flagged Keyword Mentions
             flagged_messages = ChatMessage.objects.filter(risk_score__gte=50).exclude(
                 flagged_terms=[]
@@ -1314,57 +1271,63 @@ def sync_all_modules() -> dict[str, int]:
         try:
             AudioRecording = apps.get_model("q_voice", "AudioRecording")
             TranscriptSegment = apps.get_model("q_voice", "TranscriptSegment")
-            for rec in AudioRecording.objects.all()[:50]:
-                segments = list(TranscriptSegment.objects.filter(recording=rec))
-                all_text = " ".join([s.text_content for s in segments]).lower()
-                has_indhumathi = any(
-                    x in all_text for x in ["indhumathi", "indhumadhi", "indumadhi"]
-                )
-                has_metec = "metec" in all_text
-                if has_indhumathi and has_metec:
-                    audio_fname = (
-                        rec.audio_file.name
-                        if getattr(rec, "audio_file", None)
-                        else "South Avenue Road 8.wav"
-                    )
-                    audio_url = rec.audio_file.url if getattr(rec, "audio_file", None) else ""
-                    emit_forensic_finding(
-                        source_module="q_voice",
-                        event_type="AUDIO_IDENTITY_REVEALED",
-                        primary_entity_data={
-                            "name": "Indhumathi",
-                            "type": ForensicEntity.EntityType.EMPLOYEE,
-                            "metadata": {
-                                "designation": "Design HR",
-                                "organization": "Metec",
-                                "tags": ["Design", "HR", "Metec", "Rapid Layering Hub"],
-                            },
-                        },
-                        secondary_entities_data=[
+            for rec in AudioRecording.objects.filter(transcription_status="COMPLETED")[:50]:
+                custodian = (rec.custodian_name or "").strip()
+                if not custodian:
+                    continue
+                segments = list(TranscriptSegment.objects.filter(recording=rec)[:25])
+                if not segments:
+                    continue
+                secondaries = []
+                seen_terms = set()
+                for seg in segments:
+                    for term in seg.flagged_keywords or []:
+                        term_clean = str(term).strip()
+                        if (
+                            not term_clean
+                            or term_clean.lower() == custodian.lower()
+                            or term_clean.lower() in seen_terms
+                        ):
+                            continue
+                        seen_terms.add(term_clean.lower())
+                        secondaries.append(
                             {
-                                "name": "Metec",
-                                "type": ForensicEntity.EntityType.COMPANY,
-                                "relation_type": "DESIGN_HR",
+                                "name": term_clean,
+                                "type": _classify_counterparty_type(term_clean),
+                                "relation_type": "INTERCEPT_COMMUNICATION",
                                 "direction": "out",
                             }
-                        ],
-                        evidence_data={
-                            "source_module": "q_voice",
-                            "source_model": "AudioRecording",
-                            "source_record_id": str(rec.id),
-                            "evidence_url": f"/voice/recording/{rec.id}/",
-                            "summary_snippet": "Indhumathi from Metec Design HR confirmed payment and coordination.",
-                            "metadata": {
-                                "file_name": audio_fname,
-                                "audio_timestamp": "00:08",
-                                "snippet": "Indhumathi from Metec Design HR confirmed payment and coordination.",
-                                "audio_url": audio_url,
-                            },
+                        )
+                if not secondaries:
+                    continue
+                audio_fname = rec.source_filename or (
+                    rec.audio_file.name if getattr(rec, "audio_file", None) else ""
+                )
+                audio_url = rec.audio_file.url if getattr(rec, "audio_file", None) else ""
+                emit_forensic_finding(
+                    source_module="q_voice",
+                    event_type="VOICE_SURVEILLANCE_DISPATCH",
+                    primary_entity_data={
+                        "name": custodian,
+                        "type": ForensicEntity.EntityType.EMPLOYEE,
+                        "is_target": True,
+                    },
+                    secondary_entities_data=secondaries,
+                    evidence_data={
+                        "source_module": "q_voice",
+                        "source_model": "AudioRecording",
+                        "source_record_id": str(rec.id),
+                        "evidence_url": f"/voice/recording/{rec.id}/",
+                        "summary_snippet": f"Voice recording ({audio_fname}) linked custodian {custodian} with {', '.join(s['name'] for s in secondaries[:5])}.",
+                        "metadata": {
+                            "file_name": audio_fname,
+                            "audio_url": audio_url,
                         },
-                        timeline_title="Voice Intercept: Indhumathi (Design HR - Metec)",
-                        severity="WARNING",
-                    )
-                    stats["q_voice"] = stats.get("q_voice", 0) + 1
+                    },
+                    timeline_title=f"Voice Intercept: {custodian}",
+                    severity="WARNING",
+                )
+                stats["q_voice"] = stats.get("q_voice", 0) + 1
         except Exception as err:
             logger.warning(f"Error syncing Q-Voice in Q-Link: {err}")
 

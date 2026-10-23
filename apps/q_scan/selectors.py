@@ -341,18 +341,6 @@ def get_scan_dashboard_metrics() -> dict[str, Any]:
     }
 
 
-def get_top_matched_keywords(limit: int = 10) -> list[dict[str, Any]]:
-    """
-    Returns the most frequently matched forensic keywords.
-    """
-    qs = (
-        FileEvidenceHit.objects.values("matched_keyword")
-        .annotate(hit_count=Count("id"))
-        .order_by("-hit_count")[:limit]
-    )
-    return list(qs)
-
-
 def get_custodian_scanned_devices(custodian_name: str) -> QuerySet[ScannedDevice]:
     """
     Returns related scanned devices for a given custodian name.

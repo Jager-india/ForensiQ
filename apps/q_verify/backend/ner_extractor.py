@@ -190,16 +190,16 @@ def extract_proper_nouns_and_entities(
             if p_pat.search(full_text):
                 raw_candidates.append((clean_p, "AUDITEE", "Target Auditee / Custodian", 0.98))
 
-    # Canonical mapping dictionary to normalize variations
-    canonical_map: dict[str, str] = {
-        "c. venkatesan": "Venkatesan C",
-        "c venkatesan": "Venkatesan C",
-        "s maharajan": "Maharajan",
-        "mr. s maharajan": "Maharajan",
-        "s. maharajan": "Maharajan",
-        "vani d": "Vani D",
-        "d. vani": "Vani D",
-    }
+    # Canonical mapping dictionary to normalize variations dynamically from registered profiles
+    canonical_map: dict[str, str] = {}
+    for prof_name in known_profiles:
+        clean_p = _clean_token(prof_name)
+        if clean_p:
+            canonical_map[clean_p.lower()] = prof_name
+            canonical_map[f"mr. {clean_p.lower()}"] = prof_name
+            canonical_map[f"mrs. {clean_p.lower()}"] = prof_name
+            canonical_map[f"ms. {clean_p.lower()}"] = prof_name
+
     if custodian_name:
         clean_c = _clean_token(custodian_name)
         canonical_map[clean_c.lower()] = custodian_name

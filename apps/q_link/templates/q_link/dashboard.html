@@ -269,7 +269,7 @@
                     <!-- Active Audit Pill -->
                     <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-theme-subtle dark:bg-white/5 border border-theme-border dark:border-white/10 text-xs font-mono text-theme-text dark:text-slate-200">
                         <span class="text-theme-muted dark:text-slate-400 font-sans">Audit:</span>
-                        <span class="font-bold text-amber-600 dark:text-amber-400 font-mono">{{ active_audit.name|default:"2026-WB-01" }}</span>
+                        <span class="font-bold text-amber-600 dark:text-amber-400 font-mono">{{ active_audit.name|default:"None" }}</span>
                     </div>
 
                     <!-- Operational Mode Dropdown Switcher Pill -->
@@ -404,6 +404,14 @@
                         <div class="w-px h-4 bg-theme-border dark:bg-white/15 mx-0.5"></div>
                         <button id="btn-toggle-labels" type="button" onclick="toggleAllEdgeLabels()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Toggle Edge Labels">
                             <i id="icon-toggle-labels" class="fa-regular fa-tag text-xs"></i>
+                        </button>
+                        <div class="w-px h-4 bg-theme-border dark:bg-white/15 mx-0.5"></div>
+                        <button id="btn-hide-links-mode" type="button" onclick="toggleHideLinksMode()" class="w-8 h-8 rounded-lg flex items-center justify-center text-theme-muted dark:text-slate-300 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-theme-subtle dark:hover:bg-white/10 transition cursor-pointer" title="Hide Links Mode (Click any link to fade 80%, or Shift+Click / Right-Click any link)">
+                            <i id="icon-hide-links-mode" class="fa-solid fa-eye-slash text-xs"></i>
+                        </button>
+                        <button id="btn-restore-muted-links" type="button" onclick="restoreAllMutedEdges()" class="hidden px-2.5 h-8 rounded-lg items-center gap-1.5 text-[11px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 transition cursor-pointer" title="Restore all faded links to 100% opacity">
+                            <i class="fa-solid fa-eye text-[10px]"></i>
+                            <span id="muted-links-count">Restore (0)</span>
                         </button>
                     </div>
 
@@ -846,6 +854,131 @@
         let isPhysicsEnabled = true;
         // Edge label visibility state: hidden by default for clean map
         let showAllEdgeLabels = false;
+        // Click-to-Hide (80% fade / 20% opacity) state & persistence per audit
+        let hideLinksMode = false;
+        const mutedEdgesStorageKey = "qlink_muted_edges_{{ active_audit_id|default:'global' }}";
+        let mutedEdgeIds = new Set((() => {
+            try {
+                const raw = localStorage.getItem(mutedEdgesStorageKey);
+                return raw ? JSON.parse(raw).map(String) : [];
+            } catch (_) {
+                return [];
+            }
+        })());
+
+        function isEdgeMuted(edgeId) {
+            return mutedEdgeIds.has(String(edgeId));
+        }
+
+        function saveMutedEdges() {
+            try {
+                localStorage.setItem(mutedEdgesStorageKey, JSON.stringify(Array.from(mutedEdgeIds)));
+            } catch (_) {}
+            updateMutedLinksCounter();
+        }
+
+        function updateMutedLinksCounter() {
+            const btn = document.getElementById("btn-restore-muted-links");
+            const countSpan = document.getElementById("muted-links-count");
+            if (!btn || !countSpan) return;
+            const count = mutedEdgeIds.size;
+            countSpan.innerText = `Restore (${count})`;
+            if (count > 0) {
+                btn.classList.remove("hidden");
+                btn.classList.add("inline-flex");
+            } else {
+                btn.classList.add("hidden");
+                btn.classList.remove("inline-flex");
+            }
+        }
+
+        function getEdgeDisplayColor(edge) {
+            const base = (edge && edge.originalColor) ? edge.originalColor : { color: "#475569", highlight: "#f59e0b" };
+            return {
+                color: base.color,
+                highlight: base.highlight,
+                opacity: isEdgeMuted(edge.id) ? 0.20 : 1.0
+            };
+        }
+
+        function getEdgeDisplayFont(edge, forceVisible = false) {
+            if (isEdgeMuted(edge.id)) {
+                return { color: "rgba(0,0,0,0)", size: 0, strokeWidth: 0, background: "rgba(0,0,0,0)" };
+            }
+            if (forceVisible || showAllEdgeLabels) {
+                return edge.originalFont;
+            }
+            return { color: "rgba(0,0,0,0)", size: 0, strokeWidth: 0, background: "rgba(0,0,0,0)" };
+        }
+
+        function toggleHideLinksMode() {
+            hideLinksMode = !hideLinksMode;
+            const btn = document.getElementById("btn-hide-links-mode");
+            const canvas = document.getElementById("qlink-canvas");
+            if (btn) {
+                if (hideLinksMode) {
+                    btn.classList.add("bg-amber-500", "text-slate-950", "shadow-xs");
+                    btn.classList.remove("text-theme-muted", "dark:text-slate-300");
+                } else {
+                    btn.classList.remove("bg-amber-500", "text-slate-950", "shadow-xs");
+                    btn.classList.add("text-theme-muted", "dark:text-slate-300");
+                }
+            }
+            if (canvas) {
+                canvas.style.cursor = hideLinksMode ? "crosshair" : "";
+            }
+        }
+
+        function toggleMuteEdge(edgeId) {
+            if (edgeId === undefined || edgeId === null) return;
+            const key = String(edgeId);
+            if (mutedEdgeIds.has(key)) {
+                mutedEdgeIds.delete(key);
+            } else {
+                mutedEdgeIds.add(key);
+            }
+            saveMutedEdges();
+
+            if (graphEdges) {
+                const edge = graphEdges.get(edgeId) || graphEdges.get(key) || graphEdges.get(Number(edgeId));
+                if (edge) {
+                    graphEdges.update({
+                        id: edge.id,
+                        color: getEdgeDisplayColor(edge),
+                        font: getEdgeDisplayFont(edge)
+                    });
+                }
+            }
+
+            // Update Evidence Drawer button if currently inspecting this edge
+            const drawerBtn = document.getElementById("btn-drawer-mute-edge");
+            if (drawerBtn && String(drawerBtn.dataset.edgeId) === key) {
+                const muted = mutedEdgeIds.has(key);
+                drawerBtn.innerHTML = muted
+                    ? `<i class="fa-solid fa-eye text-[10px]"></i><span>Restore Link (100%)</span>`
+                    : `<i class="fa-solid fa-eye-slash text-[10px]"></i><span>Fade Link (80%)</span>`;
+            }
+        }
+
+        function restoreAllMutedEdges() {
+            mutedEdgeIds.clear();
+            saveMutedEdges();
+            if (!graphEdges) return;
+            const updates = [];
+            graphEdges.forEach(edge => {
+                updates.push({
+                    id: edge.id,
+                    color: getEdgeDisplayColor(edge),
+                    font: getEdgeDisplayFont(edge)
+                });
+            });
+            graphEdges.update(updates);
+
+            const drawerBtn = document.getElementById("btn-drawer-mute-edge");
+            if (drawerBtn) {
+                drawerBtn.innerHTML = `<i class="fa-solid fa-eye-slash text-[10px]"></i><span>Fade Link (80%)</span>`;
+            }
+        }
 
         // Theme-aware color helper: returns the right color for current mode
         function isDarkMode() {
@@ -899,7 +1032,7 @@
             if (!nType || nType === "UNKNOWN" || nType === "PROFILE") {
                 if (labelLower.includes("ltd") || labelLower.includes("limited") || labelLower.includes("corp") || labelLower.includes("inc") || labelLower.includes("traders") || labelLower.includes("industries") || labelLower.includes("engineers") || labelLower.includes("vendor")) {
                     nType = "VENDOR";
-                } else if (labelLower.includes("bank") || labelLower.includes("account") || labelLower.includes("a/c") || labelLower.includes("hdfc") || labelLower.includes("sbi") || labelLower.includes("icici") || labelLower.includes("axis") || labelLower.includes("meridian") || labelLower.includes("upi")) {
+                } else if (labelLower.includes("bank") || labelLower.includes("account") || labelLower.includes("a/c") || labelLower.includes("hdfc") || labelLower.includes("sbi") || labelLower.includes("icici") || labelLower.includes("axis") || labelLower.includes("upi")) {
                     nType = "BANK_ACCOUNT";
                 } else if (labelLower.includes("doc") || labelLower.includes("file") || labelLower.includes(".pdf") || labelLower.includes("deed") || labelLower.includes("po-")) {
                     nType = "DOCUMENT";
@@ -943,9 +1076,9 @@
             } else if (nType === "WORKSTATION" || labelLower.includes("ws-") || labelLower.includes("workstation") || labelLower.includes("pc")) {
                 accentColor = "#94a3b8"; // Slate
                 iconKind = "desktop";
-            } else if (profCat === "VENDOR_COMPANY" || profCat === "VENDOR" || nType === "VENDOR" || labelLower.includes("vendor") || labelLower.includes("engineers") || labelLower.includes("corp") || labelLower.includes("mirra")) {
+            } else if (profCat === "VENDOR_COMPANY" || profCat === "VENDOR" || nType === "VENDOR" || labelLower.includes("vendor") || labelLower.includes("engineers") || labelLower.includes("corp")) {
                 iconKind = "factory";
-                if (isRapidLayering || riskRating >= 70 || labelLower.includes("shell") || labelLower.includes("mirra")) {
+                if (isRapidLayering || riskRating >= 70 || labelLower.includes("shell")) {
                     accentColor = "#ef4444"; // Red / Crimson for Shell Vendor
                     isHighRiskVendor = true;
                 } else {
@@ -1055,16 +1188,14 @@
             const nameBoxY = line2 ? (nameBaseY - 15) : (nameBaseY - 13);
             const nameBoxH = line2 ? 31 : 20;
 
-            // Sub-label pill string (e.g. "14 Mar 2026 · 23:41" or "14 Mar 2026 · 23:41 98% conf.")
-            let rawTime = n.timestamp || "14 Mar 2026 · 23:41";
+            // Sub-label pill string (only uses real node timestamp / risk rating, no synthetic fallback)
+            let rawTime = n.timestamp || "";
             let pillText = rawTime;
-            if (isHighRiskVendor || (riskRating >= 85)) {
-                pillText = `${rawTime}  ${riskRating || 98}% conf.`;
-            } else if (nType === "BANK_ACCOUNT" || labelLower.includes("bank")) {
-                pillText = `94% ${rawTime}`;
+            if ((isHighRiskVendor || riskRating >= 85) && riskRating > 0) {
+                pillText = rawTime ? `${rawTime}  ${riskRating}% conf.` : `${riskRating}% conf.`;
             }
 
-            const pillW = Math.min(200, Math.max(96, pillText.length * 6.2 + 18));
+            const pillW = pillText ? Math.min(200, Math.max(80, pillText.length * 6.2 + 18)) : 0;
             const pillX = cx - (pillW / 2);
 
             const filterId = "glow-" + String(n.id || "0").replace(/[^a-zA-Z0-9]/g, "");
@@ -1133,9 +1264,11 @@
                     <text x="${cx}" y="${nameBaseY + 1}" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${nameFontSize}" font-weight="${isTarget ? '800' : '700'}" fill="${nameTextFill}">${escapeXml(line1)}</text>
                 `}
 
+                ${pillText ? `
                 <!-- Translucent Metadata Sub-label Pill -->
                 <rect x="${pillX}" y="${pillY}" width="${pillW}" height="18" rx="9" fill="${subPillBg}" stroke="${subPillBorder}" stroke-width="0.8" />
                 <text x="${cx}" y="${pillY + 12.5}" text-anchor="middle" font-family="'JetBrains Mono', monospace, -apple-system, sans-serif" font-size="9.2" font-weight="500" fill="${subTextFill}">${escapeXml(pillText)}</text>
+                ` : ''}
             </svg>`.trim();
 
             return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -1257,9 +1390,11 @@
                     ? { to: { enabled: true, scaleFactor: 0.7 }, from: { enabled: true, scaleFactor: 0.7 } }
                     : { to: { enabled: true, scaleFactor: 0.7 } };
 
-                // Labels hidden by default; shown when showAllEdgeLabels = true or on node click
-                const labelFontSize = showAllEdgeLabels ? 9.5 : 0;
-                const labelFontColor = showAllEdgeLabels ? fontColor : "rgba(0,0,0,0)";
+                // Labels hidden by default; shown when showAllEdgeLabels = true or on node click (unless muted)
+                const muted = isEdgeMuted(e.id);
+                const labelVisible = showAllEdgeLabels && !muted;
+                const labelFontSize = labelVisible ? 9.5 : 0;
+                const labelFontColor = labelVisible ? fontColor : "rgba(0,0,0,0)";
 
                 return {
                     id: e.id,
@@ -1268,15 +1403,15 @@
                     label: edgeLabel,
                     arrows: arrowConfig,
                     smooth: straightConfig,
-                    color: { color: edgeColor, highlight: highlightColor },
+                    color: { color: edgeColor, highlight: highlightColor, opacity: muted ? 0.20 : 1.0 },
                     font: {
                         color: labelFontColor,
                         size: labelFontSize,
                         face: "'Inter', -apple-system, sans-serif",
                         align: "middle",
-                        background: showAllEdgeLabels ? fontBg : "rgba(0,0,0,0)",
-                        strokeWidth: showAllEdgeLabels ? 1 : 0,
-                        strokeColor: showAllEdgeLabels ? fontStroke : "rgba(0,0,0,0)"
+                        background: labelVisible ? fontBg : "rgba(0,0,0,0)",
+                        strokeWidth: labelVisible ? 1 : 0,
+                        strokeColor: labelVisible ? fontStroke : "rgba(0,0,0,0)"
                     },
                     width: edgeWidth,
                     dashes: edgeDashes,
@@ -1661,7 +1796,7 @@
 
             // Click Events:
             // - Node click: Highlight 1st and 2nd degree path, dim unrelated nodes, open Inspector drawer
-            // - Edge click: Open Audit Evidence Trail drawer
+            // - Edge click: If Hide Links mode is active (or Shift+Click), toggle 80% fade; otherwise open Audit Evidence Trail drawer
             // - Blank canvas click: Reset dimming and restore graph (suppressed if user was panning)
             networkInstance.on("click", function(params) {
                 if (window.suppressNextCanvasReset) {
@@ -1675,29 +1810,40 @@
                     openWorkstationDrawer('inspector');
                 } else if (params.edges.length > 0) {
                     const edgeId = params.edges[0];
+                    const isShiftClick = Boolean(params.event && params.event.srcEvent && params.event.srcEvent.shiftKey);
+                    if (hideLinksMode || isShiftClick) {
+                        toggleMuteEdge(edgeId);
+                        return;
+                    }
                     // For merged edges, pass all sub-link IDs so get_edge_evidence aggregates citations
                     const edgeData = graphEdges ? graphEdges.get(edgeId) : null;
                     const raw = edgeData ? (edgeData.raw || {}) : {};
                     const subIds = (raw.sub_link_ids && raw.sub_link_ids.length > 0)
                         ? raw.sub_link_ids.join(",")
                         : edgeId;
-                    inspectEdge(subIds);
+                    window.currentInspectedCanvasEdgeId = edgeId;
+                    inspectEdge(subIds, edgeId);
                 } else {
                     resetNetworkHighlight();
+                }
+            });
+
+            // Right-Click on Edge: Quick toggle 80% fade without switching modes
+            networkInstance.on("oncontext", function(params) {
+                if (!params || !params.pointer || !params.pointer.DOM) return;
+                const edgeId = networkInstance.getEdgeAt(params.pointer.DOM);
+                const nodeId = networkInstance.getNodeAt(params.pointer.DOM);
+                if (edgeId !== undefined && edgeId !== null && (nodeId === undefined || nodeId === null)) {
+                    if (params.event && typeof params.event.preventDefault === "function") {
+                        params.event.preventDefault();
+                    }
+                    toggleMuteEdge(edgeId);
                 }
             });
         }
 
         // Update Active Mode Information Banner
         function updateModeBanner(data) {
-            const bannerTitle = document.getElementById("mode-status-title");
-            const bannerDesc = document.getElementById("mode-status-desc");
-            const bannerCount = document.getElementById("mode-status-count");
-            const bannerIcon = document.getElementById("mode-status-icon");
-
-            const nLen = (data && data.nodes) ? data.nodes.length : 0;
-            const eLen = (data && data.edges) ? data.edges.length : 0;
-
             const badgeEntities = document.getElementById("badge-stat-entities");
             const badgeEdges = document.getElementById("badge-stat-edges");
             if (badgeEntities && data && data.nodes) badgeEntities.innerText = data.nodes.length;
@@ -1708,25 +1854,6 @@
                 if (currentOperationalMode === 'keyword') modeLabel.innerText = "Keyword Interlinks";
                 else if (currentOperationalMode === 'global') modeLabel.innerText = "Global Vault";
                 else modeLabel.innerText = "Full Audit Topology";
-            }
-
-            if (bannerTitle) {
-                if (currentOperationalMode === 'keyword') {
-                    bannerTitle.innerText = (data && data.title) ? data.title : "Keyword Interlinks";
-                    bannerDesc.innerText = (data && data.message) ? data.message : "Correlating cross-module entities sharing active audit keywords";
-                    if (bannerIcon) bannerIcon.className = "fa-solid fa-link text-amber-400 text-xs";
-                } else if (currentOperationalMode === 'global') {
-                    bannerTitle.innerText = "Global Vault Match";
-                    bannerDesc.innerText = "Cross-audit entity resolution matching internal profiles with external repository";
-                    if (bannerIcon) bannerIcon.className = "fa-solid fa-vault text-amber-400 text-xs";
-                } else {
-                    bannerTitle.innerText = "Full Audit Topology";
-                    bannerDesc.innerText = "Macro correlation network of all profiles, bank accounts, and entities in audit";
-                    if (bannerIcon) bannerIcon.className = "fa-solid fa-folder-tree text-amber-400 text-xs";
-                }
-            }
-            if (bannerCount) {
-                bannerCount.innerText = `${nLen} Entities | ${eLen} Connections`;
             }
         }
 
@@ -1792,20 +1919,20 @@
             });
             graphNodes.update(nodeUpdates);
 
-            // Dim unrelated edges; show labels for connected edges when a node is selected
+            // Dim unrelated edges; show labels for connected edges when a node is selected (preserving 80% fade on muted edges)
             const edgeUpdates = [];
             graphEdges.forEach(edge => {
                 if (highlightedNodeIds.has(edge.from) && highlightedNodeIds.has(edge.to)) {
                     edgeUpdates.push({
                         id: edge.id,
-                        color: edge.originalColor,
-                        font: edge.originalFont, // Restore visible font for highlighted edges
+                        color: getEdgeDisplayColor(edge),
+                        font: getEdgeDisplayFont(edge, true), // Restore visible font for highlighted unmuted edges
                         hidden: false
                     });
                 } else {
                     edgeUpdates.push({
                         id: edge.id,
-                        color: { color: tc.dimEdge },
+                        color: { color: tc.dimEdge, opacity: isEdgeMuted(edge.id) ? 0.20 : 1.0 },
                         font: { color: "rgba(0,0,0,0)", size: 0, strokeWidth: 0 },
                         hidden: false
                     });
@@ -1842,13 +1969,8 @@
             graphEdges.forEach(edge => {
                 edgeUpdates.push({
                     id: edge.id,
-                    color: edge.originalColor,
-                    // Restore to original font only if global label toggle is ON, else hide
-                    font: showAllEdgeLabels ? edge.originalFont : {
-                        color: "rgba(0,0,0,0)",
-                        size: 0,
-                        strokeWidth: 0
-                    },
+                    color: getEdgeDisplayColor(edge),
+                    font: getEdgeDisplayFont(edge),
                     hidden: false
                 });
             });
@@ -1891,11 +2013,7 @@
             graphEdges.forEach(edge => {
                 edgeUpdates.push({
                     id: edge.id,
-                    font: showAllEdgeLabels ? edge.originalFont : {
-                        color: "rgba(0,0,0,0)",
-                        size: 0,
-                        strokeWidth: 0
-                    }
+                    font: getEdgeDisplayFont(edge)
                 });
             });
             graphEdges.update(edgeUpdates);
@@ -1928,7 +2046,8 @@
         }
 
         // Inspect Edge: Slide out Evidence Trail Drawer and fetch citations
-        async function inspectEdge(edgeId) {
+        async function inspectEdge(edgeId, canvasEdgeId = null) {
+            const targetCanvasEdgeId = canvasEdgeId !== null ? canvasEdgeId : (window.currentInspectedCanvasEdgeId || String(edgeId).split(",")[0]);
             openEvidenceDrawer();
             const body = document.getElementById("evidence-drawer-body");
             const header = document.getElementById("drawer-edge-header");
@@ -1946,33 +2065,6 @@
                 let edge = (data && data.status === "success") ? data.edge : null;
                 let items = (data && data.status === "success") ? (data.evidence_items || []) : [];
                 window.currentEdgeEvidenceItems = items;
-
-                if (!edge && graphEdges) {
-                    const localEdge = graphEdges.get(edgeId);
-                    if (localEdge && localEdge.raw) {
-                        const raw = localEdge.raw;
-                        const fromNode = graphNodes ? graphNodes.get(raw.source || raw.from) : null;
-                        const toNode = graphNodes ? graphNodes.get(raw.target || raw.to) : null;
-                        edge = {
-                            id: edgeId,
-                            source_name: fromNode ? String(fromNode.cleanLabel || (fromNode.raw && fromNode.raw.label) || 'Entity A').split('\n')[0] : (raw.source || 'Entity A'),
-                            target_name: toNode ? String(toNode.cleanLabel || (toNode.raw && toNode.raw.label) || 'Entity B').split('\n')[0] : (raw.target || 'Entity B'),
-                            relation_type: raw.relation_type || 'KEYWORD_INTERLINK',
-                            relation_type_display: raw.label || 'Keyword Interlink',
-                            category: 'DOCUMENT',
-                            module: raw.module || 'q_link',
-                            weight: raw.weight || 2.5,
-                            confidence: raw.confidence || 0.95,
-                            is_rapid_layering: Boolean(raw.is_rapid_layering)
-                        };
-                        items = [{
-                            id: 'local-fallback',
-                            source_module: (raw.module || 'Q-Link').toUpperCase(),
-                            summary: `Interlink established based on ${raw.label || 'shared keyword'} between ${edge.source_name} and ${edge.target_name}.`,
-                            snippet: `Correlated nexus verified within active audit records.`
-                        }];
-                    }
-                }
 
                 if (!edge) {
                     body.innerHTML = `
@@ -2026,6 +2118,12 @@
                         <div class="flex items-center justify-between text-xs">
                             <span class="text-theme-muted">Confidence Score:</span>
                             <span class="font-mono text-emerald-600 dark:text-emerald-400 font-semibold">${Math.round((edge.confidence || 1.0) * 100)}%</span>
+                        </div>
+                        <div class="pt-2 border-t border-theme-border flex items-center justify-end">
+                            <button id="btn-drawer-mute-edge" type="button" data-edge-id="${targetCanvasEdgeId}" onclick="toggleMuteEdge('${targetCanvasEdgeId}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-theme-surface hover:bg-amber-500/15 text-theme-text hover:text-amber-600 dark:hover:text-amber-400 border border-theme-border text-[11px] font-semibold transition cursor-pointer">
+                                <i class="fa-solid ${isEdgeMuted(targetCanvasEdgeId) ? 'fa-eye' : 'fa-eye-slash'} text-[10px]"></i>
+                                <span>${isEdgeMuted(targetCanvasEdgeId) ? 'Restore Link (100%)' : 'Fade Link (80%)'}</span>
+                            </button>
                         </div>
                     </div>
 
@@ -2481,34 +2579,6 @@
             networkInstance.moveTo({ scale: currentScale * 0.75, animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
         }
 
-        // Toggle Physics
-        function togglePhysics() {
-            if (!networkInstance) return;
-            isPhysicsEnabled = !isPhysicsEnabled;
-            networkInstance.setOptions({ physics: { enabled: isPhysicsEnabled } });
-            const btnTxt = document.getElementById("text-physics");
-            if (btnTxt) btnTxt.innerText = isPhysicsEnabled ? "Freeze" : "Unfreeze";
-        }
-
-        // Filter Nodes in Graph
-        function filterGraphNodes(query) {
-            if (!graphNodes) return;
-            const q = query.toLowerCase().trim();
-            if (!q) {
-                resetGraphView();
-                return;
-            }
-            const matching = graphNodes.get({
-                filter: item => String(item.cleanLabel || (item.raw && item.raw.label) || "").toLowerCase().includes(q)
-            });
-            if (matching.length > 0) {
-                networkInstance.focus(matching[0].id, { scale: 1.2, animation: true });
-                highlightNodeNetwork(matching[0].id);
-                inspectEntity(matching[0].id);
-                openWorkstationDrawer('inspector');
-            }
-        }
-
         // Entity Type Quick Filter (Highlights Matching Nodes & Dims Non-Matching)
         function setEntityFilter(type, btnElement) {
             document.querySelectorAll(".qlink-filter-pill, .filter-chip").forEach(el => {
@@ -2572,7 +2642,7 @@
                 let isMatch = false;
 
                 if (filterType === "BANKS" || filterType === "BANK_ACCOUNT") {
-                    isMatch = nType === "BANK_ACCOUNT" || nType === "ACCOUNT" || label.includes("bank") || label.includes("a/c") || label.includes("hdfc") || label.includes("axis") || label.includes("sbi") || label.includes("meridian");
+                    isMatch = nType === "BANK_ACCOUNT" || nType === "ACCOUNT" || label.includes("bank") || label.includes("a/c") || label.includes("hdfc") || label.includes("axis") || label.includes("sbi");
                 } else if (filterType === "TARGETS" || filterType === "EMPLOYEE") {
                     isMatch = Boolean(raw.is_target || raw.is_root);
                 } else if (filterType === "COMMS") {
@@ -2596,14 +2666,14 @@
                 if (matchingNodeIds.has(edge.from) || matchingNodeIds.has(edge.to)) {
                     edgeUpdates.push({
                         id: edge.id,
-                        color: edge.originalColor,
-                        font: edge.originalFont,
+                        color: getEdgeDisplayColor(edge),
+                        font: getEdgeDisplayFont(edge, true),
                         hidden: false
                     });
                 } else {
                     edgeUpdates.push({
                         id: edge.id,
-                        color: { color: tc.dimEdge },
+                        color: { color: tc.dimEdge, opacity: isEdgeMuted(edge.id) ? 0.20 : 1.0 },
                         font: { color: "transparent", strokeWidth: 0 },
                         hidden: false
                     });
@@ -2949,6 +3019,7 @@
 
         // Initialize on DOM ready
         document.addEventListener("DOMContentLoaded", function() {
+            updateMutedLinksCounter();
             initNetworkGraph(initialGraphData);
         });
 

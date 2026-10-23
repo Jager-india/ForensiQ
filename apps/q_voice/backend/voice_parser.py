@@ -3,9 +3,7 @@ Q-Voice Transcript Parser & Diarization Intent Screener
 Parses audio metadata, WebVTT (.vtt), SRT (.srt), JSON/CSV call transcripts, and plain diarized transcripts.
 """
 
-import json
 import re
-from pathlib import Path
 from typing import Any
 
 from config import (
@@ -208,23 +206,3 @@ def parse_transcript_text_to_timeline(
             speaker_turn_idx += 1
 
     return timeline
-
-
-def ingest_transcript_content(
-    content: str, filename: str, extra_keywords: list[str] | None = None
-) -> list[dict[str, Any]]:
-    """
-    Ingests raw file text and produces structured diarization segment dictionaries.
-    """
-    ext = Path(filename).suffix.lower()
-    if ext == ".json":
-        try:
-            data = json.loads(content)
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict) and "timeline_transcript" in data:
-                return data["timeline_transcript"]
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-            return parse_transcript_text_to_timeline(content, extra_keywords=extra_keywords)
-
-    return parse_transcript_text_to_timeline(content, extra_keywords=extra_keywords)

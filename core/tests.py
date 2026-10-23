@@ -1274,12 +1274,11 @@ class ProfileKeywordRegistryIntegrationTests(TestCase):
         req.session = {"active_audit_id": str(audit.id)}
         self.assertEqual(get_profile_keywords(request=req), ["KW_ALPHA_1", "KW_ALPHA_2"])
 
-        # 5. Global fallback when no session keys
+        # 5. Empty request when no session keys returns empty keywords list (no global fallback)
         req_empty = factory.get("/scan/")
         req_empty.session = {}
         all_kws = get_profile_keywords(request=req_empty)
-        self.assertIn("KW_ALPHA_1", all_kws)
-        self.assertIn("KW_BETA_1", all_kws)
+        self.assertEqual(all_kws, [])
 
 
 class CoreFuzzyEngineTests(TestCase):

@@ -133,17 +133,9 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     except (ValueError, TypeError):
         min_amount = 1000.0
 
-    # Default auto-selection heuristic: select profiles with available data within the current scope
+    # No hardcoded or heuristic defaults: user explicitly chooses profiles to analyze
     if not profile_ids:
-        profiles_with_data = [p["id"] for p in available_profiles if p.get("has_data")]
-        if len(profiles_with_data) >= 2:
-            profile_ids = profiles_with_data
-        elif len(available_profiles) >= 2:
-            profile_ids = [available_profiles[0]["id"], available_profiles[1]["id"]]
-        elif available_profiles:
-            profile_ids = [available_profiles[0]["id"]]
-        else:
-            profile_ids = []
+        profile_ids = []
 
     # Execute money trail reconciliation
     analysis = analyze_profiles_money_trail(

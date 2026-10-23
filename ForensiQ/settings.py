@@ -71,9 +71,8 @@ INSTALLED_APPS = [
     # UI & Component engine
     "django_cotton",
     "ui",
-    # Core & Demo
+    # Core
     "core",
-    "demo",
     # Forensic Analytical Modules
     "q_mail",
     "q_bank",

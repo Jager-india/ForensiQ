@@ -24,7 +24,7 @@ def print_step(title: str) -> None:
 def check_app_documentation() -> bool:
     print_step("Checking Mandatory App Documentation (INSTRUCTION.md, SCHEMA.md, USER_GUIDE.md)")
 
-    app_dirs = [BASE_DIR / "core", BASE_DIR / "demo", BASE_DIR / "ui"]
+    app_dirs = [BASE_DIR / "core", BASE_DIR / "ui"]
     apps_folder = BASE_DIR / "apps"
     if apps_folder.exists():
         app_dirs.extend(

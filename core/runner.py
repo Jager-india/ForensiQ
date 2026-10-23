@@ -12,7 +12,7 @@ class ForensicTestRunner(DiscoverRunner):
     """
     Standard test runner for ForensiQ.
     When no test labels are explicitly provided to 'python manage.py test',
-    it automatically discovers and tests all registered forensic apps, core, and demo.
+    it automatically discovers and tests all registered forensic apps and core.
     """
 
     def build_suite(self, test_labels=None, extra_tests=None, **kwargs):

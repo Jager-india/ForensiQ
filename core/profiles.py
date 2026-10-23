@@ -300,6 +300,7 @@ def get_profile_keywords(
         profile = get_profile_by_id(profile_id)
         if profile and profile.keywords:
             return _normalize_keywords(profile.keywords)
+        return []
 
     if custodian_name:
         clean = custodian_name.replace("(Auditee)", "").strip()
@@ -307,6 +308,7 @@ def get_profile_keywords(
             profile = InvestigationProfile.objects.filter(full_name__iexact=clean).first()
             if profile and profile.keywords:
                 return _normalize_keywords(profile.keywords)
+        return []
 
     if audit_id:
         from .audits import get_audit_by_id
@@ -317,8 +319,8 @@ def get_profile_keywords(
             for p in audit.profiles.all():
                 if p.keywords:
                     collected.extend(_normalize_keywords(p.keywords))
-            if collected:
-                return _normalize_keywords(collected)
+            return _normalize_keywords(collected)
+        return []
 
     if request:
         # Check query parameters
@@ -327,17 +329,21 @@ def get_profile_keywords(
             p = get_profile_by_id(req_profile_id)
             if p and p.keywords:
                 return _normalize_keywords(p.keywords)
+            return []
 
         req_custodian = request.GET.get("custodian")
         if req_custodian:
             p = InvestigationProfile.objects.filter(full_name__iexact=req_custodian.strip()).first()
             if p and p.keywords:
                 return _normalize_keywords(p.keywords)
+            return []
 
         # Check active profile in session
         profile = get_active_profile(request)
-        if profile and profile.keywords:
-            return _normalize_keywords(profile.keywords)
+        if profile:
+            if profile.keywords:
+                return _normalize_keywords(profile.keywords)
+            return []
 
         # Check active audit in session
         from .audits import get_active_audit
@@ -348,16 +354,7 @@ def get_profile_keywords(
             for p in active_audit.profiles.all():
                 if p.keywords:
                     audit_kws.extend(_normalize_keywords(p.keywords))
-            if audit_kws:
-                return _normalize_keywords(audit_kws)
-
-    # Fallback: collect registered keywords across all investigation profiles
-    all_kws: list[str] = []
-    for p in InvestigationProfile.objects.all():
-        if p.keywords:
-            all_kws.extend(_normalize_keywords(p.keywords))
-    if all_kws:
-        return _normalize_keywords(all_kws)
+            return _normalize_keywords(audit_kws)
 
     return []
 
@@ -631,25 +628,24 @@ def extract_entities_from_document(
     for m in party_pat.finditer(full_text):
         add_entity(m.group(1), "PARTNER")
 
-    # Pattern B: Explicit Partner Names mentioned in Partnership Deeds
-    partner_mentions = [
-        "Dhanasekaran",
-        "Venkatesan C",
-        "Vani D",
-        "Thangapandiammal",
-        "Maharajan",
-    ]
-    for p_name in partner_mentions:
-        if re.search(r"\b" + re.escape(p_name) + r"\b", full_text, re.IGNORECASE):
-            add_entity(p_name, "PARTNER")
+    # Pattern B: Registered Profile Entities & Associates mentioned in Document
+    registered_names = set(
+        InvestigationProfile.objects.exclude(full_name="").values_list("full_name", flat=True)
+    )
+    for p_name in registered_names:
+        clean_p = p_name.strip()
+        if len(clean_p) >= 3 and re.search(
+            r"\b" + re.escape(clean_p) + r"\b", full_text, re.IGNORECASE
+        ):
+            add_entity(clean_p, "PARTNER")
 
     # Pattern C: Corporate / Partnership Firm Names
     firm_pat = re.compile(
-        r"(?:Sri\s+Mirra\s+Engineers|[A-Z][a-zA-Z\s]{2,30}\s+(?:Engineers|Enterprises|Traders|Associates|Agency|LLP|Ltd|Private\s+Limited))",
+        r"\b([A-Z][a-zA-Z\s]{2,30}\s+(?:Engineers|Enterprises|Traders|Associates|Agency|LLP|Ltd|Private\s+Limited))\b",
         re.IGNORECASE,
     )
     for m in firm_pat.finditer(full_text):
-        add_entity(m.group(0), "COMPANY")
+        add_entity(m.group(1).strip(), "COMPANY")
 
     # Pattern D: Nominee Schedule Pattern (e.g. 'Mr. A. JOSEPH REMIGIUS ... J. Silviya Spouse')
     nominee_pat = re.compile(

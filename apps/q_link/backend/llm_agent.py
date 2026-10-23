@@ -502,15 +502,11 @@ class ForensicCopilotAgent:
         target = active_entity or (matched_entities[0] if matched_entities else None)
 
         if not target:
-            # Fallback to the primary high-risk target in the database
-            target = ForensicEntity.objects.order_by("-is_target", "-risk_rating").first()
-
-        if not target:
             return {
                 "query": user_query,
-                "response": "No forensic entities currently indexed in Q-Link. Run cross-module synchronization to ingest data.",
+                "response": "No matching forensic entity found for your inquiry. Select an entity on the graph or specify an indexed entity name.",
                 "tool_calls": [],
-                "mode": "deterministic_fallback",
+                "mode": "entity_not_found",
             }
 
         return self._analyze_single_entity(user_query, target)
@@ -585,17 +581,20 @@ class ForensicCopilotAgent:
             url_part = f" ([Inspect Record]({item['url']}))" if item.get("url") else ""
             citations.append(f"- **[{item['module'].upper()}]** {item['summary']}{url_part}")
 
-        if llm_response:
-            cit_block = (
-                ("\n\n#### 🔗 Cross-Tool Converged Evidence:\n" + "\n".join(citations[:5]))
-                if citations
-                else ""
-            )
-            final_narrative = llm_response + cit_block
-        else:
-            final_narrative = self._build_deterministic_narrative(
-                target, net_out, timeline_out, evidence_out, conflict_out
-            )
+        if not llm_response:
+            return {
+                "query": user_query,
+                "response": "⚠️ Local AI Copilot service is currently offline or unreachable. Please ensure the LLM server is running.",
+                "tool_calls": tool_calls,
+                "mode": "llm_offline",
+            }
+
+        cit_block = (
+            ("\n\n#### 🔗 Cross-Tool Converged Evidence:\n" + "\n".join(citations[:5]))
+            if citations
+            else ""
+        )
+        final_narrative = llm_response + cit_block
 
         return {
             "query": user_query,
@@ -673,15 +672,20 @@ class ForensicCopilotAgent:
             url_part = f" ([Inspect Record]({item['url']}))" if item.get("url") else ""
             citations.append(f"- **[{item['module'].upper()}]** {item['summary']}{url_part}")
 
-        if llm_response:
-            cit_block = (
-                ("\n\n#### 🔗 Cross-Tool Converged Evidence:\n" + "\n".join(citations[:5]))
-                if citations
-                else ""
-            )
-            final_narrative = llm_response + cit_block
-        else:
-            final_narrative = self._build_dual_entity_narrative(source, target, path_out, citations)
+        if not llm_response:
+            return {
+                "query": user_query,
+                "response": "⚠️ Local AI Copilot service is currently offline or unreachable. Please ensure the LLM server is running.",
+                "tool_calls": tool_calls,
+                "mode": "llm_offline",
+            }
+
+        cit_block = (
+            ("\n\n#### 🔗 Cross-Tool Converged Evidence:\n" + "\n".join(citations[:5]))
+            if citations
+            else ""
+        )
+        final_narrative = llm_response + cit_block
 
         return {
             "query": user_query,
@@ -705,14 +709,17 @@ class ForensicCopilotAgent:
         )
 
         llm_response = self._synthesize_overview_with_llm(user_query, overview_out)
-        if llm_response:
-            final_narrative = llm_response
-        else:
-            final_narrative = self._build_syndicate_overview_narrative(overview_out)
+        if not llm_response:
+            return {
+                "query": user_query,
+                "response": "⚠️ Local AI Copilot service is currently offline or unreachable. Please ensure the LLM server is running.",
+                "tool_calls": tool_calls,
+                "mode": "llm_offline",
+            }
 
         return {
             "query": user_query,
-            "response": final_narrative,
+            "response": llm_response,
             "tool_calls": tool_calls,
             "mode": "agentic_tool_calling",
         }
@@ -941,149 +948,3 @@ class ForensicCopilotAgent:
         except Exception as exc:
             logger.debug(f"Model-Host request error: {exc}")
         return None
-
-    def _build_deterministic_narrative(
-        self,
-        target: ForensicEntity,
-        net_out: dict[str, Any],
-        timeline_out: dict[str, Any],
-        evidence_out: dict[str, Any],
-        conflict_out: dict[str, Any],
-    ) -> str:
-        """
-        Builds a structured markdown forensic briefing deterministically.
-        """
-        connected_count = max(0, net_out.get("connected_nodes_count", 1) - 1)
-        edges_count = net_out.get("connected_edges_count", 0)
-        events = timeline_out.get("timeline", [])
-        evidence_items = evidence_out.get("evidence_items", [])
-        vendor_rels = conflict_out.get("vendor_connections", [])
-
-        narrative = [
-            f"### 🛡️ Forensic Syndicate Analysis: {target.display_name}",
-            f"- **Entity Classification**: {target.get_entity_type_display()} (Risk Score: `{target.risk_rating}/100`)",
-            f"- **Network Density**: Connected to **{connected_count} unique entities** across **{edges_count} multi-tool edges**.",
-        ]
-
-        if vendor_rels:
-            narrative.append(
-                f"- **Commercial Footprint**: Active affiliations with {len(vendor_rels)} corporate/vendor counterparties."
-            )
-
-        narrative.append("\n#### 🔗 Cross-Tool Converged Evidence:")
-        if evidence_items:
-            seen = set()
-            for item in evidence_items:
-                k = (item.get("module"), item.get("summary"))
-                if k in seen:
-                    continue
-                seen.add(k)
-                url_part = f" ([Inspect Record]({item['url']}))" if item.get("url") else ""
-                narrative.append(f"- **[{item['module'].upper()}]** {item['summary']}{url_part}")
-                if len(seen) >= 5:
-                    break
-        else:
-            narrative.append("- *No direct granular evidence pointers logged yet.*")
-
-        narrative.append("\n#### ⏱️ Reconstructed Timeline Highlights:")
-        if events:
-            for ev in events[:4]:
-                narrative.append(
-                    f"- **{ev['date']}** (`{ev['module'].upper()}`): {ev['title']} — {ev['description']}"
-                )
-        else:
-            narrative.append("- *No timestamped events available.*")
-
-        narrative.append(
-            f"\n> **Investigative Hypothesis**: {target.display_name} acts as a central hub connecting multiple transaction channels. "
-            "Cross-referencing fund flows against procurement documentation shows tight temporal correlation. "
-            "Recommend immediate deep-dive into intermediary conduit accounts."
-        )
-
-        return "\n".join(narrative)
-
-    def _build_dual_entity_narrative(
-        self,
-        source: ForensicEntity,
-        target: ForensicEntity,
-        path_out: dict[str, Any],
-        citations: list[str],
-    ) -> str:
-        """
-        Builds a structured markdown connection trail between two entities deterministically.
-        """
-        paths = path_out.get("path_details", [])
-        paths_count = path_out.get("paths_found", 0)
-
-        narrative = [
-            "### 🔍 Inter-Entity Nexus & Conduit Analysis",
-            f"- **Source**: **{source.display_name}** ({source.get_entity_type_display()}, Risk: `{source.risk_rating}/100`)",
-            f"- **Target**: **{target.display_name}** ({target.get_entity_type_display()}, Risk: `{target.risk_rating}/100`)",
-            f"- **Discovered Routes**: **{paths_count} path(s)** identified across the multi-tool graph.",
-            "",
-            "#### 🛤️ Conduit Transmission Routes:",
-        ]
-
-        if paths:
-            for idx, p in enumerate(paths[:3], 1):
-                steps = []
-                for hop in p:
-                    steps.append(
-                        f"`{hop.get('from_name')}` --[{hop.get('relation_type')}]--> `{hop.get('to_name')}`"
-                    )
-                narrative.append(f"{idx}. " + " ➔ ".join(steps))
-        else:
-            narrative.append(
-                "- *No direct paths found within 3 hops. Entities appear in separate graph clusters or communicate via external channels.*"
-            )
-
-        if citations:
-            narrative.append("\n#### 🔗 Cross-Tool Converged Evidence:")
-            narrative.extend(citations[:5])
-
-        narrative.append(
-            f"\n> **Nexus Evaluation**: Direct and indirect linkages establish an operational conduit between {source.display_name} and {target.display_name}. "
-            "Examine intermediate nodes for shell company indicators or pass-through transaction timing."
-        )
-
-        return "\n".join(narrative)
-
-    def _build_syndicate_overview_narrative(self, overview_out: dict[str, Any]) -> str:
-        """
-        Builds an executive overview of the audit syndicate deterministically.
-        """
-        metrics = overview_out.get("metrics", {})
-        high_risks = overview_out.get("high_risk_entities", [])
-        alerts = overview_out.get("recent_alerts", [])
-
-        narrative = [
-            "### 🌐 Executive Syndicate Intelligence Briefing",
-            f"- **Repository Volume**: `{metrics.get('total_entities', 0)}` indexed entities across `{metrics.get('total_relationships', 0)}` inter-tool relationships.",
-            f"- **High-Risk Nodes**: `{len(high_risks)}` entities identified above critical risk threshold.",
-            f"- **Unresolved Flags**: `{metrics.get('unack_alerts', 0)}` active multi-tool correlation alerts.",
-            "",
-            "#### 🚨 Primary High-Risk Targets:",
-        ]
-
-        if high_risks:
-            for e in high_risks[:5]:
-                target_badge = " [TARGET]" if e.get("is_target") else ""
-                narrative.append(
-                    f"- **{e.get('display_name')}** ({e.get('entity_type')}{target_badge}) — Risk Score: `{e.get('risk_rating')}/100`"
-                )
-        else:
-            narrative.append("- *No high-risk entities detected.*")
-
-        narrative.append("\n#### ⚡ Urgent Relationship Alerts:")
-        if alerts:
-            for a in alerts[:4]:
-                narrative.append(f"- **[{a.get('severity')}]** {a.get('title')}")
-        else:
-            narrative.append("- *No recent unacknowledged alerts.*")
-
-        narrative.append(
-            "\n> **Strategic Recommendation**: Focus investigative inquiry on targets exhibiting both financial layering and voice/chat coordination. "
-            "Select any entity from the knowledge graph or use Copilot queries to inspect individual conduit paths."
-        )
-
-        return "\n".join(narrative)

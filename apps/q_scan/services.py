@@ -389,7 +389,6 @@ def ingest_document_for_scan(
 
     profile_keywords = get_profile_keywords(custodian_name=custodian_name)
     target_terms = {k.lower() for k in profile_keywords}
-    target_terms.update(["silviya", "shanthi", "palani", "joseph remigius"])
 
     batch = []
     lines = [line.strip() for line in extracted_text.splitlines() if line.strip()]

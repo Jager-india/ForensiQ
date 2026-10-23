@@ -19,7 +19,7 @@ from typing import Any
 # 01. Q-BANK: Financial & Bank Statement Forensic Engine Configuration
 # =============================================================================
 
-DEFAULT_BANK_INVESTIGATION_KEYWORDS: list[str] = ["trust", "sarla"]
+DEFAULT_BANK_INVESTIGATION_KEYWORDS: list[str] = []
 """
 Default investigative keyword targets seeded across bank statement triage.
 Transactions whose narration or party name matches these terms are immediately

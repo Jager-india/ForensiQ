@@ -20,35 +20,6 @@ from .models import (
     RelationshipAlert,
 )
 
-
-def get_all_entities(
-    *,
-    entity_type: str | None = None,
-    search_query: str | None = None,
-    is_target: bool | None = None,
-    min_risk: int = 0,
-) -> QuerySet[ForensicEntity]:
-    """
-    Retrieves all forensic entities filtered by type, query, or risk level.
-    Prefetches aliases for high-speed resolution.
-    """
-    qs = ForensicEntity.objects.prefetch_related("aliases").filter(risk_rating__gte=min_risk)
-
-    if entity_type:
-        qs = qs.filter(entity_type=entity_type)
-    if is_target is not None:
-        qs = qs.filter(is_target=is_target)
-    if search_query:
-        query = search_query.strip()
-        qs = qs.filter(
-            Q(display_name__icontains=query)
-            | Q(identifier__icontains=query)
-            | Q(aliases__alias_name__icontains=query)
-        ).distinct()
-
-    return qs.order_by("-risk_rating", "display_name")
-
-
 TOOL_DISPLAY_MAP: dict[str, str] = {
     "q_bank": "Bank",
     "bank": "Bank",
@@ -76,7 +47,7 @@ TOOL_DISPLAY_MAP: dict[str, str] = {
 def resolve_tool_display_name(module_code: str | None) -> str:
     """Returns human-friendly short tool name (Bank, Voice, Mail, Scan, Ledger, Verify, etc.)."""
     if not module_code:
-        return "Bank"
+        return ""
     clean = str(module_code).strip().lower()
     return TOOL_DISPLAY_MAP.get(clean, clean.replace("q_", "").capitalize())
 
@@ -287,7 +258,7 @@ MODULE_INFO_MAP: dict[str, dict[str, Any]] = {
 
 def get_module_info(mod_key: str | None) -> dict[str, Any]:
     """Returns canonical module styling, brand name, and icon configuration."""
-    clean = str(mod_key or "q_bank").strip().lower()
+    clean = str(mod_key or "q_link").strip().lower()
     if clean in MODULE_INFO_MAP:
         return dict(MODULE_INFO_MAP[clean])
     name = clean.replace("q_", "").capitalize()
@@ -326,9 +297,6 @@ def resolve_edge_modules(
         if clean_rm not in counts:
             counts[clean_rm] = 1
 
-    if not counts:
-        counts["q_bank"] = 1
-
     modules: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
 
@@ -348,7 +316,7 @@ def resolve_rel_tool_names(rel_or_list: Any) -> str:
     Extracts all unique originating forensic tools for a relationship from its evidence pointers.
     """
     if not rel_or_list:
-        return "Bank"
+        return ""
     rels = rel_or_list if isinstance(rel_or_list, list) else [rel_or_list]
     tools: list[str] = []
     for r in rels:
@@ -360,7 +328,7 @@ def resolve_rel_tool_names(rel_or_list: Any) -> str:
             t = resolve_tool_display_name(r.source_module)
             if t and t not in tools:
                 tools.append(t)
-    return ", ".join(tools) if tools else "Bank"
+    return ", ".join(tools)
 
 
 def get_entity_by_id(entity_id: str) -> ForensicEntity | None:
@@ -484,7 +452,7 @@ def _format_node(
         "risk": entity.risk_rating,
         "is_target": bool(entity.is_target or prof is not None),
         "category": entity.category,
-        "timestamp": formatted_date or "14 Mar 2026 · 23:41",
+        "timestamp": formatted_date,
         "metadata": entity.metadata or {},
     }
     if is_root is not None:
@@ -588,8 +556,8 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if len(group) == 1:
             edge = dict(group[0])
             if "modules" not in edge or not edge["modules"]:
-                mod_name = edge.get("module") or "q_bank"
-                edge["modules"] = [get_module_info(mod_name)]
+                mod_name = edge.get("module")
+                edge["modules"] = [get_module_info(mod_name)] if mod_name else []
             if "sub_links" not in edge or not edge["sub_links"]:
                 edge["sub_links"] = [
                     {
@@ -1020,25 +988,6 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 }
                 evidence_items.append(item)
 
-        if not evidence_items:
-            evidence_items.append(
-                {
-                    "id": f"synth-{rel.id}",
-                    "source_module": rel.source_module or "core",
-                    "source_model": "EntityRelationship",
-                    "summary": f"{rel.source_entity.display_name} connected to {rel.target_entity.display_name}",
-                    "amount": rel.weight,
-                    "narration": rel.get_relation_type_display(),
-                    "ref_no": str(rel.id)[:8],
-                    "is_rapid_layering": bool(rel.metadata.get("is_rapid_layering")),
-                    "turnaround": rel.metadata.get("turnaround", ""),
-                    "snippet": f"Correlation established via {rel.source_module} ({rel.get_relation_type_display()})",
-                    "file_name": "",
-                    "page_number": None,
-                    "audio_timestamp": "",
-                }
-            )
-
         tool_name = resolve_rel_tool_names(rels or [rel])
         rel_group = rels or [rel]
         bank_w = sum(
@@ -1063,6 +1012,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
             for r in (rels or [rel])
         )
         has_ext = any(bool(r.metadata.get("is_external")) for r in (rels or [rel]))
+        rel_display = rel.get_relation_type_display()
         return {
             "status": "success",
             "edge": {
@@ -1072,8 +1022,10 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "source_name": rel.source_entity.display_name,
                 "target_name": rel.target_entity.display_name,
                 "relation_type": rel.relation_type,
-                "relation_type_display": f"[{tool_name}] {rel.get_relation_type_display()}",
-                "label": f"{tool_name}: {rel.get_relation_type_display()}",
+                "relation_type_display": f"[{tool_name}] {rel_display}"
+                if tool_name
+                else rel_display,
+                "label": f"{tool_name}: {rel_display}" if tool_name else rel_display,
                 "category": category,
                 "module": rel.source_module or tool_name.lower(),
                 "weight": total_w,
@@ -1085,7 +1037,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
             "evidence_list": evidence_items,
         }
 
-    # Case: Synthetic/Composite Keyword Interlink without DB EntityRelationship
+    # Case: Composite Keyword Interlink without DB EntityRelationship
     category = "DOCUMENT"
     try:
         from core.models import ProfileDocument
@@ -1107,7 +1059,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                         "record_id": str(doc.id),
                         "summary": f"Keyword '{keyword}' matched in {doc.filename}",
                         "file_name": doc.filename,
-                        "page_number": 2 if "partnership" in doc.filename.lower() else 1,
+                        "page_number": None,
                         "snippet": f"Legal document establishing profile nexus: {doc.filename}. Associated with {ea.display_name} & {eb.display_name}.",
                     }
                 )
@@ -1135,7 +1087,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                         "snippet": meta.get("snippet") or p.summary_snippet,
                         "amount": meta.get("amount") or 0.0,
                         "file_name": meta.get("file_name", ""),
-                        "page_number": meta.get("page_number", 1),
+                        "page_number": meta.get("page_number"),
                         "evidence_url": p.evidence_url,
                         "metadata": meta,
                     }
@@ -1143,23 +1095,10 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
         except Exception as exc:
             logger.debug(f"Evidence pointer lookup bypassed: {exc}")
 
-    if not evidence_items:
-        evidence_items.append(
-            {
-                "id": f"kw-interlink-{str(ea.id)[:6]}-{str(eb.id)[:6]}",
-                "source_module": "Q-Link",
-                "source_model": "KeywordInterlink",
-                "summary": f"Forensic Interlink established between {ea.display_name} and {eb.display_name} based on shared keyword: '{keyword}'.",
-                "snippet": f"Corroborated cross-module nexus linking {ea.display_name} and {eb.display_name} via active audit keyword register.",
-                "amount": 2.5,
-                "ref_no": f"KW-{keyword[:8].upper()}" if keyword else "KW-INTERLINK",
-            }
-        )
-
-    synth_tool = "Bank"
+    synth_tool = "Link"
     if evidence_items:
         first_mod = evidence_items[0].get("source_module")
-        synth_tool = resolve_tool_display_name(first_mod)
+        synth_tool = resolve_tool_display_name(first_mod) or "Link"
 
     return {
         "status": "success",
@@ -1176,8 +1115,8 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
             "label": f"{synth_tool}: {keyword}" if keyword else f"{synth_tool} Interlink",
             "category": category,
             "module": synth_tool.lower(),
-            "weight": 2.5,
-            "confidence": 0.95,
+            "weight": float(len(evidence_items) or 1.0),
+            "confidence": 1.0,
             "is_rapid_layering": False,
             "is_external": False,
         },
@@ -1229,18 +1168,14 @@ def get_mode1_keyword_graph(
         target_entities = list(
             ForensicEntity.objects.filter(target_q).distinct().prefetch_related("aliases")
         )
-
-    if not target_entities:
+    elif not audit and not filter_names:
         target_entities = list(
             ForensicEntity.objects.filter(is_target=True).prefetch_related("aliases")[:10]
         )
-        if not target_entities and ForensicEntity.objects.exists():
-            target_entities = list(ForensicEntity.objects.prefetch_related("aliases")[:5])
 
     target_entity_ids = {e.id for e in target_entities}
     target_entity_dict = {str(e.id): e for e in target_entities}
 
-    # Scope relationships strictly to those involving target auditees
     # Scope relationships strictly to those involving target auditees
     if target_entity_ids:
         audit_rels = list(
@@ -1273,11 +1208,7 @@ def get_mode1_keyword_graph(
                 if dr not in audit_rels:
                     audit_rels.append(dr)
     else:
-        audit_rels = list(
-            EntityRelationship.objects.select_related(
-                "source_entity", "target_entity"
-            ).prefetch_related("evidence_pointers")[:100]
-        )
+        audit_rels = []
         doc_node_ids = set()
 
     # Allowed entities strictly within the active audit scope
@@ -1889,11 +1820,9 @@ def get_mode2_audit_graph(
                 )[:max_nodes]
             )
         else:
-            entities = list(
-                ForensicEntity.objects.filter(risk_rating__gte=min_risk).order_by(
-                    "-is_target", "-risk_rating"
-                )[:max_nodes]
-            )
+            entities = []
+    elif audit_id:
+        entities = []
     else:
         entities = list(
             ForensicEntity.objects.filter(risk_rating__gte=min_risk).order_by(
@@ -1953,7 +1882,7 @@ def get_mode3_global_graph(
             fe = ForensicEntity.objects.filter(display_name__iexact=name).first()
             if fe:
                 internal_entities.append(fe)
-    else:
+    elif not audit:
         internal_entities = list(
             ForensicEntity.objects.filter(is_target=True).order_by("-risk_rating")[:10]
         )
@@ -2057,38 +1986,6 @@ def get_mode3_global_graph(
                         }
                     )
 
-    # Search additional external entities by category or high risk
-    if len(external_matched_entities) < 5:
-        ext_candidates = ForensicEntity.objects.exclude(id__in=internal_ids).filter(
-            Q(category__icontains="External") | Q(risk_rating__gte=50)
-        )[:10]
-        for ev in ext_candidates:
-            if str(ev.id) not in internal_ids and ev not in external_matched_entities:
-                external_matched_entities.append(ev)
-                if internal_entities:
-                    external_edges.append(
-                        {
-                            "id": f"ext-{str(internal_entities[0].id)[:8]}-{str(ev.id)[:8]}",
-                            "source": str(internal_entities[0].id),
-                            "target": str(ev.id),
-                            "from": str(internal_entities[0].id),
-                            "to": str(ev.id),
-                            "relation_type": "CROSS_AUDIT_NEXUS",
-                            "label": "External Historical Match",
-                            "weight": 2.0,
-                            "confidence": 0.85,
-                            "module": "vault",
-                            "is_direct": False,
-                            "is_rapid_layering": False,
-                            "is_external": True,
-                            "evidence": {
-                                "source_module": "Historical Repository",
-                                "snippet": f"External record for '{ev.display_name}' matched from historical audit repository.",
-                            },
-                            "evidence_count": 1,
-                        }
-                    )
-
     for ext_ent in external_matched_entities:
         nodes.append(
             _format_node(
@@ -2157,31 +2054,12 @@ def get_link_dashboard_metrics() -> dict[str, int]:
     raw_pairs = EntityRelationship.objects.values_list("source_entity_id", "target_entity_id")
     merged_pairs = {tuple(sorted((str(u), str(v)))) for u, v in raw_pairs}
     unack_count = RelationshipAlert.objects.filter(is_acknowledged=False).count()
-    total_alerts = unack_count or RelationshipAlert.objects.count()
     return {
         "total_entities": ForensicEntity.objects.count(),
-        "total_relationships": len(merged_pairs) or EntityRelationship.objects.count(),
+        "total_relationships": len(merged_pairs),
         "total_evidence": EvidencePointer.objects.count(),
-        "unack_alerts": total_alerts,
+        "unack_alerts": unack_count,
     }
-
-
-def get_target_entities(
-    filter_names: list[str] | None = None, limit: int = 10
-) -> QuerySet[ForensicEntity]:
-    """
-    Retrieves prioritized target entities, scoping to active audit profile names if supplied,
-    or falling back to global marked target entities.
-    """
-    if filter_names:
-        audit_q = Q()
-        for name in filter_names:
-            audit_q |= Q(display_name__iexact=name)
-        audit_targets = ForensicEntity.objects.filter(audit_q).order_by("-risk_rating")
-        if audit_targets.exists():
-            return audit_targets[:limit]
-
-    return ForensicEntity.objects.filter(is_target=True).order_by("-risk_rating")[:limit]
 
 
 def get_high_risk_entities(min_risk: int = 50, limit: int = 15) -> QuerySet[ForensicEntity]:

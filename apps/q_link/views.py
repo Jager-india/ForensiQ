@@ -24,10 +24,8 @@ from .selectors import (
     get_entity_network,
     get_entity_timeline,
     get_graph_overview,
-    get_high_risk_entities,
     get_link_dashboard_metrics,
     get_recent_alerts,
-    get_target_entities,
 )
 from .services import acknowledge_alert
 
@@ -65,7 +63,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     filter_names = (
         audit_profile_names if (scope == "audit" and active_audit and audit_profile_names) else None
     )
-    targets = get_target_entities(filter_names=filter_names, limit=10)
 
     audit_id = str(active_audit.id) if active_audit else None
     initial_graph = get_graph_overview(
@@ -75,7 +72,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         max_nodes=120,
         filter_names=filter_names,
     )
-    high_risk_entities = get_high_risk_entities(min_risk=50, limit=15)
 
     context = {
         "page_title": "Q-Link | Forensic Intelligence & Relationship Engine",
@@ -84,8 +80,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "total_evidence": metrics["total_evidence"],
         "unack_alerts": metrics["unack_alerts"],
         "alerts": alerts,
-        "targets": targets,
-        "high_risk_entities": high_risk_entities,
         "initial_graph_json": json.dumps(initial_graph),
         "active_audit": active_audit,
         "scope": scope,

@@ -34,19 +34,15 @@ def generate_loop_forensic_narrative(loop_data: dict[str, Any]) -> str:
         " → ".join(cycle_nodes) if cycle_nodes else f"{originator} → {counterparty} → {originator}"
     )
 
-    fallback_narrative = (
-        f"Capital initiated from '{originator}' (₹{initial_amt:,.2f}) and routed through "
-        f"intermediary conduits ({conduits_str}) before returning ₹{return_amt:,.2f} "
-        f"back to '{originator}'. A total of ₹{retained_amt:,.2f} was retained in transit fees, "
-        f"confirming a closed round-tripping circuit with beneficial control preservation."
-    )
-
     endpoint = getattr(
         settings,
         "TRAIL_LLM_ENDPOINT",
         getattr(settings, "LLM_API_ENDPOINT", "http://127.0.0.1:8434/v1/chat/completions"),
     )
     timeout = float(getattr(settings, "LLM_API_TIMEOUT", 8.0))
+
+    if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
+        return "⚠️ Forensic AI Narrative unavailable (LLM service endpoint not configured)."
 
     system_prompt = load_prompt(
         "q_trail",
@@ -90,7 +86,7 @@ def generate_loop_forensic_narrative(loop_data: dict[str, Any]) -> str:
     }
 
     if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
-        return fallback_narrative
+        return "⚠️ Forensic AI Narrative unavailable (LLM service endpoint not configured)."
 
     try:
         headers = {"Content-Type": "application/json"}
@@ -116,6 +112,6 @@ def generate_loop_forensic_narrative(loop_data: dict[str, Any]) -> str:
                             content = content[: last_punct + 1].strip()
                         return content
     except Exception as exc:
-        logger.debug("Local LLM synthesis bypassed ({}); using deterministic narrative.", exc)
+        logger.debug("Local LLM synthesis offline or unreachable: {}", exc)
 
-    return fallback_narrative
+    return "⚠️ Forensic AI Narrative unavailable (LLM service offline or unreachable)."
