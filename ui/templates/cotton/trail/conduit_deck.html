@@ -2,72 +2,108 @@
     title="Suspected Middlemen Passing Money"
 />
 
+<script>
+function conduitDeckComponent() {
+    return {
+        isExpanded: false,
+        priorityModel: 'composite',
+        expandedConduit: null,
+        loadingConduits: new Set(),
+
+        get sortedConduits() {
+            var items = [].concat(window.conduitDeckData || []);
+            if (this.priorityModel === 'value') {
+                return items.sort(function(a, b) {
+                    var valB = (b.scores && b.scores.value) != null ? b.scores.value : 0;
+                    var valA = (a.scores && a.scores.value) != null ? a.scores.value : 0;
+                    return valB - valA;
+                });
+            } else if (this.priorityModel === 'velocity') {
+                return items.sort(function(a, b) {
+                    var velB = (b.scores && b.scores.velocity) != null ? b.scores.velocity : 0;
+                    var velA = (a.scores && a.scores.velocity) != null ? a.scores.velocity : 0;
+                    return velB - velA;
+                });
+            }
+            return items.sort(function(a, b) {
+                var compB = (b.scores && b.scores.composite) != null ? b.scores.composite : 0;
+                var compA = (a.scores && a.scores.composite) != null ? a.scores.composite : 0;
+                return compB - compA;
+            });
+        },
+
+        toggle(id) {
+            this.expandedConduit = (this.expandedConduit === id) ? null : id;
+        },
+
+        handleCounterpartyKeywordAdded(event) {
+            var name = (event && event.detail && event.detail.name ? event.detail.name : '').toLowerCase();
+            if (name) {
+                (window.conduitDeckData || []).forEach(function(item) {
+                    if (item.name && item.name.toLowerCase() === name) {
+                        item.is_keyword_added = true;
+                    }
+                });
+            }
+        },
+
+        getScoreTextColor(score) {
+            if (score >= 70) return 'text-rose-400';
+            if (score >= 40) return 'text-amber-400';
+            return 'text-theme-muted';
+        },
+
+        getScoreBarColor(score) {
+            if (score >= 70) return 'bg-rose-500';
+            return 'bg-amber-500';
+        },
+
+        async addConduitKeyword(c) {
+            if (c.is_keyword_added) return;
+            this.loadingConduits.add(c.id);
+            try {
+                var csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                var sender = (c.sender || '').toLowerCase();
+                var recipient = (c.recipient || '').toLowerCase();
+                var matchedP = (window.analyzedProfilesData || []).find(function(p) {
+                    return p.name && (p.name.toLowerCase() === sender || p.name.toLowerCase() === recipient);
+                });
+                var profileId = (matchedP && matchedP.id) ||
+                                (window.analyzedProfilesData && window.analyzedProfilesData[0] && window.analyzedProfilesData[0].id) ||
+                                (window.beatsData && window.beatsData[0] && window.beatsData[0].profile_id) || '';
+                var res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        profile_id: profileId,
+                        keyword: c.name,
+                    })
+                });
+                var data = await res.json();
+                if (data.status === 'success') {
+                    c.is_keyword_added = true;
+                    window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
+                        detail: { name: c.name, profileId: profileId }
+                    }));
+                } else {
+                    alert(data.message || 'Failed to add keyword.');
+                }
+            } catch (err) {
+                console.error('Failed adding conduit keyword:', err);
+            } finally {
+                this.loadingConduits.delete(c.id);
+            }
+        }
+    };
+}
+</script>
+
 <div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
-     x-data="{
-         isExpanded: false,
-         priorityModel: 'composite',
-         expandedConduit: null,
-         get sortedConduits() {
-             const items = [...(window.conduitDeckData || [])];
-             if (this.priorityModel === 'value') {
-                 return items.sort((a, b) => (b.scores?.value ?? 0) - (a.scores?.value ?? 0));
-             } else if (this.priorityModel === 'velocity') {
-                 return items.sort((a, b) => (b.scores?.velocity ?? 0) - (a.scores?.velocity ?? 0));
-             }
-             return items.sort((a, b) => (b.scores?.composite ?? 0) - (a.scores?.composite ?? 0));
-         },
-         toggle(id) {
-             this.expandedConduit = (this.expandedConduit === id) ? null : id;
-         },
-         loadingConduits: new Set(),
-         async addConduitKeyword(c) {
-             if (c.is_keyword_added) return;
-             this.loadingConduits.add(c.id);
-             try {
-                 const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-                 const sender = (c.sender || '').toLowerCase();
-                 const recipient = (c.recipient || '').toLowerCase();
-                 const matchedP = (window.analyzedProfilesData || []).find(p =>
-                     (p.name && (p.name.toLowerCase() === sender || p.name.toLowerCase() === recipient))
-                 );
-                 const profileId = matchedP?.id || (window.analyzedProfilesData && window.analyzedProfilesData[0]?.id) || (window.beatsData && window.beatsData[0] && window.beatsData[0].profile_id) || '';
-                 const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
-                     method: 'POST',
-                     headers: {
-                         'Content-Type': 'application/json',
-                         'X-CSRFToken': csrfToken,
-                     },
-                     body: JSON.stringify({
-                         profile_id: profileId,
-                         keyword: c.name,
-                     })
-                 });
-                 const data = await res.json();
-                 if (data.status === 'success') {
-                     c.is_keyword_added = true;
-                     window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
-                         detail: { name: c.name, profileId: profileId }
-                     }));
-                 } else {
-                     alert(data.message || 'Failed to add keyword.');
-                 }
-             } catch (err) {
-                 console.error('Failed adding conduit keyword:', err);
-             } finally {
-                 this.loadingConduits.delete(c.id);
-             }
-         }
-     }"
-     @counterparty-keyword-added.window="
-         const name = ($event.detail?.name || '').toLowerCase();
-         if (name) {
-             (window.conduitDeckData || []).forEach(item => {
-                 if (item.name && item.name.toLowerCase() === name) {
-                     item.is_keyword_added = true;
-                 }
-             });
-         }
-     ">
+     x-data="conduitDeckComponent()"
+     @counterparty-keyword-added.window="handleCounterpartyKeywordAdded($event)">
 
     <!-- Header Bar: Click to Expand / Collapse -->
     <button type="button" @click="isExpanded = !isExpanded"
@@ -149,11 +185,11 @@
                     <div class="flex items-center gap-3">
                         <div class="text-right">
                             <div class="text-xs font-bold font-mono"
-                                 :class="c.scores.composite >= 70 ? 'text-rose-400' : (c.scores.composite >= 40 ? 'text-amber-400' : 'text-theme-muted')"
+                                 :class="getScoreTextColor(c.scores.composite)"
                                  x-text="c.scores[priorityModel] + ' pts'"></div>
                             <div class="w-20 bg-theme-subtle h-1.5 rounded-full overflow-hidden mt-1">
                                 <div class="h-full rounded-full transition-all"
-                                     :class="c.scores.composite >= 70 ? 'bg-rose-500' : 'bg-amber-500'"
+                                     :class="getScoreBarColor(c.scores.composite)"
                                      :style="'width: ' + c.scores[priorityModel] + '%'"></div>
                             </div>
                         </div>

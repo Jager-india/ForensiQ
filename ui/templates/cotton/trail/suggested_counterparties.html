@@ -2,39 +2,45 @@
     title="Suggested Counterparties for Investigation"
 />
 
-<div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
-     x-data="{
+<script>
+function suggestedCounterpartiesComponent() {
+    return {
         isExpanded: true,
         filter: 'all',
         dismissed: new Set(),
         loadingItems: new Set(),
         addedKeywords: new Set(),
-        counterparties: {{ suggested_counterparties_json|default:'[]'|safe }},
-        analyzedProfiles: {{ analyzed_profiles_json|default:'[]'|safe }},
+        counterparties: window.suggestedCounterpartiesData || [],
+        analyzedProfiles: window.analyzedProfilesData || [],
         selectedProfiles: {},
         isAddingAll: false,
 
         init() {
-            this.counterparties.forEach(c => {
+            var self = this;
+            (this.counterparties || []).forEach(function(c) {
                 if (c.is_already_keyword) {
-                    this.addedKeywords.add(c.id);
+                    self.addedKeywords.add(c.id);
                 }
-                this.selectedProfiles[c.id] = c.associated_profile_id;
+                self.selectedProfiles[c.id] = c.associated_profile_id;
             });
         },
 
         get visibleItems() {
-            return this.counterparties.filter(c => {
-                if (this.dismissed.has(c.id)) return false;
-                if (this.filter === 'unadded') return !this.addedKeywords.has(c.id);
-                if (this.filter === 'conduits') return c.category === 'CONDUIT';
-                if (this.filter === 'layering') return c.category === 'LAYERING';
+            var self = this;
+            return (this.counterparties || []).filter(function(c) {
+                if (self.dismissed.has(c.id)) return false;
+                if (self.filter === 'unadded') return !self.addedKeywords.has(c.id);
+                if (self.filter === 'conduits') return c.category === 'CONDUIT';
+                if (self.filter === 'layering') return c.category === 'LAYERING';
                 return true;
             });
         },
 
         get unaddedCount() {
-            return this.counterparties.filter(c => !this.dismissed.has(c.id) && !this.addedKeywords.has(c.id)).length;
+            var self = this;
+            return (this.counterparties || []).filter(function(c) {
+                return !self.dismissed.has(c.id) && !self.addedKeywords.has(c.id);
+            }).length;
         },
 
         dismiss(id) {
@@ -45,9 +51,9 @@
             if (this.addedKeywords.has(c.id) || this.loadingItems.has(c.id)) return;
             this.loadingItems.add(c.id);
             try {
-                const profileId = this.selectedProfiles[c.id] || c.associated_profile_id;
-                const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-                const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                var profileId = this.selectedProfiles[c.id] || c.associated_profile_id;
+                var csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                var res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -58,7 +64,7 @@
                         keyword: c.name,
                     })
                 });
-                const data = await res.json();
+                var data = await res.json();
                 if (data.status === 'success') {
                     this.addedKeywords.add(c.id);
                     c.is_already_keyword = true;
@@ -77,16 +83,21 @@
         },
 
         async addAllUnadded() {
-            const unadded = this.counterparties.filter(c => !this.dismissed.has(c.id) && !this.addedKeywords.has(c.id));
+            var self = this;
+            var unadded = (this.counterparties || []).filter(function(c) {
+                return !self.dismissed.has(c.id) && !self.addedKeywords.has(c.id);
+            });
             if (!unadded.length || this.isAddingAll) return;
             this.isAddingAll = true;
             try {
-                const items = unadded.map(c => ({
-                    profile_id: this.selectedProfiles[c.id] || c.associated_profile_id,
-                    keyword: c.name,
-                }));
-                const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
-                const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                var items = unadded.map(function(c) {
+                    return {
+                        profile_id: self.selectedProfiles[c.id] || c.associated_profile_id,
+                        keyword: c.name,
+                    };
+                });
+                var csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                var res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -94,10 +105,10 @@
                     },
                     body: JSON.stringify({ items: items })
                 });
-                const data = await res.json();
+                var data = await res.json();
                 if (data.status === 'success') {
-                    unadded.forEach(c => {
-                        this.addedKeywords.add(c.id);
+                    unadded.forEach(function(c) {
+                        self.addedKeywords.add(c.id);
                         c.is_already_keyword = true;
                     });
                     window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
@@ -113,7 +124,12 @@
                 this.isAddingAll = false;
             }
         }
-     }">
+    };
+}
+</script>
+
+<div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
+     x-data="suggestedCounterpartiesComponent()">
 
     <!-- Header Bar: Click to Expand / Collapse -->
     <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border-b border-theme-border">
@@ -126,7 +142,7 @@
                 <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
                     <span>{{ title }}</span>
                     <span class="text-xs font-mono px-2 py-0.5 rounded bg-theme-subtle text-theme-muted font-normal"
-                          x-text="counterparties.length + ' Discovered'"></span>
+                          x-text="(counterparties || []).length + ' Discovered'"></span>
                     <template x-if="unaddedCount > 0">
                         <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold"
                               x-text="unaddedCount + ' Unapproved'"></span>
@@ -167,7 +183,7 @@
                 <button type="button" @click="filter = 'all'"
                         :class="filter === 'all' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
                         class="px-2.5 py-1 rounded transition cursor-pointer">
-                    All (<span x-text="counterparties.filter(c => !dismissed.has(c.id)).length"></span>)
+                    All (<span x-text="(counterparties || []).filter(function(c) { return !dismissed.has(c.id); }).length"></span>)
                 </button>
                 <button type="button" @click="filter = 'unadded'"
                         :class="filter === 'unadded' ? 'bg-theme-surface text-amber-500 font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
@@ -257,7 +273,7 @@
                             <!-- Target Profile Selector / Badge -->
                             <div class="flex items-center justify-between text-[11px]">
                                 <span class="text-theme-muted">Target Profile:</span>
-                                <template x-if="analyzedProfiles.length > 1">
+                                <template x-if="(analyzedProfiles || []).length > 1">
                                     <select x-model="selectedProfiles[c.id]"
                                             class="text-[11px] font-medium bg-theme-surface border border-theme-border rounded px-1.5 py-0.5 text-theme-text focus:outline-hidden focus:border-amber-500">
                                         <template x-for="p in analyzedProfiles" :key="p.id">
@@ -265,7 +281,7 @@
                                         </template>
                                     </select>
                                 </template>
-                                <template x-if="analyzedProfiles.length <= 1">
+                                <template x-if="(analyzedProfiles || []).length <= 1">
                                     <span class="font-bold text-theme-text" x-text="c.associated_profile_name"></span>
                                 </template>
                             </div>
