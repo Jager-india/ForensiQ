@@ -1006,6 +1006,7 @@ def analyze_profiles_money_trail(
         direct_df=combined_direct,
         analyzed_profiles=profile_metadata,
         trail_keywords_set=trail_keywords_set,
+        profile_dfs=profile_dfs,
     )
 
     return {
@@ -1045,6 +1046,7 @@ def extract_suggested_counterparties(
     direct_df: pd.DataFrame,
     analyzed_profiles: list[dict[str, Any]],
     trail_keywords_set: set[str],
+    profile_dfs: dict[str, pd.DataFrame] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Identifies candidate counterparties (conduits, middlemen, and rapid layering parties)
@@ -1083,6 +1085,68 @@ def extract_suggested_counterparties(
             return True
         return False
 
+    def _find_auditee_for_counterparty(cand_name: str, fallback_party: str = "") -> tuple[str, str]:
+        """
+        Determines the auditee profile (profile_id, profile_name) from whose bank
+        statement the candidate counterparty was discovered.
+        """
+        c_lower = str(cand_name or "").strip().lower()
+        if not c_lower:
+            return default_pid, default_pname
+
+        # 1. Match directly against raw statements in profile_dfs
+        if profile_dfs:
+            for pid, df in profile_dfs.items():
+                if df is None or df.empty:
+                    continue
+                p_name = next(
+                    (p["name"] for p in analyzed_profiles if str(p["id"]) == str(pid)),
+                    default_pname,
+                )
+                for col in ["Counterparty_Name", "Party_Name", "Narration", "Description"]:
+                    if col in df.columns:
+                        try:
+                            matches = df[
+                                df[col].astype(str).str.lower().str.contains(c_lower, regex=False)
+                            ]
+                            if not matches.empty:
+                                return str(pid), str(p_name)
+                        except (TypeError, ValueError, KeyError) as exc:
+                            logger.debug("Failed checking statement column {}: {}", col, exc)
+
+        # 2. Check intermediate_df: In rapid layering, Intermediary_Entity is the auditee account holder
+        if isinstance(intermediate_df, pd.DataFrame) and not intermediate_df.empty:
+            for _, r in intermediate_df.iterrows():
+                s = str(r.get("Sender_Person", "")).strip().lower()
+                rec = str(r.get("Recipient_Person", "")).strip().lower()
+                if c_lower in (s, rec):
+                    inter = str(r.get("Intermediary_Entity", "")).strip()
+                    matched_p = next(
+                        (
+                            p
+                            for p in analyzed_profiles
+                            if p["name"].strip().lower() == inter.lower()
+                        ),
+                        None,
+                    )
+                    if matched_p:
+                        return str(matched_p["id"]), str(matched_p["name"])
+
+        # 3. Check fallback_party against analyzed_profiles
+        if fallback_party:
+            matched_p = next(
+                (
+                    p
+                    for p in analyzed_profiles
+                    if p["name"].strip().lower() == fallback_party.strip().lower()
+                ),
+                None,
+            )
+            if matched_p:
+                return str(matched_p["id"]), str(matched_p["name"])
+
+        return default_pid, default_pname
+
     suggestions_by_key: dict[str, dict[str, Any]] = {}
 
     # 1. Candidate Conduits from Grouped Intermediaries
@@ -1105,17 +1169,8 @@ def extract_suggested_counterparties(
             senders = []
             recipients = []
 
-        assoc_p = next(
-            (
-                p
-                for p in analyzed_profiles
-                if any(p["name"].lower() == s.lower() for s in senders)
-                or any(p["name"].lower() == r.lower() for r in recipients)
-            ),
-            None,
-        )
-        assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
-        assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+        fallback = senders[0] if senders else (recipients[0] if recipients else "")
+        assoc_id, assoc_name = _find_auditee_for_counterparty(clean_name, fallback)
 
         is_already = c_key in existing_kws_lower
         slug_id = f"c_{re.sub(r'[^a-zA-Z0-9]+', '_', c_key).strip('_')}"
@@ -1159,13 +1214,9 @@ def extract_suggested_counterparties(
                     )
                 )
 
-                other_party = sender if is_outflow else recipient
-                assoc_p = next(
-                    (p for p in analyzed_profiles if p["name"].lower() == other_party.lower()),
-                    None,
-                )
-                assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
-                assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+                inter = str(row.get("Intermediary_Entity", "")).strip()
+                fallback = inter or (sender if is_outflow else recipient)
+                assoc_id, assoc_name = _find_auditee_for_counterparty(cand, fallback)
 
                 is_already = k in existing_kws_lower
                 slug_id = f"lay_{re.sub(r'[^a-zA-Z0-9]+', '_', k).strip('_')}"
@@ -1208,12 +1259,7 @@ def extract_suggested_counterparties(
                     )
                     continue
 
-                assoc_p = next(
-                    (p for p in analyzed_profiles if p["name"].lower() == counterpart.lower()),
-                    None,
-                )
-                assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
-                assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+                assoc_id, assoc_name = _find_auditee_for_counterparty(cand, counterpart)
 
                 is_already = k in existing_kws_lower
                 slug_id = f"dir_{re.sub(r'[^a-zA-Z0-9]+', '_', k).strip('_')}"

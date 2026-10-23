@@ -1,134 +1,190 @@
 <c-vars
     title="Multi-Hop Fund Flow Topology"
-    
 />
 
+<script>
+function netGraphComponent() {
+    return {
+        graph: window.topologyGraphData || { W: 1060, H: 580, R: 18, nodes: [], edges: [], plates: [], cols: [] },
+        focusedNode: null,
+        focusedEdge: null,
+        hoveredNode: null,
+        hoveredEdge: null,
+        activeBeatEdge: null,
+        tooltip: null,
+
+        init() {
+            var self = this;
+            this.renderSvg();
+            this.$watch('focusedNode', function() { self.renderSvg(); });
+            this.$watch('focusedEdge', function() { self.renderSvg(); });
+            this.$watch('hoveredNode', function() { self.renderSvg(); });
+            this.$watch('hoveredEdge', function() { self.renderSvg(); });
+            this.$watch('activeBeatEdge', function() { self.renderSvg(); });
+        },
+
+        isEdgeActive(edgeId) {
+            if (this.activeBeatEdge) return this.activeBeatEdge === edgeId;
+            if (this.focusedEdge) return this.focusedEdge === edgeId;
+            if (this.hoveredEdge) return this.hoveredEdge === edgeId;
+            if (this.focusedNode) {
+                var self = this;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === edgeId; });
+                return e && (e.from === self.focusedNode || e.to === self.focusedNode);
+            }
+            if (this.hoveredNode) {
+                var self = this;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === edgeId; });
+                return e && (e.from === self.hoveredNode || e.to === self.hoveredNode);
+            }
+            return true;
+        },
+
+        isNodeActive(nodeId) {
+            if (this.focusedNode) return this.focusedNode === nodeId;
+            if (this.hoveredNode) return this.hoveredNode === nodeId;
+            if (this.activeBeatEdge) {
+                var self = this;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === self.activeBeatEdge; });
+                return e && (e.from === nodeId || e.to === nodeId);
+            }
+            if (this.focusedEdge) {
+                var self = this;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === self.focusedEdge; });
+                return e && (e.from === nodeId || e.to === nodeId);
+            }
+            if (this.hoveredEdge) {
+                var self = this;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === self.hoveredEdge; });
+                return e && (e.from === nodeId || e.to === nodeId);
+            }
+            return true;
+        },
+
+        get isFocused() {
+            return !!(this.focusedNode || this.focusedEdge || this.hoveredNode || this.hoveredEdge || this.activeBeatEdge);
+        },
+
+        selectNode(id) {
+            this.focusedNode = (this.focusedNode === id) ? null : id;
+            this.focusedEdge = null;
+        },
+
+        selectEdge(id) {
+            this.focusedEdge = (this.focusedEdge === id) ? null : id;
+            this.focusedNode = null;
+        },
+
+        clearFocus() {
+            this.focusedNode = null;
+            this.focusedEdge = null;
+            this.activeBeatEdge = null;
+        },
+
+        handleMouseOver(event) {
+            var nodeEl = event.target.closest('[data-node-id]');
+            var edgeEl = event.target.closest('[data-edge-id]');
+            if (nodeEl) {
+                this.hoveredNode = nodeEl.getAttribute('data-node-id');
+            } else if (edgeEl) {
+                var edgeId = edgeEl.getAttribute('data-edge-id');
+                this.hoveredEdge = edgeId;
+                var e = (this.graph.edges || []).find(function(x) { return x.id === edgeId; });
+                if (e && e.mid) {
+                    this.tooltip = {
+                        title: (e.from_name || '') + ' \u2192 ' + (e.to_name || ''),
+                        amount: e.amount || '',
+                        kind: e.kind || '',
+                        utr: e.utr || '',
+                        x: e.mid.x,
+                        y: e.mid.y
+                    };
+                }
+            }
+        },
+
+        handleMouseOut(event) {
+            if (!event.relatedTarget || !event.relatedTarget.closest('[data-node-id]')) {
+                this.hoveredNode = null;
+            }
+            if (!event.relatedTarget || !event.relatedTarget.closest('[data-edge-id]')) {
+                this.hoveredEdge = null;
+                this.tooltip = null;
+            }
+        },
+
+        handleClick(event) {
+            var nodeEl = event.target.closest('[data-node-id]');
+            var edgeEl = event.target.closest('[data-edge-id]');
+            if (nodeEl) this.selectNode(nodeEl.getAttribute('data-node-id'));
+            else if (edgeEl) this.selectEdge(edgeEl.getAttribute('data-edge-id'));
+        },
+
+        renderSvg() {
+            var container = this.$refs.svgDynamics;
+            if (!container || !this.graph) return;
+            var g = this.graph;
+
+            // Explicitly set camelCase viewBox on the SVG root to guarantee proper coordinate scaling
+            var svgEl = container.closest('svg');
+            if (svgEl) {
+                svgEl.setAttribute('viewBox', '0 0 ' + (g.W || 1060) + ' ' + (g.H || 580));
+            }
+
+            var html = '';
+
+            // 1. Column Guides
+            (g.cols || []).forEach(function(col) {
+                html += "<line x1='" + col.x + "' y1='60' x2='" + col.x + "' y2='" + (g.H - 40) + "' class='stroke-slate-200 dark:stroke-zinc-800' stroke-width='1' stroke-dasharray='3 6' />";
+                html += "<text x='" + col.x + "' y='42' text-anchor='middle' class='fill-slate-500 dark:fill-zinc-500' font-size='10' font-family='monospace' font-weight='700' letter-spacing='1.5'>" + col.t + "</text>";
+            });
+
+            // 2. Edges
+            var self = this;
+            (g.edges || []).forEach(function(e) {
+                var on = self.isEdgeActive(e.id);
+                var op = self.isFocused ? (on ? 1 : 0.08) : 0.85;
+                var marker = (e.kind === 'direct') ? 'arw-direct' : ((e.kind === 'return') ? 'arw-return' : 'arw-hop');
+                var dash = e.dashed ? "stroke-dasharray='4 4'" : '';
+                var sw = (e.kind === 'return') ? 2.5 : 1.8;
+
+                html += "<g opacity='" + op + "' style='transition: opacity .2s'>";
+                if (e.kind === 'return' || on) {
+                    html += "<path d='" + e.d + "' fill='none' stroke='" + e.color + "' stroke-width='6' stroke-linecap='round' opacity='0.2' />";
+                }
+                html += "<path d='" + e.d + "' fill='none' stroke='" + e.color + "' stroke-width='" + sw + "' stroke-linecap='round' " + dash + " marker-end='url(#" + marker + ")' />";
+                html += "<path d='" + e.d + "' fill='none' stroke='transparent' stroke-width='16' style='cursor:pointer' data-edge-id='" + e.id + "' />";
+                html += "</g>";
+            });
+
+            // 3. Connection Docking Pins on SVG layer
+            (g.nodes || []).forEach(function(n) {
+                var on = self.isNodeActive(n.id);
+                var op = self.isFocused ? (on ? 1 : 0.2) : 0.8;
+                var fill = (n.kind === 'conduit') ? '#38bdf8' : '#f59e0b';
+                var halfW = (n.w || 205) / 2;
+
+                html += "<g opacity='" + op + "' style='transition: opacity .2s' data-node-id='" + n.id + "'>";
+                // Left dock pin (incoming)
+                if (n.kind === 'conduit' || n.x > 500) {
+                    html += "<circle cx='" + (n.x - halfW) + "' cy='" + n.y + "' r='3.5' fill='" + fill + "' style='stroke: var(--fq-bg-surface);' stroke-width='1.5' />";
+                }
+                // Right dock pin (outgoing)
+                if (n.kind === 'conduit' || n.x < 500) {
+                    html += "<circle cx='" + (n.x + halfW) + "' cy='" + n.y + "' r='3.5' fill='" + fill + "' style='stroke: var(--fq-bg-surface);' stroke-width='1.5' />";
+                }
+                html += "</g>";
+            });
+
+            container.innerHTML = html;
+        }
+    };
+}
+</script>
+
 <div class="bg-theme-surface text-theme-text rounded-xl p-5 border border-theme-border shadow-md mb-8 relative overflow-hidden"
-     x-data="{
-         graph: window.topologyGraphData || { W: 1060, H: 580, R: 18, nodes: [], edges: [], plates: [], cols: [] },
-         focusedNode: null,
-         focusedEdge: null,
-         hoveredNode: null,
-         hoveredEdge: null,
-         activeBeatEdge: null,
-         tooltip: null,
-
-         init() {
-             this.renderSvg();
-             this.$watch('focusedNode', () => this.renderSvg());
-             this.$watch('focusedEdge', () => this.renderSvg());
-             this.$watch('hoveredNode', () => this.renderSvg());
-             this.$watch('hoveredEdge', () => this.renderSvg());
-             this.$watch('activeBeatEdge', () => this.renderSvg());
-         },
-
-         isEdgeActive(edgeId) {
-             if (this.activeBeatEdge) return this.activeBeatEdge === edgeId;
-             if (this.focusedEdge) return this.focusedEdge === edgeId;
-             if (this.hoveredEdge) return this.hoveredEdge === edgeId;
-             if (this.focusedNode) {
-                 const e = this.graph.edges.find(x => x.id === edgeId);
-                 return e && (e.from === this.focusedNode || e.to === this.focusedNode);
-             }
-             if (this.hoveredNode) {
-                 const e = this.graph.edges.find(x => x.id === edgeId);
-                 return e && (e.from === this.hoveredNode || e.to === this.hoveredNode);
-             }
-             return true;
-         },
-
-         isNodeActive(nodeId) {
-             if (this.focusedNode) return this.focusedNode === nodeId;
-             if (this.hoveredNode) return this.hoveredNode === nodeId;
-             if (this.activeBeatEdge) {
-                 const e = this.graph.edges.find(x => x.id === this.activeBeatEdge);
-                 return e && (e.from === nodeId || e.to === nodeId);
-             }
-             if (this.focusedEdge) {
-                 const e = this.graph.edges.find(x => x.id === this.focusedEdge);
-                 return e && (e.from === nodeId || e.to === nodeId);
-             }
-             if (this.hoveredEdge) {
-                 const e = this.graph.edges.find(x => x.id === this.hoveredEdge);
-                 return e && (e.from === nodeId || e.to === nodeId);
-             }
-             return true;
-         },
-
-         get isFocused() {
-             return !!(this.focusedNode || this.focusedEdge || this.hoveredNode || this.hoveredEdge || this.activeBeatEdge);
-         },
-
-         selectNode(id) {
-             this.focusedNode = (this.focusedNode === id) ? null : id;
-             this.focusedEdge = null;
-         },
-
-         selectEdge(id) {
-             this.focusedEdge = (this.focusedEdge === id) ? null : id;
-             this.focusedNode = null;
-         },
-
-         clearFocus() {
-             this.focusedNode = null;
-             this.focusedEdge = null;
-             this.activeBeatEdge = null;
-         },
-
-         renderSvg() {
-             const container = this.$refs.svgDynamics;
-             if (!container || !this.graph) return;
-             const g = this.graph;
-             let html = '';
-
-             // 1. Column Guides
-             (g.cols || []).forEach(col => {
-                 html += `<line x1='${col.x}' y1='60' x2='${col.x}' y2='${g.H - 40}' class='stroke-slate-200 dark:stroke-zinc-800' stroke-width='1' stroke-dasharray='3 6' />`;
-                 html += `<text x='${col.x}' y='42' text-anchor='middle' class='fill-slate-500 dark:fill-zinc-500' font-size='10' font-family='monospace' font-weight='700' letter-spacing='1.5'>${col.t}</text>`;
-             });
-
-             // 2. Edges
-             (g.edges || []).forEach(e => {
-                 const on = this.isEdgeActive(e.id);
-                 const op = this.isFocused ? (on ? 1 : 0.08) : 0.85;
-                 const marker = (e.kind === 'direct') ? 'arw-direct' : ((e.kind === 'return') ? 'arw-return' : 'arw-hop');
-                 const dash = e.dashed ? `stroke-dasharray='4 4'` : '';
-                 const sw = (e.kind === 'return') ? 2.5 : 1.8;
-
-                 html += `<g opacity='${op}' style='transition: opacity .2s'>`;
-                 if (e.kind === 'return' || on) {
-                     html += `<path d='${e.d}' fill='none' stroke='${e.color}' stroke-width='6' stroke-linecap='round' opacity='0.2' />`;
-                 }
-                 html += `<path d='${e.d}' fill='none' stroke='${e.color}' stroke-width='${sw}' stroke-linecap='round' ${dash} marker-end='url(#${marker})' />`;
-                 html += `<path d='${e.d}' fill='none' stroke='transparent' stroke-width='16' style='cursor:pointer' data-edge-id='${e.id}' />`;
-                 html += `</g>`;
-             });
-
-             // 3. Connection Docking Pins on SVG layer
-             (g.nodes || []).forEach(n => {
-                 const on = this.isNodeActive(n.id);
-                 const op = this.isFocused ? (on ? 1 : 0.2) : 0.8;
-                 const fill = (n.kind === 'conduit') ? '#38bdf8' : '#f59e0b';
-                 const halfW = (n.w || 205) / 2;
-
-                 html += `<g opacity='${op}' style='transition: opacity .2s' data-node-id='${n.id}'>`;
-                 // Left dock pin (incoming)
-                 if (n.kind === 'conduit' || n.x > 500) {
-                     html += `<circle cx='${n.x - halfW}' cy='${n.y}' r='3.5' fill='${fill}' style='stroke: var(--fq-bg-surface);' stroke-width='1.5' />`;
-                 }
-                 // Right dock pin (outgoing)
-                 if (n.kind === 'conduit' || n.x < 500) {
-                     html += `<circle cx='${n.x + halfW}' cy='${n.y}' r='3.5' fill='${fill}' style='stroke: var(--fq-bg-surface);' stroke-width='1.5' />`;
-                 }
-                 html += `</g>`;
-             });
-
-             container.innerHTML = html;
-         }
-     }"
-     @beat-changed.window="
-         activeBeatEdge = $event.detail.beat ? $event.detail.beat.edge_id : null;
-     ">
+     x-data="netGraphComponent()"
+     @beat-changed.window="activeBeatEdge = $event.detail.beat ? $event.detail.beat.edge_id : null">
 
     <!-- Topology Header & Legend Bar -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-theme-border pb-4 mb-4">
@@ -185,30 +241,11 @@
 
         <!-- 1. SVG Layer (Grid, column guides, vector curves, arrows, node circles) -->
         <svg class="w-full h-full absolute inset-0"
-             :viewBox="'0 0 ' + (graph.W || 1060) + ' ' + (graph.H || 580)"
+             viewBox="0 0 1060 580"
              preserveAspectRatio="xMidYMid meet"
-             @mouseover="
-                 const nodeEl = $event.target.closest('[data-node-id]');
-                 const edgeEl = $event.target.closest('[data-edge-id]');
-                 if (nodeEl) {
-                     hoveredNode = nodeEl.getAttribute('data-node-id');
-                 } else if (edgeEl) {
-                     const edgeId = edgeEl.getAttribute('data-edge-id');
-                     hoveredEdge = edgeId;
-                     const e = (graph.edges || []).find(x => x.id === edgeId);
-                     if (e && e.mid) tooltip = { title: (e.from_name || '') + ' → ' + (e.to_name || ''), amount: e.amount || '', kind: e.kind || '', utr: e.utr || '', x: e.mid.x, y: e.mid.y };
-                 }
-             "
-             @mouseout="
-                 if (!$event.relatedTarget || !$event.relatedTarget.closest('[data-node-id]')) hoveredNode = null;
-                 if (!$event.relatedTarget || !$event.relatedTarget.closest('[data-edge-id]')) { hoveredEdge = null; tooltip = null; }
-             "
-             @click="
-                 const nodeEl = $event.target.closest('[data-node-id]');
-                 const edgeEl = $event.target.closest('[data-edge-id]');
-                 if (nodeEl) selectNode(nodeEl.getAttribute('data-node-id'));
-                 else if (edgeEl) selectEdge(edgeEl.getAttribute('data-edge-id'));
-             ">
+             @mouseover="handleMouseOver($event)"
+             @mouseout="handleMouseOut($event)"
+             @click="handleClick($event)">
             <defs>
                 <!-- Subtle dotted grid -->
                 <pattern id="qtrailGrid" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -260,11 +297,10 @@
                         <div class="flex-1 min-w-0 flex flex-col justify-center leading-tight">
                             <span class="font-bold text-xs truncate text-theme-text block tracking-tight"
                                   x-text="p.meta ? p.meta.label : p.name"></span>
-                            <div class="flex items-center justify-between text-[10px] text-theme-muted font-mono gap-1 mt-0.5">
-                                <span class="truncate text-theme-muted" x-text="p.meta ? p.meta.sub : ''"></span>
-                                <span class="shrink-0 font-medium text-[9px]"
-                                      :class="(p.meta && p.meta.kind === 'conduit') ? 'text-sky-400' : 'text-emerald-400'"
-                                      x-text="p.meta ? p.meta.foot : ''"></span>
+                            <div class="flex items-center text-[10px] font-mono mt-0.5">
+                                <span class="truncate font-medium"
+                                      :class="(p.meta && p.meta.kind === 'conduit') ? 'text-sky-500 dark:text-sky-400' : ((p.meta && p.meta.sub === 'Auditee Profile') ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400')"
+                                      x-text="p.meta ? (p.meta.kind === 'conduit' ? 'Conduit Intermediary' : (p.meta.sub === 'Auditee Profile' ? 'Auditee Profile' : 'Counterparty Sink')) : ''"></span>
                             </div>
                         </div>
                     </button>
