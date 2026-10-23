@@ -1800,3 +1800,123 @@ class QTrailMinimumThresholdTests(TestCase):
         with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
             fallback = generate_loop_forensic_narrative(loop_data)
             self.assertIn("offline", fallback.lower())
+
+
+class QTrailSuggestedCounterpartiesTests(TestCase):
+    """Unit and integration tests for Suggested Counterparties discovery and promotion."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        self.user = User.objects.create_user(username="test_auditor_trail", password="password123")
+        self.profile = InvestigationProfile.objects.create(
+            full_name="Target Officer",
+            keywords=["ExistingToken"],
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_extract_suggested_counterparties_filtering(self):
+        from q_trail.services import extract_suggested_counterparties
+
+        grouped_intermediaries = {
+            "Conduit Middleman Ltd": [
+                {
+                    "Sender_Person": "Target Officer",
+                    "Recipient_Person": "Third Party Recipient",
+                    "Outflow_Amount": 200000.0,
+                    "Inflow_Amount": 180000.0,
+                    "Retention_Amount": 20000.0,
+                }
+            ],
+            "UNKNOWN COUNTERPARTY": [{"Outflow_Amount": 10000.0}],
+            "UPI": [{"Outflow_Amount": 5000.0}],
+            "OPENING BALANCE B/F": [{"Outflow_Amount": 50000.0}],
+            "Target Officer": [{"Outflow_Amount": 100000.0}],
+            "ExistingToken": [
+                {
+                    "Sender_Person": "Target Officer",
+                    "Recipient_Person": "Vendor A",
+                    "Outflow_Amount": 50000.0,
+                    "Inflow_Amount": 50000.0,
+                    "Retention_Amount": 0.0,
+                }
+            ],
+        }
+
+        suggestions = extract_suggested_counterparties(
+            grouped_intermediaries=grouped_intermediaries,
+            intermediate_df=pd.DataFrame(),
+            direct_df=pd.DataFrame(),
+            analyzed_profiles=[{"id": str(self.profile.id), "name": "Target Officer"}],
+            trail_keywords_set={"ExistingToken"},
+        )
+
+        names = [s["name"] for s in suggestions]
+        self.assertIn("Conduit Middleman Ltd", names)
+        self.assertIn("ExistingToken", names)
+        self.assertNotIn("UNKNOWN COUNTERPARTY", names)
+        self.assertNotIn("UPI", names)
+        self.assertNotIn("OPENING BALANCE B/F", names)
+        self.assertNotIn("Target Officer", names)
+
+        conduit_item = next(s for s in suggestions if s["name"] == "Conduit Middleman Ltd")
+        self.assertFalse(conduit_item["is_already_keyword"])
+        self.assertEqual(conduit_item["category"], "CONDUIT")
+
+        existing_item = next(s for s in suggestions if s["name"] == "ExistingToken")
+        self.assertTrue(existing_item["is_already_keyword"])
+
+    def test_add_suggested_counterparty_keyword_service(self):
+        from q_trail.services import add_suggested_counterparty_keyword_service
+
+        res = add_suggested_counterparty_keyword_service(
+            profile_id=str(self.profile.id),
+            keyword="Silviya Intermediary",
+        )
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["keyword"], "Silviya Intermediary")
+
+        self.profile.refresh_from_db()
+        self.assertIn("Silviya Intermediary", self.profile.keywords)
+        self.assertIn("ExistingToken", self.profile.keywords)
+
+    def test_add_multiple_counterparty_keywords_service(self):
+        from q_trail.services import add_multiple_counterparty_keywords_service
+
+        items = [
+            {"profile_id": str(self.profile.id), "keyword": "Conduit One"},
+            {"profile_id": str(self.profile.id), "keyword": "Conduit Two"},
+        ]
+        res = add_multiple_counterparty_keywords_service(items)
+        self.assertEqual(res["status"], "success")
+        self.assertEqual(res["added_count"], 2)
+
+        self.profile.refresh_from_db()
+        self.assertIn("Conduit One", self.profile.keywords)
+        self.assertIn("Conduit Two", self.profile.keywords)
+
+    def test_add_counterparty_keyword_view_api(self):
+        url = reverse("q_trail:add_counterparty_keyword")
+
+        # Single keyword addition
+        response = self.client.post(
+            url,
+            data=json.dumps({"profile_id": str(self.profile.id), "keyword": "Metro Conduits"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["keyword"], "Metro Conduits")
+
+        self.profile.refresh_from_db()
+        self.assertIn("Metro Conduits", self.profile.keywords)
+
+        # Missing parameters
+        bad_res = self.client.post(
+            url,
+            data=json.dumps({"keyword": "Missing Profile"}),
+            content_type="application/json",
+        )
+        self.assertEqual(bad_res.status_code, 400)

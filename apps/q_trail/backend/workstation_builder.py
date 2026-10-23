@@ -244,6 +244,7 @@ def build_conduit_deck(
     grouped_intermediaries: dict[str, Any],
     circular_trails: list[dict[str, Any]],
     max_delta_days: int = 3,
+    trail_keywords: set[str] | list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Ranks and scores 1-hop suspected intermediary conduits across 3 prioritization models:
@@ -252,6 +253,7 @@ def build_conduit_deck(
     - Velocity Model (prioritizes ultra-rapid pass-throughs <= 1 day)
     """
     deck: list[dict[str, Any]] = []
+    trail_kws_lower = {str(k).strip().lower() for k in (trail_keywords or []) if str(k).strip()}
 
     # Map of entities participating in circular loops
     loop_entities = set()
@@ -384,6 +386,7 @@ def build_conduit_deck(
                 "delta_days": round(delta_days, 1),
                 "hops_count": hops_count,
                 "is_loop": is_loop,
+                "is_keyword_added": name.lower() in trail_kws_lower,
                 "flags": flags,
                 "scores": {
                     "composite": comp_score,

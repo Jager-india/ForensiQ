@@ -18,8 +18,56 @@
          },
          toggle(id) {
              this.expandedConduit = (this.expandedConduit === id) ? null : id;
+         },
+         loadingConduits: new Set(),
+         async addConduitKeyword(c) {
+             if (c.is_keyword_added) return;
+             this.loadingConduits.add(c.id);
+             try {
+                 const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                 const sender = (c.sender || '').toLowerCase();
+                 const recipient = (c.recipient || '').toLowerCase();
+                 const matchedP = (window.analyzedProfilesData || []).find(p =>
+                     (p.name && (p.name.toLowerCase() === sender || p.name.toLowerCase() === recipient))
+                 );
+                 const profileId = matchedP?.id || (window.analyzedProfilesData && window.analyzedProfilesData[0]?.id) || (window.beatsData && window.beatsData[0] && window.beatsData[0].profile_id) || '';
+                 const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                     method: 'POST',
+                     headers: {
+                         'Content-Type': 'application/json',
+                         'X-CSRFToken': csrfToken,
+                     },
+                     body: JSON.stringify({
+                         profile_id: profileId,
+                         keyword: c.name,
+                     })
+                 });
+                 const data = await res.json();
+                 if (data.status === 'success') {
+                     c.is_keyword_added = true;
+                     window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
+                         detail: { name: c.name, profileId: profileId }
+                     }));
+                 } else {
+                     alert(data.message || 'Failed to add keyword.');
+                 }
+             } catch (err) {
+                 console.error('Failed adding conduit keyword:', err);
+             } finally {
+                 this.loadingConduits.delete(c.id);
+             }
          }
-     }">
+     }"
+     @counterparty-keyword-added.window="
+         const name = ($event.detail?.name || '').toLowerCase();
+         if (name) {
+             (window.conduitDeckData || []).forEach(item => {
+                 if (item.name && item.name.toLowerCase() === name) {
+                     item.is_keyword_added = true;
+                 }
+             });
+         }
+     ">
 
     <!-- Header Bar: Click to Expand / Collapse -->
     <button type="button" @click="isExpanded = !isExpanded"
@@ -193,13 +241,31 @@
                     </div>
 
                     <!-- Action Bar -->
-                    <div class="flex items-center justify-between pt-2 border-t border-theme-border">
-                        <button type="button"
-                                @click="$dispatch('trace-conduit', { name: c.name })"
-                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer">
-                            <i class="fa-solid fa-play text-[10px]"></i>
-                            <span>Trace this conduit on timeline</span>
-                        </button>
+                    <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-theme-border">
+                        <div class="flex items-center gap-2">
+                            <button type="button"
+                                    @click="$dispatch('trace-conduit', { name: c.name })"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 transition cursor-pointer">
+                                <i class="fa-solid fa-play text-[10px]"></i>
+                                <span>Trace this conduit on timeline</span>
+                            </button>
+
+                            <template x-if="c.is_keyword_added">
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 font-bold text-xs">
+                                    <i class="fa-solid fa-check text-[10px]"></i>
+                                    <span>In Profile Keywords</span>
+                                </span>
+                            </template>
+                            <template x-if="!c.is_keyword_added">
+                                <button type="button"
+                                        @click="addConduitKeyword(c)"
+                                        :disabled="loadingConduits && loadingConduits.has(c.id)"
+                                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/30 hover:bg-amber-500 hover:text-slate-950 font-bold text-xs transition cursor-pointer">
+                                    <i class="fa-solid" :class="(loadingConduits && loadingConduits.has(c.id)) ? 'fa-spinner fa-spin' : 'fa-plus'"></i>
+                                    <span>Add to Profile Keywords</span>
+                                </button>
+                            </template>
+                        </div>
                         <span class="text-[11px] font-mono text-theme-muted">Rule 2 Intermediate Transit</span>
                     </div>
                 </div>

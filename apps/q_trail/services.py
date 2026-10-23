@@ -140,6 +140,7 @@ def analyze_profiles_money_trail(
             "keyword_hits_count": 0,
         },
         "trail_keywords": [],
+        "suggested_counterparties": [],
         "analyzed_profiles": [],
     }
 
@@ -990,12 +991,21 @@ def analyze_profiles_money_trail(
         grouped_intermediaries=grouped_intermediaries,
         circular_trails=circular_trails,
         max_delta_days=time_window_days,
+        trail_keywords=trail_keywords_set,
     )
     topology_graph = build_topology_graph(
         analyzed_profiles=profile_metadata,
         direct_df=combined_direct,
         intermediate_df=combined_intermediate,
         circular_trails=circular_trails,
+    )
+
+    suggested_counterparties = extract_suggested_counterparties(
+        grouped_intermediaries=grouped_intermediaries,
+        intermediate_df=combined_intermediate,
+        direct_df=combined_direct,
+        analyzed_profiles=profile_metadata,
+        trail_keywords_set=trail_keywords_set,
     )
 
     return {
@@ -1012,5 +1022,318 @@ def analyze_profiles_money_trail(
         "pairwise_summaries": pairwise_summaries,
         "metrics": metrics,
         "trail_keywords": trail_keywords,
+        "suggested_counterparties": suggested_counterparties,
         "analyzed_profiles": profile_metadata,
+    }
+
+
+def _format_inr(value: float | Decimal | None) -> str:
+    """Formats float/decimal into Indian Rupee comma grouping format."""
+    if value is None:
+        return "0.00"
+    try:
+        val = float(value)
+        return f"{val:,.2f}"
+    except (ValueError, TypeError):
+        return "0.00"
+
+
+def extract_suggested_counterparties(
+    *,
+    grouped_intermediaries: dict[str, Any],
+    intermediate_df: pd.DataFrame,
+    direct_df: pd.DataFrame,
+    analyzed_profiles: list[dict[str, Any]],
+    trail_keywords_set: set[str],
+) -> list[dict[str, Any]]:
+    """
+    Identifies candidate counterparties (conduits, middlemen, and rapid layering parties)
+    discovered during money trail analysis for forensic auditor review and keyword promotion.
+    Filters out noise tokens, banking protocol terms, balance markers, and entities matching
+    the names of the analyzed profiles themselves.
+    """
+    from config import BANKING_NOISE_TOKENS
+
+    known_profile_names = {
+        str(p["name"]).strip().lower() for p in analyzed_profiles if p.get("name")
+    }
+    default_pid = str(analyzed_profiles[0]["id"]) if analyzed_profiles else ""
+    default_pname = str(analyzed_profiles[0]["name"]) if analyzed_profiles else "Primary Target"
+    existing_kws_lower = {str(k).strip().lower() for k in trail_keywords_set if str(k).strip()}
+
+    balance_markers = (
+        "OPENING BALANCE",
+        "CLOSING BALANCE",
+        "OPBAL",
+        "BALANCE B/F",
+        "BAL B/F",
+        "BROUGHT FORWARD",
+    )
+
+    def _is_invalid_candidate(raw: str) -> bool:
+        s = str(raw or "").strip()
+        if not s or len(s) < 3 or s.isdigit():
+            return True
+        up = s.upper()
+        if up in BANKING_NOISE_TOKENS or up == "UNKNOWN COUNTERPARTY" or up == "SAL":
+            return True
+        if any(bm in up for bm in balance_markers):
+            return True
+        if s.lower() in known_profile_names:
+            return True
+        return False
+
+    suggestions_by_key: dict[str, dict[str, Any]] = {}
+
+    # 1. Candidate Conduits from Grouped Intermediaries
+    for inter_name, hops in grouped_intermediaries.items():
+        clean_name = str(inter_name or "").strip()
+        if _is_invalid_candidate(clean_name):
+            continue
+
+        c_key = clean_name.lower()
+        if isinstance(hops, list):
+            outflow = sum(float(h.get("Outflow_Amount", 0.0)) for h in hops)
+            retained = sum(float(h.get("Retention_Amount", 0.0)) for h in hops)
+            hop_count = len(hops)
+            senders = [str(h.get("Sender_Person", "")).strip() for h in hops]
+            recipients = [str(h.get("Recipient_Person", "")).strip() for h in hops]
+        else:
+            outflow = float(getattr(hops, "get", lambda k, d=0: d)("Total_Outflow", 0.0))
+            retained = float(getattr(hops, "get", lambda k, d=0: d)("Total_Retained", 0.0))
+            hop_count = int(getattr(hops, "get", lambda k, d=1: d)("Hops_Count", 1))
+            senders = []
+            recipients = []
+
+        assoc_p = next(
+            (
+                p
+                for p in analyzed_profiles
+                if any(p["name"].lower() == s.lower() for s in senders)
+                or any(p["name"].lower() == r.lower() for r in recipients)
+            ),
+            None,
+        )
+        assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
+        assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+
+        is_already = c_key in existing_kws_lower
+        slug_id = f"c_{re.sub(r'[^a-zA-Z0-9]+', '_', c_key).strip('_')}"
+
+        suggestions_by_key[c_key] = {
+            "id": slug_id,
+            "name": clean_name,
+            "role": "Conduit Middleman",
+            "category": "CONDUIT",
+            "reason": f"Suspected 1-hop conduit: routed ₹{_format_inr(outflow)} across {hop_count} pass-through(s)",
+            "associated_profile_id": assoc_id,
+            "associated_profile_name": assoc_name,
+            "total_volume": outflow,
+            "total_volume_formatted": _format_inr(outflow),
+            "retained_formatted": _format_inr(retained) if retained > 0 else "0.00",
+            "hop_count": hop_count,
+            "is_already_keyword": is_already,
+            "risk_score": 85 if (retained > 0 or hop_count >= 2) else 70,
+            "risk_level": "CRITICAL" if (retained > 0 or hop_count >= 2) else "HIGH",
+        }
+
+    # 2. Candidate Counterparties from Rapid Layering Pass-Throughs
+    if isinstance(intermediate_df, pd.DataFrame) and not intermediate_df.empty:
+        for _, row in intermediate_df.iterrows():
+            sender = str(row.get("Sender_Person", "")).strip()
+            recipient = str(row.get("Recipient_Person", "")).strip()
+            for cand, role_label, is_outflow in [
+                (sender, "Pass-Through Originator", False),
+                (recipient, "Pass-Through Sink", True),
+            ]:
+                if _is_invalid_candidate(cand):
+                    continue
+                k = cand.lower()
+                if k in suggestions_by_key:
+                    continue
+
+                amt = float(
+                    row.get(
+                        "Outflow_Amount" if is_outflow else "Inflow_Amount",
+                        row.get("Amount", 0.0),
+                    )
+                )
+
+                other_party = sender if is_outflow else recipient
+                assoc_p = next(
+                    (p for p in analyzed_profiles if p["name"].lower() == other_party.lower()),
+                    None,
+                )
+                assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
+                assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+
+                is_already = k in existing_kws_lower
+                slug_id = f"lay_{re.sub(r'[^a-zA-Z0-9]+', '_', k).strip('_')}"
+
+                suggestions_by_key[k] = {
+                    "id": slug_id,
+                    "name": cand,
+                    "role": role_label,
+                    "category": "LAYERING",
+                    "reason": f"Temporal rapid layering pass-through flow of ₹{_format_inr(amt)}",
+                    "associated_profile_id": assoc_id,
+                    "associated_profile_name": assoc_name,
+                    "total_volume": amt,
+                    "total_volume_formatted": _format_inr(amt),
+                    "retained_formatted": "0.00",
+                    "hop_count": 1,
+                    "is_already_keyword": is_already,
+                    "risk_score": 75,
+                    "risk_level": "HIGH",
+                }
+
+    # 3. Candidate Counterparties from Direct Transfers
+    if isinstance(direct_df, pd.DataFrame) and not direct_df.empty:
+        for _, row in direct_df.iterrows():
+            sender = str(row.get("Sender_Person", "")).strip()
+            recipient = str(row.get("Recipient_Person", "")).strip()
+            amt = float(row.get("Amount", 0.0))
+
+            for cand, role_label, counterpart in [
+                (sender, "Direct Inflow Originator", recipient),
+                (recipient, "Direct Outflow Recipient", sender),
+            ]:
+                if _is_invalid_candidate(cand):
+                    continue
+                k = cand.lower()
+                if k in suggestions_by_key:
+                    suggestions_by_key[k]["total_volume"] += amt
+                    suggestions_by_key[k]["total_volume_formatted"] = _format_inr(
+                        suggestions_by_key[k]["total_volume"]
+                    )
+                    continue
+
+                assoc_p = next(
+                    (p for p in analyzed_profiles if p["name"].lower() == counterpart.lower()),
+                    None,
+                )
+                assoc_id = str(assoc_p["id"]) if assoc_p else default_pid
+                assoc_name = str(assoc_p["name"]) if assoc_p else default_pname
+
+                is_already = k in existing_kws_lower
+                slug_id = f"dir_{re.sub(r'[^a-zA-Z0-9]+', '_', k).strip('_')}"
+
+                suggestions_by_key[k] = {
+                    "id": slug_id,
+                    "name": cand,
+                    "role": role_label,
+                    "category": "DIRECT",
+                    "reason": f"Direct reconciled transfer of ₹{_format_inr(amt)}",
+                    "associated_profile_id": assoc_id,
+                    "associated_profile_name": assoc_name,
+                    "total_volume": amt,
+                    "total_volume_formatted": _format_inr(amt),
+                    "retained_formatted": "0.00",
+                    "hop_count": 1,
+                    "is_already_keyword": is_already,
+                    "risk_score": 60,
+                    "risk_level": "MEDIUM",
+                }
+
+    suggestions = list(suggestions_by_key.values())
+    suggestions.sort(
+        key=lambda x: (
+            1 if x["is_already_keyword"] else 0,
+            -x["total_volume"],
+        )
+    )
+    return suggestions
+
+
+def add_suggested_counterparty_keyword_service(
+    profile_id: str | uuid.UUID,
+    keyword: str,
+) -> dict[str, Any]:
+    """
+    Promotes a suggested counterparty or intermediary into an active investigation profile keyword.
+    Uses atomic transaction and deduplicates against existing keywords.
+    """
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    clean_kw = str(keyword or "").strip()
+    if not clean_kw:
+        raise ValueError("Counterparty keyword cannot be empty.")
+
+    clean_id = str(profile_id or "").strip()
+    name, resolved_id = _resolve_profile_entity(clean_id)
+    profile = get_profile_by_id(resolved_id)
+    if not profile:
+        profile = InvestigationProfile.objects.filter(full_name__iexact=name).first()
+
+    if not profile:
+        raise ValueError(f"Investigation profile not found for '{clean_id}'.")
+
+    with transaction.atomic():
+        updated_prof = add_keywords_to_profile(profile.id, [clean_kw])
+
+    logger.info(
+        "Promoted suggested counterparty '{}' to profile '{}' (Total keywords: {})",
+        clean_kw,
+        updated_prof.full_name,
+        len(updated_prof.keywords or []),
+    )
+
+    return {
+        "status": "success",
+        "keyword": clean_kw,
+        "profile_id": str(updated_prof.id),
+        "profile_name": updated_prof.full_name,
+        "keywords_count": len(updated_prof.keywords or []),
+        "keywords": updated_prof.keywords or [],
+    }
+
+
+def add_multiple_counterparty_keywords_service(
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Batch promotes multiple suggested counterparties into profile keywords.
+    Items format: [{'profile_id': '...', 'keyword': '...'}, ...]
+    """
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    if not items:
+        return {"status": "success", "added_count": 0, "results": []}
+
+    grouped_by_pid: dict[str, list[str]] = {}
+    for item in items:
+        pid = str(item.get("profile_id", "")).strip()
+        kw = str(item.get("keyword", "")).strip()
+        if pid and kw:
+            grouped_by_pid.setdefault(pid, []).append(kw)
+
+    results = []
+    total_added = 0
+    with transaction.atomic():
+        for raw_pid, kws in grouped_by_pid.items():
+            name, resolved_id = _resolve_profile_entity(raw_pid)
+            profile = get_profile_by_id(resolved_id)
+            if not profile:
+                profile = InvestigationProfile.objects.filter(full_name__iexact=name).first()
+            if not profile:
+                continue
+
+            prev_len = len(profile.keywords or [])
+            updated_prof = add_keywords_to_profile(profile.id, kws)
+            new_len = len(updated_prof.keywords or [])
+            added_for_p = new_len - prev_len
+            total_added += added_for_p
+            results.append(
+                {
+                    "profile_id": str(updated_prof.id),
+                    "profile_name": updated_prof.full_name,
+                    "added_keywords": kws,
+                    "keywords_count": new_len,
+                }
+            )
+
+    return {
+        "status": "success",
+        "added_count": total_added,
+        "results": results,
     }

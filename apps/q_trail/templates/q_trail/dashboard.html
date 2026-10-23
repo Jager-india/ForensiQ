@@ -493,6 +493,8 @@
         window.beatsData = {{ beats_json | safe }};
         window.conduitDeckData = {{ conduit_deck_json | safe }};
         window.topologyGraphData = {{ topology_graph_json | safe }};
+        window.analyzedProfilesData = {{ analyzed_profiles_json | safe }};
+        window.suggestedCounterpartiesData = {{ suggested_counterparties_json | safe }};
     </script>
 
     
@@ -529,6 +531,11 @@
         </span>
         {% endif %}
     </div>
+    {% endif %}
+
+    <!-- Suggested Counterparties for Keyword Promotion -->
+    {% if suggested_counterparties %}
+    <c-trail.suggested_counterparties />
     {% endif %}
 
     <!-- 2. Cinematic Trace the Money Timeline Tape Player -->

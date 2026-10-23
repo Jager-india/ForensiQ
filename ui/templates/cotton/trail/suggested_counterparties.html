@@ -1,0 +1,306 @@
+<c-vars
+    title="Suggested Counterparties for Investigation"
+/>
+
+<div class="bg-theme-surface rounded-2xl border border-theme-border shadow-sm mb-8 overflow-hidden transition-all"
+     x-data="{
+        isExpanded: true,
+        filter: 'all',
+        dismissed: new Set(),
+        loadingItems: new Set(),
+        addedKeywords: new Set(),
+        counterparties: {{ suggested_counterparties_json|default:'[]'|safe }},
+        analyzedProfiles: {{ analyzed_profiles_json|default:'[]'|safe }},
+        selectedProfiles: {},
+        isAddingAll: false,
+
+        init() {
+            this.counterparties.forEach(c => {
+                if (c.is_already_keyword) {
+                    this.addedKeywords.add(c.id);
+                }
+                this.selectedProfiles[c.id] = c.associated_profile_id;
+            });
+        },
+
+        get visibleItems() {
+            return this.counterparties.filter(c => {
+                if (this.dismissed.has(c.id)) return false;
+                if (this.filter === 'unadded') return !this.addedKeywords.has(c.id);
+                if (this.filter === 'conduits') return c.category === 'CONDUIT';
+                if (this.filter === 'layering') return c.category === 'LAYERING';
+                return true;
+            });
+        },
+
+        get unaddedCount() {
+            return this.counterparties.filter(c => !this.dismissed.has(c.id) && !this.addedKeywords.has(c.id)).length;
+        },
+
+        dismiss(id) {
+            this.dismissed.add(id);
+        },
+
+        async addKeyword(c) {
+            if (this.addedKeywords.has(c.id) || this.loadingItems.has(c.id)) return;
+            this.loadingItems.add(c.id);
+            try {
+                const profileId = this.selectedProfiles[c.id] || c.associated_profile_id;
+                const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({
+                        profile_id: profileId,
+                        keyword: c.name,
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    this.addedKeywords.add(c.id);
+                    c.is_already_keyword = true;
+                    window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
+                        detail: { name: c.name, profileId: profileId }
+                    }));
+                } else {
+                    alert(data.message || 'Failed to add keyword.');
+                }
+            } catch (err) {
+                console.error('Error adding counterparty keyword:', err);
+                alert('Connection error while adding keyword.');
+            } finally {
+                this.loadingItems.delete(c.id);
+            }
+        },
+
+        async addAllUnadded() {
+            const unadded = this.counterparties.filter(c => !this.dismissed.has(c.id) && !this.addedKeywords.has(c.id));
+            if (!unadded.length || this.isAddingAll) return;
+            this.isAddingAll = true;
+            try {
+                const items = unadded.map(c => ({
+                    profile_id: this.selectedProfiles[c.id] || c.associated_profile_id,
+                    keyword: c.name,
+                }));
+                const csrfToken = (typeof window.getCookie === 'function' ? window.getCookie('csrftoken') : '') || document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+                const res = await fetch('{% url 'q_trail:add_counterparty_keyword' %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ items: items })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    unadded.forEach(c => {
+                        this.addedKeywords.add(c.id);
+                        c.is_already_keyword = true;
+                    });
+                    window.dispatchEvent(new CustomEvent('counterparty-keyword-added', {
+                        detail: { batch: true, count: unadded.length }
+                    }));
+                } else {
+                    alert(data.message || 'Failed to batch add keywords.');
+                }
+            } catch (err) {
+                console.error('Error batch adding counterparty keywords:', err);
+                alert('Connection error during batch addition.');
+            } finally {
+                this.isAddingAll = false;
+            }
+        }
+     }">
+
+    <!-- Header Bar: Click to Expand / Collapse -->
+    <div class="p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 border-b border-theme-border">
+        <button type="button" @click="isExpanded = !isExpanded"
+                class="flex items-center gap-3 text-left cursor-pointer select-none">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center text-sm">
+                <i class="fa-solid fa-user-plus"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-theme-text flex items-center gap-2">
+                    <span>{{ title }}</span>
+                    <span class="text-xs font-mono px-2 py-0.5 rounded bg-theme-subtle text-theme-muted font-normal"
+                          x-text="counterparties.length + ' Discovered'"></span>
+                    <template x-if="unaddedCount > 0">
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-bold"
+                              x-text="unaddedCount + ' Unapproved'"></span>
+                    </template>
+                </h3>
+                <p class="text-xs text-theme-muted mt-0.5">
+                    Candidate conduits, middlemen, and transit counterparties detected in transaction flows. Approve to promote into profile investigation keywords.
+                </p>
+            </div>
+        </button>
+
+        <div class="flex items-center gap-2">
+            <!-- Batch Approve All Action -->
+            <template x-if="unaddedCount > 0">
+                <button type="button"
+                        @click="addAllUnadded()"
+                        :disabled="isAddingAll"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 text-slate-950 hover:bg-amber-400 transition cursor-pointer shadow-xs disabled:opacity-50">
+                    <i class="fa-solid" :class="isAddingAll ? 'fa-spinner fa-spin' : 'fa-check-double'"></i>
+                    <span x-text="isAddingAll ? 'Promoting All...' : 'Approve All (' + unaddedCount + ')'"></span>
+                </button>
+            </template>
+
+            <!-- Toggle Arrow -->
+            <button type="button" @click="isExpanded = !isExpanded"
+                    class="w-7 h-7 rounded-lg flex items-center justify-center text-theme-muted hover:text-theme-text hover:bg-theme-subtle transition cursor-pointer">
+                <i class="fa-solid fa-chevron-down text-sm transition-transform duration-200"
+                   :class="{ 'rotate-180': isExpanded }"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Collapsible Content -->
+    <div x-show="isExpanded" x-cloak class="p-4 sm:p-5 space-y-4">
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-1.5 p-1 rounded-lg bg-theme-subtle border border-theme-border font-medium">
+                <button type="button" @click="filter = 'all'"
+                        :class="filter === 'all' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    All (<span x-text="counterparties.filter(c => !dismissed.has(c.id)).length"></span>)
+                </button>
+                <button type="button" @click="filter = 'unadded'"
+                        :class="filter === 'unadded' ? 'bg-theme-surface text-amber-500 font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Unapproved (<span x-text="unaddedCount"></span>)
+                </button>
+                <button type="button" @click="filter = 'conduits'"
+                        :class="filter === 'conduits' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Conduits
+                </button>
+                <button type="button" @click="filter = 'layering'"
+                        :class="filter === 'layering' ? 'bg-theme-surface text-theme-text font-bold shadow-xs' : 'text-theme-muted hover:text-theme-text'"
+                        class="px-2.5 py-1 rounded transition cursor-pointer">
+                    Rapid Layering
+                </button>
+            </div>
+
+            <div class="text-[11px] text-theme-muted font-sans italic">
+                <i class="fa-solid fa-shield-halved text-amber-500"></i> Keywords approved here are automatically monitored across Q-Bank, Q-Scan, and Q-Link.
+            </div>
+        </div>
+
+        <!-- Suggestions Grid -->
+        <template x-if="visibleItems.length > 0">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                <template x-for="c in visibleItems" :key="c.id">
+                    <div class="border rounded-xl p-4 transition-all flex flex-col justify-between gap-3 relative"
+                         :class="addedKeywords.has(c.id) ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-theme-border hover:border-theme-border-strong bg-theme-surface shadow-xs'">
+
+                        <!-- Top Row: Name, Category & Dismiss -->
+                        <div>
+                            <div class="flex items-start justify-between gap-2 mb-1.5">
+                                <div class="min-w-0 pr-2">
+                                    <h4 class="font-bold text-sm text-theme-text font-mono truncate" :title="c.name" x-text="c.name"></h4>
+                                    <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                                        <template x-if="c.category === 'CONDUIT'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-500 border border-amber-500/25 font-mono">
+                                                <i class="fa-solid fa-arrows-split-up-and-left text-[9px]"></i> Conduit
+                                            </span>
+                                        </template>
+                                        <template x-if="c.category === 'LAYERING'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/25 font-mono">
+                                                <i class="fa-solid fa-layer-group text-[9px]"></i> Layering
+                                            </span>
+                                        </template>
+                                        <template x-if="c.category === 'DIRECT'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/25 font-mono">
+                                                <i class="fa-solid fa-hand-holding-dollar text-[9px]"></i> Direct
+                                            </span>
+                                        </template>
+
+                                        <template x-if="c.risk_level === 'CRITICAL'">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-500 border border-rose-500/25 font-mono">
+                                                Critical Risk
+                                            </span>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <!-- Dismiss Button -->
+                                <button type="button" @click="dismiss(c.id)"
+                                        title="Dismiss this suggestion"
+                                        class="text-theme-muted hover:text-rose-500 transition p-1 cursor-pointer">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            </div>
+
+                            <!-- Metrics & Context -->
+                            <div class="p-2.5 rounded-lg bg-theme-subtle/50 border border-theme-border/60 text-xs my-2 font-mono space-y-1">
+                                <div class="flex items-center justify-between text-theme-muted">
+                                    <span>Total Flow:</span>
+                                    <strong class="text-theme-text font-bold" x-text="c.total_volume_formatted"></strong>
+                                </div>
+                                <template x-if="c.retained_formatted && c.retained_formatted !== '0.00' && c.retained_formatted !== '₹0.00'">
+                                    <div class="flex items-center justify-between text-theme-muted">
+                                        <span>Conduit Margin:</span>
+                                        <span class="text-amber-500 font-bold" x-text="c.retained_formatted"></span>
+                                    </div>
+                                </template>
+                                <div class="text-[10px] text-theme-muted font-sans mt-1 line-clamp-2" :title="c.reason" x-text="c.reason"></div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Row: Profile Association & Add Action -->
+                        <div class="pt-2 border-t border-theme-border/60 space-y-2">
+                            <!-- Target Profile Selector / Badge -->
+                            <div class="flex items-center justify-between text-[11px]">
+                                <span class="text-theme-muted">Target Profile:</span>
+                                <template x-if="analyzedProfiles.length > 1">
+                                    <select x-model="selectedProfiles[c.id]"
+                                            class="text-[11px] font-medium bg-theme-surface border border-theme-border rounded px-1.5 py-0.5 text-theme-text focus:outline-hidden focus:border-amber-500">
+                                        <template x-for="p in analyzedProfiles" :key="p.id">
+                                            <option :value="p.id" x-text="p.name" :selected="p.id === c.associated_profile_id"></option>
+                                        </template>
+                                    </select>
+                                </template>
+                                <template x-if="analyzedProfiles.length <= 1">
+                                    <span class="font-bold text-theme-text" x-text="c.associated_profile_name"></span>
+                                </template>
+                            </div>
+
+                            <!-- Action Button -->
+                            <div>
+                                <template x-if="addedKeywords.has(c.id)">
+                                    <div class="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5">
+                                        <i class="fa-solid fa-check text-xs"></i>
+                                        <span>Active in Profile Keywords</span>
+                                    </div>
+                                </template>
+                                <template x-if="!addedKeywords.has(c.id)">
+                                    <button type="button"
+                                            @click="addKeyword(c)"
+                                            :disabled="loadingItems.has(c.id)"
+                                            class="w-full py-1.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs disabled:opacity-50">
+                                        <i class="fa-solid" :class="loadingItems.has(c.id) ? 'fa-spinner fa-spin' : 'fa-plus'"></i>
+                                        <span x-text="loadingItems.has(c.id) ? 'Promoting...' : 'Add to Profile Keywords'"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <!-- Empty State -->
+        <template x-if="visibleItems.length === 0">
+            <div class="p-8 text-center text-xs text-theme-muted border border-dashed border-theme-border rounded-xl">
+                <i class="fa-solid fa-user-check text-2xl mb-2 text-theme-muted"></i>
+                <p class="font-medium text-theme-text">No pending candidate counterparties to approve.</p>
+                <p class="text-[11px] text-theme-muted mt-0.5">All identified conduits and counterparties are either already in profile keywords or have been dismissed.</p>
+            </div>
+        </template>
+    </div>
+</div>

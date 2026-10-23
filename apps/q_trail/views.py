@@ -287,11 +287,14 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "topology_graph": topology_graph,
         "topology_graph_json": json.dumps(topology_graph),
         "analyzed_profiles": analyzed_profiles,
+        "analyzed_profiles_json": json.dumps(analyzed_profiles),
         "profile_names": profile_names,
         "pairwise_matrix": formatted_matrix,
         "pairwise_summaries": pairwise_summaries,
         "saved_cases": saved_cases,
         "trail_keywords": analysis.get("trail_keywords", []),
+        "suggested_counterparties": analysis.get("suggested_counterparties", []),
+        "suggested_counterparties_json": json.dumps(analysis.get("suggested_counterparties", [])),
     }
 
     return render(request, "q_trail/dashboard.html", context)
@@ -346,6 +349,51 @@ def analyze_api_view(request: HttpRequest) -> JsonResponse:
             "topology_graph": analysis.get("topology_graph", {}),
             "pairwise_matrix": analysis.get("pairwise_matrix", {}),
             "pairwise_summaries": analysis.get("pairwise_summaries", []),
+            "suggested_counterparties": analysis.get("suggested_counterparties", []),
             "sankey_html": sankey_html,
         }
     )
+
+
+@csrf_protect
+@require_POST
+def add_counterparty_keyword_view(request: HttpRequest) -> JsonResponse:
+    """
+    API endpoint to promote a suggested counterparty or intermediary into
+    an investigation profile's search/flag keywords.
+    Supports single keyword promotion or batch promotion.
+    """
+    try:
+        if request.content_type == "application/json" and request.body:
+            payload = json.loads(request.body.decode("utf-8"))
+        else:
+            payload = request.POST
+    except Exception as e:
+        logger.warning(f"Invalid payload in add_counterparty_keyword_view: {e}")
+        return JsonResponse({"status": "error", "message": "Invalid request payload."}, status=400)
+
+    # Batch support
+    items = payload.get("items")
+    if items and isinstance(items, list):
+        from .services import add_multiple_counterparty_keywords_service
+
+        res = add_multiple_counterparty_keywords_service(items)
+        return JsonResponse(res)
+
+    profile_id = payload.get("profile_id")
+    keyword = payload.get("keyword")
+
+    if not profile_id or not keyword:
+        return JsonResponse(
+            {"status": "error", "message": "Both profile_id and keyword are required."},
+            status=400,
+        )
+
+    try:
+        from .services import add_suggested_counterparty_keyword_service
+
+        res = add_suggested_counterparty_keyword_service(profile_id=profile_id, keyword=keyword)
+        return JsonResponse(res)
+    except Exception as e:
+        logger.warning(f"Failed promoting counterparty keyword: {e}")
+        return JsonResponse({"status": "error", "message": str(e)}, status=400)
