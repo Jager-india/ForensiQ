@@ -663,3 +663,24 @@ class QVoiceCustodianProfileTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertFalse(AudioRecording.objects.filter(custodian_name="Rajesh Sharma").exists())
         self.assertFalse(TranscriptSegment.objects.filter(recording=self.rec1).exists())
+
+    def test_voice_suggested_entity_keyword_services(self):
+        from q_voice.services import (
+            add_suggested_voice_entity_keyword_service,
+            bulk_add_voice_entities_as_keywords_service,
+        )
+
+        res = add_suggested_voice_entity_keyword_service(self.profile.id, "Apex Logistics Pvt Ltd")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Apex Logistics Pvt Ltd", res["keywords"])
+
+        batch_res = bulk_add_voice_entities_as_keywords_service(
+            [
+                {"profile_id": str(self.profile.id), "keyword": "C. Venkatesan"},
+                {"profile_id": str(self.profile.id), "keyword": "9840123456"},
+            ]
+        )
+        self.assertEqual(batch_res["status"], "success")
+        self.profile.refresh_from_db()
+        self.assertIn("C. Venkatesan", self.profile.keywords)
+        self.assertIn("9840123456", self.profile.keywords)

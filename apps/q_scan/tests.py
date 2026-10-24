@@ -722,3 +722,31 @@ class QScanDjangoServiceAndViewsTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("suggested_entities", res.context)
         self.assertIn("analyzed_profiles", res.context)
+
+    def test_scan_suggested_entity_keyword_services(self):
+        from q_scan.services import (
+            add_suggested_scan_entity_keyword_service,
+            bulk_add_scan_entities_as_keywords_service,
+        )
+
+        from core.models import InvestigationProfile
+
+        prof = InvestigationProfile.objects.create(
+            full_name="Veeramani Velmurugan",
+            keywords=["schedule"],
+        )
+
+        res = add_suggested_scan_entity_keyword_service(prof.id, "J. Silviya")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("J. Silviya", res["keywords"])
+
+        batch_res = bulk_add_scan_entities_as_keywords_service(
+            [
+                {"profile_id": str(prof.id), "keyword": "A. JOSEPH REMIGIUS"},
+                {"profile_id": str(prof.id), "keyword": "Silviya Remigius"},
+            ]
+        )
+        self.assertEqual(batch_res["status"], "success")
+        prof.refresh_from_db()
+        self.assertIn("A. JOSEPH REMIGIUS", prof.keywords)
+        self.assertIn("Silviya Remigius", prof.keywords)

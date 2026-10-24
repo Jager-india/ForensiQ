@@ -408,3 +408,31 @@ class QChatForensicTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("suggested_entities", res.context)
         self.assertIn("analyzed_profiles", res.context)
+
+    def test_chat_suggested_entity_keyword_services(self):
+        from q_chat.services import (
+            add_suggested_chat_entity_keyword_service,
+            bulk_add_chat_entities_as_keywords_service,
+        )
+
+        from core.models import InvestigationProfile
+
+        prof = InvestigationProfile.objects.create(
+            full_name="Emor Palani",
+            keywords=["vendor"],
+        )
+
+        res = add_suggested_chat_entity_keyword_service(prof.id, "Apex Enterprises")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Apex Enterprises", res["keywords"])
+
+        batch_res = bulk_add_chat_entities_as_keywords_service(
+            [
+                {"profile_id": str(prof.id), "keyword": "Gopal"},
+                {"profile_id": str(prof.id), "keyword": "9840998877"},
+            ]
+        )
+        self.assertEqual(batch_res["status"], "success")
+        prof.refresh_from_db()
+        self.assertIn("Gopal", prof.keywords)
+        self.assertIn("9840998877", prof.keywords)

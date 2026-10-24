@@ -594,7 +594,7 @@ class DocumentSearchTests(TestCase):
     def test_content_search_backends(self):
         import sys
 
-        from apps.q_verify.backend.content_search import (
+        from q_verify.backend.content_search import (
             _extract_text_from_docx,
             _extract_text_from_image_ocr,
             _extract_text_from_pdf_ocr,
@@ -676,16 +676,14 @@ class DocumentSearchTests(TestCase):
 
         # 7. Test full pipeline success
         with patch(
-            "apps.q_verify.backend.content_search._extract_text_from_pdf_ocr",
+            "q_verify.backend.content_search._extract_text_from_pdf_ocr",
             return_value="fraud detected",
         ):
             res = search_keywords_in_file("test.pdf", "application/pdf", ["fraud", "notfound"])
             self.assertEqual(res.get("fraud"), 1)
             self.assertEqual(res.get("notfound"), 0)
 
-        with patch(
-            "apps.q_verify.backend.content_search._extract_text_from_docx", return_value="fraud"
-        ):
+        with patch("q_verify.backend.content_search._extract_text_from_docx", return_value="fraud"):
             res = search_keywords_in_file(
                 "test.docx",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -693,9 +691,7 @@ class DocumentSearchTests(TestCase):
             )
             self.assertEqual(res.get("fraud"), 1)
 
-        with patch(
-            "apps.q_verify.backend.content_search._extract_text_from_xlsx", return_value="fraud"
-        ):
+        with patch("q_verify.backend.content_search._extract_text_from_xlsx", return_value="fraud"):
             res = search_keywords_in_file(
                 "test.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -704,7 +700,7 @@ class DocumentSearchTests(TestCase):
             self.assertEqual(res.get("fraud"), 1)
 
         with patch(
-            "apps.q_verify.backend.content_search._extract_text_from_image_ocr",
+            "q_verify.backend.content_search._extract_text_from_image_ocr",
             return_value="fraud",
         ):
             res = search_keywords_in_file("test.jpg", "image/jpeg", ["fraud"])
@@ -893,3 +889,31 @@ class DocumentSearchTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("suggested_entities", res.context)
         self.assertIn("analyzed_profiles", res.context)
+
+    def test_verify_suggested_entity_keyword_services(self):
+        from q_verify.services import (
+            add_suggested_verify_entity_keyword_service,
+            bulk_add_verify_entities_as_keywords_service,
+        )
+
+        from core.models import InvestigationProfile
+
+        prof = InvestigationProfile.objects.create(
+            full_name="Maharajan",
+            keywords=["partner"],
+        )
+
+        res = add_suggested_verify_entity_keyword_service(prof.id, "Sri Mirra Engineers")
+        self.assertEqual(res["status"], "success")
+        self.assertIn("Sri Mirra Engineers", res["keywords"])
+
+        batch_res = bulk_add_verify_entities_as_keywords_service(
+            [
+                {"profile_id": str(prof.id), "keyword": "C. Venkatesan"},
+                {"profile_id": str(prof.id), "keyword": "Vani D."},
+            ]
+        )
+        self.assertEqual(batch_res["status"], "success")
+        prof.refresh_from_db()
+        self.assertIn("C. Venkatesan", prof.keywords)
+        self.assertIn("Vani D.", prof.keywords)

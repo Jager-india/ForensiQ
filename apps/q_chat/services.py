@@ -124,6 +124,38 @@ def ingest_chat_export_file(
     logger.info(
         f"Successfully ingested {channel.total_messages} messages into channel '{channel.channel_name}' ({channel.platform})"
     )
+
+    # Propagate extracted entities from chat messages to InvestigationProfile keywords
+    if custodian_name.strip():
+        try:
+            from core.entity_extractor import extract_entities_from_text
+            from core.models import InvestigationProfile
+            from core.profiles import add_keywords_to_profile
+
+            all_text = " ".join(m.message_text for m in message_objs if m.message_text)
+            interlocutors = [
+                p for p in unique_senders if p.lower() != custodian_name.strip().lower()
+            ]
+            discovered = extract_entities_from_text(
+                all_text,
+                source_context="Chat Export",
+                custodian_name=custodian_name.strip(),
+            )
+            kws_to_add = list(
+                dict.fromkeys(
+                    interlocutors
+                    + [e["name"] for e in discovered if e.get("name") and len(e["name"]) >= 3]
+                )
+            )
+            if kws_to_add:
+                prof = InvestigationProfile.objects.filter(
+                    full_name__iexact=custodian_name.strip()
+                ).first()
+                if prof:
+                    add_keywords_to_profile(prof.id, kws_to_add)
+        except Exception as ex_prof:
+            logger.debug(f"Auto-keyword propagation in Q-Chat skipped: {ex_prof}")
+
     return channel
 
 
@@ -201,3 +233,97 @@ def extract_suggested_entities_for_chat(
         default_profile_name=default_pname,
         existing_keywords=existing_keywords,
     )
+
+
+def add_suggested_chat_entity_keyword_service(
+    profile_id: str | uuid.UUID,
+    keyword: str,
+) -> dict[str, Any]:
+    """
+    Promotes a suggested entity discovered from chats into
+    an investigation profile's search/flag keywords.
+    """
+    from core.models import InvestigationProfile
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    clean_kw = str(keyword or "").strip()
+    if not clean_kw:
+        raise ValueError("Entity keyword cannot be empty.")
+
+    clean_id = str(profile_id or "").strip()
+    profile = get_profile_by_id(clean_id)
+    if not profile:
+        profile = InvestigationProfile.objects.filter(full_name__iexact=clean_id).first()
+
+    if not profile:
+        raise ValueError(f"Investigation profile not found for '{clean_id}'.")
+
+    with transaction.atomic():
+        updated_prof = add_keywords_to_profile(profile.id, [clean_kw])
+
+    logger.info(
+        "Promoted suggested chat entity '{}' to profile '{}' (Total keywords: {})",
+        clean_kw,
+        updated_prof.full_name,
+        len(updated_prof.keywords or []),
+    )
+
+    return {
+        "status": "success",
+        "keyword": clean_kw,
+        "profile_id": str(updated_prof.id),
+        "profile_name": updated_prof.full_name,
+        "keywords_count": len(updated_prof.keywords or []),
+        "keywords": updated_prof.keywords or [],
+    }
+
+
+def bulk_add_chat_entities_as_keywords_service(
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Batch promotes multiple suggested chat entities into profile keywords.
+    Items format: [{'profile_id': '...', 'keyword': '...'}, ...]
+    """
+    from core.models import InvestigationProfile
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    if not items:
+        return {"status": "success", "added_count": 0, "results": []}
+
+    grouped_by_pid: dict[str, list[str]] = {}
+    for item in items:
+        pid = str(item.get("profile_id", "")).strip()
+        kw = str(item.get("keyword", "")).strip()
+        if pid and kw:
+            grouped_by_pid.setdefault(pid, []).append(kw)
+
+    results = []
+    total_added = 0
+    with transaction.atomic():
+        for raw_pid, kws in grouped_by_pid.items():
+            profile = get_profile_by_id(raw_pid)
+            if not profile:
+                profile = InvestigationProfile.objects.filter(full_name__iexact=raw_pid).first()
+            if not profile:
+                continue
+
+            prev_len = len(profile.keywords or [])
+            updated_prof = add_keywords_to_profile(profile.id, kws)
+            new_len = len(updated_prof.keywords or [])
+            added_for_p = new_len - prev_len
+            total_added += added_for_p
+            results.append(
+                {
+                    "profile_id": str(updated_prof.id),
+                    "profile_name": updated_prof.full_name,
+                    "added_count": added_for_p,
+                    "keywords_count": new_len,
+                }
+            )
+
+    return {
+        "status": "success",
+        "added_count": total_added,
+        "results": results,
+    }

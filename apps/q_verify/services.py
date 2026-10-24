@@ -3,6 +3,7 @@ Q-Verify Business Logic & Forensic Ingestion Services
 Follows agentic-django principles: pure domain workflows, atomic transactions, and automated metric aggregation.
 """
 
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -506,3 +507,97 @@ def extract_suggested_entities_for_verify(
         default_profile_name=default_pname,
         existing_keywords=existing_keywords,
     )
+
+
+def add_suggested_verify_entity_keyword_service(
+    profile_id: str | uuid.UUID,
+    keyword: str,
+) -> dict[str, Any]:
+    """
+    Promotes a suggested entity discovered from document verification into
+    an investigation profile's search/flag keywords.
+    """
+    from core.models import InvestigationProfile
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    clean_kw = str(keyword or "").strip()
+    if not clean_kw:
+        raise ValueError("Entity keyword cannot be empty.")
+
+    clean_id = str(profile_id or "").strip()
+    profile = get_profile_by_id(clean_id)
+    if not profile:
+        profile = InvestigationProfile.objects.filter(full_name__iexact=clean_id).first()
+
+    if not profile:
+        raise ValueError(f"Investigation profile not found for '{clean_id}'.")
+
+    with transaction.atomic():
+        updated_prof = add_keywords_to_profile(profile.id, [clean_kw])
+
+    logger.info(
+        "Promoted suggested verify entity '{}' to profile '{}' (Total keywords: {})",
+        clean_kw,
+        updated_prof.full_name,
+        len(updated_prof.keywords or []),
+    )
+
+    return {
+        "status": "success",
+        "keyword": clean_kw,
+        "profile_id": str(updated_prof.id),
+        "profile_name": updated_prof.full_name,
+        "keywords_count": len(updated_prof.keywords or []),
+        "keywords": updated_prof.keywords or [],
+    }
+
+
+def bulk_add_verify_entities_as_keywords_service(
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """
+    Batch promotes multiple suggested verify entities into profile keywords.
+    Items format: [{'profile_id': '...', 'keyword': '...'}, ...]
+    """
+    from core.models import InvestigationProfile
+    from core.profiles import add_keywords_to_profile, get_profile_by_id
+
+    if not items:
+        return {"status": "success", "added_count": 0, "results": []}
+
+    grouped_by_pid: dict[str, list[str]] = {}
+    for item in items:
+        pid = str(item.get("profile_id", "")).strip()
+        kw = str(item.get("keyword", "")).strip()
+        if pid and kw:
+            grouped_by_pid.setdefault(pid, []).append(kw)
+
+    results = []
+    total_added = 0
+    with transaction.atomic():
+        for raw_pid, kws in grouped_by_pid.items():
+            profile = get_profile_by_id(raw_pid)
+            if not profile:
+                profile = InvestigationProfile.objects.filter(full_name__iexact=raw_pid).first()
+            if not profile:
+                continue
+
+            prev_len = len(profile.keywords or [])
+            updated_prof = add_keywords_to_profile(profile.id, kws)
+            new_len = len(updated_prof.keywords or [])
+            added_for_p = new_len - prev_len
+            total_added += added_for_p
+            results.append(
+                {
+                    "profile_id": str(updated_prof.id),
+                    "profile_name": updated_prof.full_name,
+                    "added_count": added_for_p,
+                    "keywords_count": new_len,
+                }
+            )
+
+    return {
+        "status": "success",
+        "added_count": total_added,
+        "results": results,
+    }
