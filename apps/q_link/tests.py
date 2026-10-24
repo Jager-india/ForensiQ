@@ -952,3 +952,48 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
         self.assertIn("Compiling Graph", content)
         self.assertIn("getRandomDuration", content)
         self.assertIn("runSequentialLoading", content)
+
+    def test_q_link_sync_vendor_master_keyword_nexus(self):
+        from django.apps import apps
+
+        from .backend.sync_all import sync_all_modules
+        from .models import EntityRelationship, ForensicEntity
+
+        VendorMaster = apps.get_model("q_ledger", "VendorMaster")
+        InvestigationProfile = apps.get_model("core", "InvestigationProfile")
+
+        # 1. Create Investigation Profile with target keywords
+        InvestigationProfile.objects.create(
+            full_name="Maharajan",
+            keywords=["Sri Mirra", "Kickback", "98765432100"],
+        )
+
+        # 2. Create Vendor Master matching one of the keywords
+        vendor = VendorMaster.objects.create(
+            vendor_code="V-NEXUS-01",
+            vendor_name="Sri Mirra Engineers",
+            bank_account_no="98765432100",
+            is_flagged=False,
+        )
+
+        # 3. Run sync_all_modules
+        counts = sync_all_modules()
+        self.assertGreaterEqual(counts.get("q_ledger", 0), 1)
+
+        # 4. Verify vendor record is flagged in database
+        vendor.refresh_from_db()
+        self.assertTrue(vendor.is_flagged)
+        self.assertTrue(len(vendor.matched_keywords) > 0)
+
+        # 5. Verify relationship created in Q-Link knowledge graph
+        emp_entity = ForensicEntity.objects.filter(display_name="Maharajan").first()
+        self.assertIsNotNone(emp_entity)
+        vendor_entity = ForensicEntity.objects.filter(display_name="Sri Mirra Engineers").first()
+        self.assertIsNotNone(vendor_entity)
+
+        rel = EntityRelationship.objects.filter(
+            source_entity=emp_entity,
+            target_entity=vendor_entity,
+            relation_type="EMPLOYEE_VENDOR_NEXUS",
+        ).first()
+        self.assertIsNotNone(rel)

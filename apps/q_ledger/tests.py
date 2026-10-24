@@ -424,7 +424,11 @@ class QLedgerSelectorAndAnalysisTests(TestCase):
 
 class QLedgerViewsTests(TestCase):
     def setUp(self):
+        from django.contrib.auth.models import User
+
         self.client = Client()
+        self.user = User.objects.create_user(username="ledger_tester", password="password123")
+        self.client.force_login(self.user)
         session = self.client.session
         session["portal_authenticated"] = True
         session.save()
@@ -839,3 +843,143 @@ class QLedgerServicesTests(TestCase):
         )
         with self.assertRaises(ValueError):
             ingest_master_files(sloc_file=bad_file)
+
+    def test_ingest_vendor_master_file_excel_and_csv(self):
+        import io
+
+        import pandas as pd
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from .models import LedgerMasterConfig, VendorMaster
+        from .services import ingest_vendor_master_file
+
+        # 1. Ingest Excel Vendor Master
+        excel_buf = io.BytesIO()
+        df_excel = pd.DataFrame(
+            {
+                "Vendor Code": ["V-1001", "V-1002"],
+                "Vendor Name": ["Sri Mirra Engineers", "Apex Logistics Pvt Ltd"],
+                "GSTIN": ["33AABCS1429B1Z1", "33AABCA0000A1Z5"],
+                "Bank Account": ["98765432100", "11223344556"],
+                "IFSC": ["HDFC0001234", "ICIC0005678"],
+            }
+        )
+        df_excel.to_excel(excel_buf, index=False)
+        excel_buf.seek(0)
+        f_excel = SimpleUploadedFile(
+            "vendor_master.xlsx", excel_buf.getvalue(), content_type="application/vnd.ms-excel"
+        )
+
+        proc, total = ingest_vendor_master_file(f_excel)
+        self.assertEqual(proc, 2)
+        self.assertEqual(total, 2)
+        v1 = VendorMaster.objects.get(vendor_code="V-1001")
+        self.assertEqual(v1.vendor_name, "Sri Mirra Engineers")
+        self.assertEqual(v1.gstin, "33AABCS1429B1Z1")
+        self.assertEqual(v1.bank_account_no, "98765432100")
+        self.assertFalse(v1.is_flagged)
+
+        # 2. Ingest CSV Vendor Master
+        csv_content = (
+            b"Vendor,Name,GST No,A/C No,IFSC\n"
+            b"V-1003,Titan Consulting LLC,33TITAN1234T1Z0,55667788990,SBIN0009999\n"
+        )
+        f_csv = SimpleUploadedFile("vendor_list.csv", csv_content, content_type="text/csv")
+        proc_csv, total_csv = ingest_vendor_master_file(f_csv)
+        self.assertEqual(proc_csv, 1)
+        self.assertEqual(total_csv, 3)
+
+        cfg = LedgerMasterConfig.objects.filter(is_active=True).first()
+        self.assertIsNotNone(cfg)
+        self.assertEqual(cfg.vendor_count, 3)
+
+    def test_reupload_vendor_master_updates_and_preserves_flagged(self):
+        import io
+
+        import pandas as pd
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from .models import VendorMaster
+        from .services import ingest_vendor_master_file
+
+        # Seed initial vendor and mark as flagged
+        VendorMaster.objects.create(
+            vendor_code="V-2001",
+            vendor_name="Old Vendor Name",
+            gstin="33OLDGSTIN123",
+            bank_account_no="123456789",
+            ifsc_code="OLDIFSC001",
+            is_flagged=True,
+            matched_keywords=["OldNexus"],
+        )
+
+        # Re-upload with updated name and blank GSTIN (should update name, preserve existing GSTIN & is_flagged)
+        excel_buf = io.BytesIO()
+        df_reupload = pd.DataFrame(
+            {
+                "Vendor Code": ["V-2001"],
+                "Vendor Name": ["New Updated Vendor Name"],
+                "GSTIN": [""],
+                "Bank Account": ["9999888877"],
+                "IFSC": ["NEWIFSC999"],
+            }
+        )
+        df_reupload.to_excel(excel_buf, index=False)
+        excel_buf.seek(0)
+        f = SimpleUploadedFile(
+            "reupload.xlsx", excel_buf.getvalue(), content_type="application/vnd.ms-excel"
+        )
+
+        ingest_vendor_master_file(f)
+        v = VendorMaster.objects.get(vendor_code="V-2001")
+        self.assertEqual(v.vendor_name, "New Updated Vendor Name")
+        # Blank in file should NOT overwrite existing non-empty value
+        self.assertEqual(v.gstin, "33OLDGSTIN123")
+        # Non-blank in file should update
+        self.assertEqual(v.bank_account_no, "9999888877")
+        self.assertEqual(v.ifsc_code, "NEWIFSC999")
+        # is_flagged and matched_keywords preserved
+        self.assertTrue(v.is_flagged)
+        self.assertEqual(v.matched_keywords, ["OldNexus"])
+
+    def test_vendor_directory_api_view(self):
+        from django.contrib.auth.models import User
+        from django.urls import reverse
+
+        from .models import VendorMaster
+
+        user = User.objects.create_user(username="api_tester_user", password="password123")
+        self.client.force_login(user)
+
+        VendorMaster.objects.create(
+            vendor_code="V-3001",
+            vendor_name="Alpha Tech Corp",
+            bank_account_no="4455667788",
+            is_flagged=False,
+        )
+        VendorMaster.objects.create(
+            vendor_code="V-3002",
+            vendor_name="Beta Logistics",
+            bank_account_no="9988776655",
+            is_flagged=True,
+            matched_keywords=["Kickback"],
+        )
+
+        url = reverse("q_ledger:vendor_directory_api")
+        # 1. Fetch all
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["status"], "success")
+        self.assertGreaterEqual(data["count"], 2)
+
+        # 2. Search query
+        res_search = self.client.get(url + "?q=Alpha")
+        data_search = res_search.json()
+        self.assertEqual(data_search["count"], 1)
+        self.assertEqual(data_search["vendors"][0]["vendor_code"], "V-3001")
+
+        # 3. Filter flagged only
+        res_flagged = self.client.get(url + "?flagged=true")
+        data_flagged = res_flagged.json()
+        self.assertTrue(all(v["is_flagged"] for v in data_flagged["vendors"]))

@@ -9,17 +9,20 @@ from core.models import ForensicBaseModel
 
 
 class LedgerMasterConfig(ForensicBaseModel):
-    """Stores the active GL Account and SLoc master reference files in the background."""
+    """Stores the active GL Account, SLoc, and Vendor master reference files in the background."""
 
     gl_file = models.FileField(upload_to="q_ledger/masters/gl/", blank=True, null=True)
     sloc_file = models.FileField(upload_to="q_ledger/masters/sloc/", blank=True, null=True)
+    vendor_file = models.FileField(upload_to="q_ledger/masters/vendor/", blank=True, null=True)
     gl_account_count = models.IntegerField(default=0)
     sloc_count = models.IntegerField(default=0)
+    vendor_count = models.IntegerField(default=0)
+    flagged_vendor_count = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"ERP Master Config ({self.gl_account_count} GLs, {self.sloc_count} SLocs)"
+        return f"ERP Master Config ({self.gl_account_count} GLs, {self.sloc_count} SLocs, {self.vendor_count} Vendors)"
 
 
 class LedgerDataset(ForensicBaseModel):
@@ -45,6 +48,7 @@ class VendorMaster(ForensicBaseModel):
     bank_account_no = models.CharField(max_length=64, blank=True, default="")
     ifsc_code = models.CharField(max_length=32, blank=True, default="")
     is_flagged = models.BooleanField(default=False)
+    matched_keywords = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return f"{self.vendor_code} - {self.vendor_name}"

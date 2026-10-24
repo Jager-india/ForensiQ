@@ -3,7 +3,7 @@ Q-Ledger Views (Thin Presentation Layer)
 Coordinates ERP evidence ingestion, interactive vendor filtering, and forensic audit presentation.
 """
 
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_GET, require_http_methods
@@ -19,6 +19,7 @@ from .selectors import (
     get_master_config,
     get_top_rankings,
     get_vendor_list,
+    get_vendors_list,
 )
 from .services import (
     ensure_masters_initialized,
@@ -44,24 +45,40 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "master_config": master_config,
         "gl_account_count": master_config.gl_account_count if master_config else 0,
         "sloc_count": master_config.sloc_count if master_config else 0,
+        "vendor_count": master_config.vendor_count if master_config else 0,
+        "flagged_vendor_count": master_config.flagged_vendor_count if master_config else 0,
     }
 
     try:
         if request.method == "POST":
             action = request.POST.get("action", "")
 
-            # 1. Master Excel Reference Upload (GL / SLoc)
+            # 1. Master Excel Reference Upload (GL / SLoc / Vendor Master)
             if (
                 action == "upload_masters"
                 or "gl_file" in request.FILES
                 or "sloc_file" in request.FILES
+                or "vendor_file" in request.FILES
             ):
                 gl_file = request.FILES.get("gl_file")
                 sloc_file = request.FILES.get("sloc_file")
-                gl_cnt, sloc_cnt = ingest_master_files(gl_file=gl_file, sloc_file=sloc_file)
+                vendor_file = request.FILES.get("vendor_file")
+                gl_cnt, sloc_cnt = ingest_master_files(
+                    gl_file=gl_file, sloc_file=sloc_file, vendor_file=vendor_file
+                )
+                from .models import VendorMaster
+
+                v_cnt = VendorMaster.objects.count()
+                updated_items = []
+                if gl_file:
+                    updated_items.append(f"GL Accounts ({gl_cnt:,})")
+                if sloc_file:
+                    updated_items.append(f"SLoc ({sloc_cnt:,})")
+                if vendor_file:
+                    updated_items.append(f"Vendors ({v_cnt:,})")
+                item_str = ", ".join(updated_items) if updated_items else "master files"
                 context["message_success"] = (
-                    f"Successfully stored GL Account ({gl_cnt:,}) and SLoc ({sloc_cnt:,}) "
-                    "master files in the background."
+                    f"Successfully updated {item_str} in the background store."
                 )
 
             # 2. Transactional SAP PR/PO & MARA Evidence Upload
@@ -158,3 +175,21 @@ def reset_data_view(request: HttpRequest) -> HttpResponse:
     request.session["selected_vendor"] = ""
     reset_ledger_cache()
     return redirect("/ledger/")
+
+
+@require_GET
+def vendor_directory_api_view(request: HttpRequest) -> JsonResponse:
+    """
+    API endpoint returning vendors for the Q-Ledger Vendor Directory drawer.
+    Supports filtering by search query 'q' and flagged status 'flagged'.
+    """
+    search = request.GET.get("q", "").strip()
+    flagged_only = request.GET.get("flagged", "").lower() in ("1", "true", "yes")
+    vendors = get_vendors_list(search=search, flagged_only=flagged_only, limit=300)
+    return JsonResponse(
+        {
+            "status": "success",
+            "count": len(vendors),
+            "vendors": vendors,
+        }
+    )

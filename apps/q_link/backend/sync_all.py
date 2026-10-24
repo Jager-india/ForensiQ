@@ -427,6 +427,104 @@ def sync_all_modules() -> dict[str, int]:
                     severity="WARNING" if getattr(po, "is_split_po", False) else "INFO",
                 )
                 stats["q_ledger"] += 1
+
+            # 2.b Ingest Vendor Master Keyword Nexus
+            VendorMaster = apps.get_model("q_ledger", "VendorMaster")
+            InvestigationProfile = apps.get_model("core", "InvestigationProfile")
+
+            all_profiles = list(InvestigationProfile.objects.all())
+            all_vendors = list(VendorMaster.objects.all())
+
+            for vendor in all_vendors:
+                v_name_lower = (vendor.vendor_name or "").lower().strip()
+                v_code_lower = (vendor.vendor_code or "").lower().strip()
+                v_bank_clean = "".join(filter(str.isdigit, vendor.bank_account_no or ""))
+
+                matched_profiles = []
+                matched_kws = set()
+
+                for prof in all_profiles:
+                    p_kws = [
+                        k.strip().lower() for k in (prof.keywords or []) if len(k.strip()) >= 3
+                    ]
+                    p_name_lower = prof.full_name.strip().lower()
+
+                    prof_match_terms = []
+                    # Check name match
+                    if p_name_lower and (
+                        p_name_lower in v_name_lower or v_name_lower in p_name_lower
+                    ):
+                        prof_match_terms.append(prof.full_name)
+
+                    for kw in p_kws:
+                        # Substring match against vendor name or exact vendor code
+                        if kw in v_name_lower or kw == v_code_lower:
+                            prof_match_terms.append(kw)
+                        # Bank account match if keyword contains >= 5 digits
+                        kw_digits = "".join(filter(str.isdigit, kw))
+                        if (
+                            len(kw_digits) >= 5
+                            and v_bank_clean
+                            and (kw_digits in v_bank_clean or v_bank_clean in kw_digits)
+                        ):
+                            prof_match_terms.append(f"Bank A/C: {kw}")
+
+                    if prof_match_terms:
+                        unique_terms = list(dict.fromkeys(prof_match_terms))
+                        matched_profiles.append((prof, unique_terms))
+                        matched_kws.update(unique_terms)
+
+                if matched_profiles:
+                    if not vendor.is_flagged or set(vendor.matched_keywords or []) != matched_kws:
+                        vendor.is_flagged = True
+                        vendor.matched_keywords = sorted(
+                            set(vendor.matched_keywords or []) | matched_kws
+                        )
+                        vendor.save(update_fields=["is_flagged", "matched_keywords"])
+
+                    for prof, terms in matched_profiles:
+                        emit_forensic_finding(
+                            source_module="q_ledger",
+                            event_type="EMPLOYEE_VENDOR_NEXUS",
+                            primary_entity_data={
+                                "name": prof.full_name,
+                                "type": ForensicEntity.EntityType.EMPLOYEE,
+                                "is_target": True,
+                            },
+                            secondary_entities_data=[
+                                {
+                                    "name": vendor.vendor_name,
+                                    "type": ForensicEntity.EntityType.VENDOR,
+                                    "relation_type": "EMPLOYEE_VENDOR_NEXUS",
+                                    "direction": "out",
+                                    "metadata": {
+                                        "vendor_code": vendor.vendor_code,
+                                        "bank_account_no": vendor.bank_account_no,
+                                        "ifsc_code": vendor.ifsc_code,
+                                        "gstin": vendor.gstin,
+                                        "matched_keywords": terms,
+                                    },
+                                }
+                            ],
+                            evidence_data={
+                                "source_module": "q_ledger",
+                                "source_model": "VendorMaster",
+                                "source_record_id": str(vendor.id),
+                                "evidence_url": f"/ledger/?vendor={vendor.vendor_code}",
+                                "summary_snippet": f"Vendor Nexus: Auditee '{prof.full_name}' linked to Vendor '{vendor.vendor_name}' ({vendor.vendor_code}) on keyword(s): {', '.join(terms)}",
+                            },
+                            timeline_title=f"Vendor Nexus: {prof.full_name} <-> {vendor.vendor_name}",
+                            timeline_description=f"Profile keyword nexus detected between auditee '{prof.full_name}' and vendor '{vendor.vendor_name}' ({vendor.vendor_code}). Matched: {', '.join(terms)}",
+                            severity="CRITICAL",
+                        )
+                        stats["q_ledger"] += 1
+
+            LedgerMasterConfig = apps.get_model("q_ledger", "LedgerMasterConfig")
+            cfg = LedgerMasterConfig.objects.filter(is_active=True).first()
+            if cfg:
+                cfg.flagged_vendor_count = VendorMaster.objects.filter(is_flagged=True).count()
+                cfg.vendor_count = VendorMaster.objects.count()
+                cfg.save(update_fields=["flagged_vendor_count", "vendor_count", "last_updated"])
         except Exception as err:
             logger.warning(f"Error syncing Q-Ledger: {err}")
 

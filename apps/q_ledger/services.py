@@ -14,7 +14,7 @@ from django.db import transaction
 from loguru import logger
 
 from .backend import dfmain, process_data, process_mara_data
-from .models import LedgerDataset, LedgerMasterConfig
+from .models import LedgerDataset, LedgerMasterConfig, VendorMaster
 
 BASE_DIR = Path(settings.BASE_DIR)
 BACKEND_DATA_DIR = BASE_DIR / "apps" / "q_ledger" / "backend" / "data"
@@ -64,9 +64,176 @@ def ensure_masters_initialized() -> LedgerMasterConfig:
 
     config.gl_account_count = gl_count
     config.sloc_count = sloc_count
+    config.vendor_count = VendorMaster.objects.count()
+    config.flagged_vendor_count = VendorMaster.objects.filter(is_flagged=True).count()
     config.save()
-    logger.info("Initialized background master config: {} GLs, {} SLocs", gl_count, sloc_count)
+    logger.info(
+        "Initialized background master config: {} GLs, {} SLocs, {} Vendors",
+        gl_count,
+        sloc_count,
+        config.vendor_count,
+    )
     return config
+
+
+@transaction.atomic
+def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
+    """
+    Ingests or updates SAP Vendor Master records from an uploaded .xlsx, .xls, or .csv file.
+    Uses vendor_code as the unique key:
+      - If vendor exists, updates non-empty fields and preserves existing is_flagged status.
+      - If vendor does not exist, creates a new VendorMaster record.
+    Returns (processed_count, total_vendor_count).
+    """
+    filename = getattr(vendor_file, "name", "vendor_master.xlsx").lower()
+    if hasattr(vendor_file, "seek"):
+        vendor_file.seek(0)
+
+    try:
+        if filename.endswith(".csv"):
+            try:
+                df = pd.read_csv(vendor_file, encoding="utf-8")
+            except UnicodeDecodeError:
+                if hasattr(vendor_file, "seek"):
+                    vendor_file.seek(0)
+                df = pd.read_csv(vendor_file, encoding="latin-1")
+        else:
+            df = pd.read_excel(vendor_file)
+    except Exception as exc:
+        logger.error("Failed to parse uploaded Vendor Master file '{}': {}", filename, exc)
+        raise ValueError(f"Could not read Vendor Master file: {exc}") from exc
+
+    if df.empty:
+        return 0, VendorMaster.objects.count()
+
+    # Normalize column names to lowercase stripped strings
+    col_map = {str(c).strip().lower(): c for c in df.columns}
+
+    code_aliases = [
+        "vendor",
+        "vendor code",
+        "vendor_code",
+        "lifnr",
+        "supplier",
+        "vendor number",
+        "vendor no",
+        "vendor_no",
+        "code",
+        "account",
+        "supplier code",
+    ]
+    name_aliases = [
+        "name",
+        "vendor name",
+        "vendor_name",
+        "name 1",
+        "name1",
+        "supplier name",
+        "supplier_name",
+        "vendor_desc",
+        "description",
+    ]
+    gst_aliases = ["gstin", "gst no", "gst_no", "gst", "tax number", "stcd3", "tax no"]
+    bank_aliases = [
+        "bank account",
+        "bank_account",
+        "bank_account_no",
+        "account number",
+        "account no",
+        "bankn",
+        "a/c no",
+        "acct no",
+        "bank acct",
+    ]
+    ifsc_aliases = ["ifsc", "ifsc code", "ifsc_code", "bank key", "bankl", "branch code"]
+
+    def _find_col(aliases: list[str]) -> Any | None:
+        for alias in aliases:
+            if alias in col_map:
+                return col_map[alias]
+        # Partial match fallback
+        for k, original in col_map.items():
+            for alias in aliases:
+                if alias in k:
+                    return original
+        return None
+
+    code_col = _find_col(code_aliases)
+    name_col = _find_col(name_aliases)
+    gst_col = _find_col(gst_aliases)
+    bank_col = _find_col(bank_aliases)
+    ifsc_col = _find_col(ifsc_aliases)
+
+    # Fallback to positional columns if names weren't recognized
+    if not code_col and len(df.columns) >= 1:
+        code_col = df.columns[0]
+    if not name_col and len(df.columns) >= 2:
+        name_col = df.columns[1]
+
+    processed_count = 0
+    for _, row in df.iterrows():
+        raw_code = str(row[code_col] if code_col is not None else "").strip()
+        raw_name = str(row[name_col] if name_col is not None else "").strip()
+
+        if not raw_code or raw_code.lower() in ("nan", "none", "null"):
+            continue
+        if raw_code.endswith(".0") and raw_code[:-2].isdigit():
+            raw_code = raw_code[:-2]
+
+        if not raw_name or raw_name.lower() in ("nan", "none", "null"):
+            raw_name = f"Vendor {raw_code}"
+
+        raw_gst = str(row[gst_col] if gst_col is not None else "").strip()
+        if raw_gst.lower() in ("nan", "none", "null"):
+            raw_gst = ""
+
+        raw_bank = str(row[bank_col] if bank_col is not None else "").strip()
+        if raw_bank.lower() in ("nan", "none", "null"):
+            raw_bank = ""
+        elif raw_bank.endswith(".0") and raw_bank[:-2].isdigit():
+            raw_bank = raw_bank[:-2]
+
+        raw_ifsc = str(row[ifsc_col] if ifsc_col is not None else "").strip()
+        if raw_ifsc.lower() in ("nan", "none", "null"):
+            raw_ifsc = ""
+
+        vendor = VendorMaster.objects.filter(vendor_code=raw_code).first()
+        if vendor:
+            # Update fields: do not overwrite existing populated values with blanks
+            vendor.vendor_name = raw_name
+            if raw_gst:
+                vendor.gstin = raw_gst
+            if raw_bank:
+                vendor.bank_account_no = raw_bank
+            if raw_ifsc:
+                vendor.ifsc_code = raw_ifsc
+            # is_flagged and matched_keywords are preserved
+            vendor.save()
+        else:
+            VendorMaster.objects.create(
+                vendor_code=raw_code,
+                vendor_name=raw_name,
+                gstin=raw_gst,
+                bank_account_no=raw_bank,
+                ifsc_code=raw_ifsc,
+                is_flagged=False,
+            )
+        processed_count += 1
+
+    config = ensure_masters_initialized()
+    if hasattr(vendor_file, "seek"):
+        vendor_file.seek(0)
+    config.vendor_file.save(filename, vendor_file, save=False)
+    config.vendor_count = VendorMaster.objects.count()
+    config.flagged_vendor_count = VendorMaster.objects.filter(is_flagged=True).count()
+    config.save()
+
+    logger.info(
+        "Ingested Vendor Master: processed {} records, total in database: {}",
+        processed_count,
+        config.vendor_count,
+    )
+    return processed_count, config.vendor_count
 
 
 @transaction.atomic
@@ -74,14 +241,17 @@ def ingest_master_files(
     *,
     gl_file: Any = None,
     sloc_file: Any = None,
+    vendor_file: Any = None,
 ) -> tuple[int, int]:
     """
-    Updates GL Account and/or SLoc master reference files and purges persistent cache
+    Updates GL Account, SLoc, and/or Vendor master reference files and purges persistent cache
     to force dataset re-enrichment against the newly uploaded masters.
+    Returns (gl_count, sloc_count).
     """
     config = ensure_masters_initialized()
     gl_count = config.gl_account_count
     sloc_count = config.sloc_count
+    vendor_count = config.vendor_count
 
     if gl_file:
         try:
@@ -103,8 +273,14 @@ def ingest_master_files(
             logger.error("Failed to parse uploaded SLoc Master: {}", exc)
             raise
 
+    if vendor_file:
+        _, vendor_count = ingest_vendor_master_file(vendor_file)
+        config.refresh_from_db()
+
     config.gl_account_count = gl_count
     config.sloc_count = sloc_count
+    config.vendor_count = vendor_count
+    config.flagged_vendor_count = VendorMaster.objects.filter(is_flagged=True).count()
     config.save()
 
     # Clear cache so data is re-enriched with new master files

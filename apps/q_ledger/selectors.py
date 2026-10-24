@@ -414,3 +414,41 @@ def prepare_table_dict(df: pd.DataFrame | None, max_rows: int = 500) -> dict[str
         "rows": json.dumps(clean_records),
         "count": len(df),
     }
+
+
+def get_vendors_list(
+    search: str = "",
+    flagged_only: bool = False,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """
+    Returns list of vendors from VendorMaster with optional search & flagged filters.
+    """
+    from django.db.models import Q
+
+    from .models import VendorMaster
+
+    qs = VendorMaster.objects.all().order_by("-is_flagged", "vendor_name")
+    if flagged_only:
+        qs = qs.filter(is_flagged=True)
+    if search:
+        s = search.strip()
+        qs = qs.filter(
+            Q(vendor_code__icontains=s)
+            | Q(vendor_name__icontains=s)
+            | Q(bank_account_no__icontains=s)
+            | Q(gstin__icontains=s)
+        )
+    return [
+        {
+            "id": str(v.id),
+            "vendor_code": v.vendor_code,
+            "vendor_name": v.vendor_name,
+            "gstin": v.gstin,
+            "bank_account_no": v.bank_account_no,
+            "ifsc_code": v.ifsc_code,
+            "is_flagged": v.is_flagged,
+            "matched_keywords": v.matched_keywords or [],
+        }
+        for v in qs[:limit]
+    ]
