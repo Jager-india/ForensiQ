@@ -44,6 +44,9 @@ class VendorMaster(ForensicBaseModel):
 
     vendor_code = models.CharField(max_length=64, unique=True, db_index=True)
     vendor_name = models.CharField(max_length=255)
+    owner_name = models.CharField(max_length=255, blank=True, default="")
+    email = models.CharField(max_length=128, blank=True, default="")
+    phone = models.CharField(max_length=64, blank=True, default="")
     gstin = models.CharField(max_length=32, blank=True, default="")
     bank_account_no = models.CharField(max_length=64, blank=True, default="")
     ifsc_code = models.CharField(max_length=32, blank=True, default="")

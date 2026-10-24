@@ -85,7 +85,9 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
       - If vendor does not exist, creates a new VendorMaster record.
     Returns (processed_count, total_vendor_count).
     """
-    filename = getattr(vendor_file, "name", "vendor_master.xlsx").lower()
+    raw_filename = getattr(vendor_file, "name", "vendor_master.xlsx")
+    filename = Path(raw_filename).name.lower()
+    clean_filename = Path(raw_filename).name
     if hasattr(vendor_file, "seek"):
         vendor_file.seek(0)
 
@@ -110,28 +112,70 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
     col_map = {str(c).strip().lower(): c for c in df.columns}
 
     code_aliases = [
-        "vendor",
+        "vednor code",
         "vendor code",
+        "vednor_code",
         "vendor_code",
+        "vednor",
+        "vendor",
         "lifnr",
         "supplier",
         "vendor number",
+        "vednor number",
         "vendor no",
-        "vendor_no",
+        "vednor no",
         "code",
         "account",
         "supplier code",
     ]
     name_aliases = [
-        "name",
         "vendor name",
+        "vednor name",
         "vendor_name",
+        "vednor_name",
+        "name",
         "name 1",
         "name1",
         "supplier name",
         "supplier_name",
         "vendor_desc",
         "description",
+        "company name",
+    ]
+    owner_aliases = [
+        "vendor company owner name",
+        "vednor company owner name",
+        "company owner name",
+        "owner name",
+        "owner_name",
+        "owner",
+        "proprietor",
+        "contact person",
+        "contact name",
+    ]
+    email_aliases = [
+        "vendor company email id",
+        "vednor company email id",
+        "company email id",
+        "company email",
+        "vendor email",
+        "email id",
+        "email_id",
+        "email",
+        "mail",
+    ]
+    phone_aliases = [
+        "vednor company owner number",
+        "vendor company owner number",
+        "company owner number",
+        "owner number",
+        "owner phone",
+        "phone",
+        "mobile",
+        "contact number",
+        "telephone",
+        "phone number",
+        "contact",
     ]
     gst_aliases = ["gstin", "gst no", "gst_no", "gst", "tax number", "stcd3", "tax no"]
     bank_aliases = [
@@ -160,6 +204,9 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
 
     code_col = _find_col(code_aliases)
     name_col = _find_col(name_aliases)
+    owner_col = _find_col(owner_aliases)
+    email_col = _find_col(email_aliases)
+    phone_col = _find_col(phone_aliases)
     gst_col = _find_col(gst_aliases)
     bank_col = _find_col(bank_aliases)
     ifsc_col = _find_col(ifsc_aliases)
@@ -183,6 +230,20 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
         if not raw_name or raw_name.lower() in ("nan", "none", "null"):
             raw_name = f"Vendor {raw_code}"
 
+        raw_owner = str(row[owner_col] if owner_col is not None else "").strip()
+        if raw_owner.lower() in ("nan", "none", "null"):
+            raw_owner = ""
+
+        raw_email = str(row[email_col] if email_col is not None else "").strip()
+        if raw_email.lower() in ("nan", "none", "null"):
+            raw_email = ""
+
+        raw_phone = str(row[phone_col] if phone_col is not None else "").strip()
+        if raw_phone.lower() in ("nan", "none", "null"):
+            raw_phone = ""
+        elif raw_phone.endswith(".0") and raw_phone[:-2].isdigit():
+            raw_phone = raw_phone[:-2]
+
         raw_gst = str(row[gst_col] if gst_col is not None else "").strip()
         if raw_gst.lower() in ("nan", "none", "null"):
             raw_gst = ""
@@ -201,6 +262,12 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
         if vendor:
             # Update fields: do not overwrite existing populated values with blanks
             vendor.vendor_name = raw_name
+            if raw_owner:
+                vendor.owner_name = raw_owner
+            if raw_email:
+                vendor.email = raw_email
+            if raw_phone:
+                vendor.phone = raw_phone
             if raw_gst:
                 vendor.gstin = raw_gst
             if raw_bank:
@@ -213,6 +280,9 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
             VendorMaster.objects.create(
                 vendor_code=raw_code,
                 vendor_name=raw_name,
+                owner_name=raw_owner,
+                email=raw_email,
+                phone=raw_phone,
                 gstin=raw_gst,
                 bank_account_no=raw_bank,
                 ifsc_code=raw_ifsc,
@@ -223,7 +293,7 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
     config = ensure_masters_initialized()
     if hasattr(vendor_file, "seek"):
         vendor_file.seek(0)
-    config.vendor_file.save(filename, vendor_file, save=False)
+    config.vendor_file.save(clean_filename, vendor_file, save=False)
     config.vendor_count = VendorMaster.objects.count()
     config.flagged_vendor_count = VendorMaster.objects.filter(is_flagged=True).count()
     config.save()

@@ -436,6 +436,9 @@ def get_vendors_list(
         qs = qs.filter(
             Q(vendor_code__icontains=s)
             | Q(vendor_name__icontains=s)
+            | Q(owner_name__icontains=s)
+            | Q(email__icontains=s)
+            | Q(phone__icontains=s)
             | Q(bank_account_no__icontains=s)
             | Q(gstin__icontains=s)
         )
@@ -444,6 +447,9 @@ def get_vendors_list(
             "id": str(v.id),
             "vendor_code": v.vendor_code,
             "vendor_name": v.vendor_name,
+            "owner_name": v.owner_name,
+            "email": v.email,
+            "phone": v.phone,
             "gstin": v.gstin,
             "bank_account_no": v.bank_account_no,
             "ifsc_code": v.ifsc_code,

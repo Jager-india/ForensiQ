@@ -438,6 +438,9 @@ def sync_all_modules() -> dict[str, int]:
             for vendor in all_vendors:
                 v_name_lower = (vendor.vendor_name or "").lower().strip()
                 v_code_lower = (vendor.vendor_code or "").lower().strip()
+                v_owner_lower = (vendor.owner_name or "").lower().strip()
+                v_email_lower = (vendor.email or "").lower().strip()
+                v_phone_clean = "".join(filter(str.isdigit, vendor.phone or ""))
                 v_bank_clean = "".join(filter(str.isdigit, vendor.bank_account_no or ""))
 
                 matched_profiles = []
@@ -450,18 +453,35 @@ def sync_all_modules() -> dict[str, int]:
                     p_name_lower = prof.full_name.strip().lower()
 
                     prof_match_terms = []
-                    # Check name match
-                    if p_name_lower and (
-                        p_name_lower in v_name_lower or v_name_lower in p_name_lower
-                    ):
-                        prof_match_terms.append(prof.full_name)
+                    # Check name match against vendor name or owner name
+                    if p_name_lower:
+                        if p_name_lower in v_name_lower or v_name_lower in p_name_lower:
+                            prof_match_terms.append(prof.full_name)
+                        if v_owner_lower and (
+                            p_name_lower in v_owner_lower or v_owner_lower in p_name_lower
+                        ):
+                            prof_match_terms.append(f"Owner: {vendor.owner_name}")
 
                     for kw in p_kws:
                         # Substring match against vendor name or exact vendor code
                         if kw in v_name_lower or kw == v_code_lower:
                             prof_match_terms.append(kw)
-                        # Bank account match if keyword contains >= 5 digits
+                        # Owner / proprietor match
+                        if v_owner_lower and (kw in v_owner_lower or v_owner_lower in kw):
+                            prof_match_terms.append(f"Owner: {vendor.owner_name}")
+                        # Email match
+                        if v_email_lower and kw in v_email_lower:
+                            prof_match_terms.append(f"Email: {vendor.email}")
+
                         kw_digits = "".join(filter(str.isdigit, kw))
+                        # Phone / contact number match
+                        if (
+                            len(kw_digits) >= 5
+                            and v_phone_clean
+                            and (kw_digits in v_phone_clean or v_phone_clean in kw_digits)
+                        ):
+                            prof_match_terms.append(f"Phone: {vendor.phone}")
+                        # Bank account match if keyword contains >= 5 digits
                         if (
                             len(kw_digits) >= 5
                             and v_bank_clean
@@ -499,6 +519,9 @@ def sync_all_modules() -> dict[str, int]:
                                     "direction": "out",
                                     "metadata": {
                                         "vendor_code": vendor.vendor_code,
+                                        "owner_name": vendor.owner_name,
+                                        "email": vendor.email,
+                                        "phone": vendor.phone,
                                         "bank_account_no": vendor.bank_account_no,
                                         "ifsc_code": vendor.ifsc_code,
                                         "gstin": vendor.gstin,
