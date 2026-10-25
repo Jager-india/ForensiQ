@@ -22,6 +22,7 @@ from config import (
     MEDIUM_RISK_KEYWORDS,
 )
 
+from .backend.inference import SnippetInferenceEngine
 from .models import FileEvidenceHit, ScannedDevice
 
 
@@ -183,6 +184,7 @@ def ingest_scan_csv_file(
         det_time = _parse_timestamp(timestamp_str)
         mod_time = _parse_timestamp(mod_time_str)
 
+        inf_res = SnippetInferenceEngine.extract_inference(keyword, snippet)
         hit = FileEvidenceHit(
             device=device,
             file_path=clean_path[:1024],
@@ -192,6 +194,8 @@ def ingest_scan_csv_file(
             matched_keyword=keyword[:128],
             match_type=match_type,
             snippet=snippet,
+            inference=inf_res.inference_text,
+            inference_category=inf_res.category,
             file_modified_at=mod_time,
             detection_timestamp=det_time or datetime.now(UTC),
             risk_score=risk_score,
@@ -214,39 +218,32 @@ def ingest_scan_csv_file(
 
     # Emit Q-Link findings for scanned hits
     try:
-        import re
-
         from q_link.backend.dispatcher import emit_forensic_finding
         from q_link.models import ForensicEntity
 
         all_hits = list(FileEvidenceHit.objects.filter(device=device))
         for hit in all_hits:
-            emp_match = re.search(
-                r"(?:Mr\.|Mrs\.|Ms\.)?\s*([A-Za-z\.\s]+?)\s+(ID-\d+)\s+.*?([A-Za-z\.\s]+?)\s+(Spouse|Husband|Wife|Son|Daughter|Father|Mother|Brother|Sister|Nominee)",
-                hit.snippet,
-                re.IGNORECASE,
-            )
-            if emp_match:
-                emp_name = emp_match.group(1).strip()
-                emp_id = emp_match.group(2).strip()
-                nom_name = emp_match.group(3).strip()
-                rel_type = emp_match.group(4).strip()
+            inf = SnippetInferenceEngine.extract_inference(hit.matched_keyword, hit.snippet)
+            if inf.category == "KINSHIP" and inf.primary_entity and inf.secondary_entity:
+                emp_name = inf.primary_entity
+                nom_name = inf.secondary_entity
+                rel_type = inf.relation_type or "NOMINEE_RELATION"
                 emit_forensic_finding(
                     source_module="q_scan",
                     event_type="NOMINEE_RELATION_IDENTIFIED",
                     primary_entity_data={
                         "name": emp_name,
                         "type": ForensicEntity.EntityType.EMPLOYEE,
-                        "raw_id": emp_id,
-                        "metadata": {"employee_id": emp_id},
+                        "raw_id": hit.filename,
+                        "metadata": {"relationship": hit.inference},
                     },
                     secondary_entities_data=[
                         {
                             "name": nom_name,
                             "type": ForensicEntity.EntityType.UNKNOWN,
-                            "relation_type": rel_type.upper(),
+                            "relation_type": rel_type,
                             "direction": "out",
-                            "metadata": {"nominee_of": emp_name, "employee_id": emp_id},
+                            "metadata": {"nominee_of": emp_name, "relationship": hit.inference},
                         }
                     ],
                     evidence_data={
@@ -256,12 +253,16 @@ def ingest_scan_csv_file(
                         "evidence_url": f"/scan/devices/{device.id}/",
                         "summary_snippet": hit.snippet[:300],
                     },
-                    timeline_title=f"Nominee Identified: {emp_name} -> {nom_name}",
-                    timeline_description=f"{nom_name} identified as {rel_type} of {emp_name} ({emp_id}) in file '{hit.filename}'",
+                    timeline_title=f"Kinship Identified: {emp_name} -> {nom_name}",
+                    timeline_description=hit.inference
+                    or f"{nom_name} identified as relative of {emp_name} in file '{hit.filename}'",
                     severity="WARNING",
                 )
 
                 if custodian_name:
+                    target_other = (
+                        nom_name if custodian_name.lower() in emp_name.lower() else emp_name
+                    )
                     emit_forensic_finding(
                         source_module="q_scan",
                         event_type="BENEFICIARY_NEXUS",
@@ -272,13 +273,14 @@ def ingest_scan_csv_file(
                         },
                         secondary_entities_data=[
                             {
-                                "name": nom_name,
+                                "name": target_other,
                                 "type": ForensicEntity.EntityType.UNKNOWN,
                                 "relation_type": "BENEFICIARY_NEXUS",
                                 "direction": "out",
                             }
                         ],
-                        timeline_title=f"Target Nexus: {custodian_name} -> {nom_name}",
+                        timeline_title=f"Target Nexus: {custodian_name} -> {target_other}",
+                        timeline_description=hit.inference,
                         severity="WARNING",
                     )
     except Exception as err:
@@ -429,6 +431,7 @@ def ingest_document_for_scan(
                 if ext == ".pdf"
                 else FileEvidenceHit.MatchType.CONTENT_TEXT
             )
+            p_inf = SnippetInferenceEngine.extract_inference(kw, line[:500])
             hit = FileEvidenceHit(
                 device=device,
                 file_path=f"Schedule://{filename}",
@@ -438,6 +441,8 @@ def ingest_document_for_scan(
                 matched_keyword=kw[:128],
                 match_type=match_type,
                 snippet=line[:500],
+                inference=p_inf.inference_text,
+                inference_category=p_inf.category,
                 detection_timestamp=datetime.now(UTC),
                 risk_score=85,
             )

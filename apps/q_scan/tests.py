@@ -750,3 +750,77 @@ class QScanDjangoServiceAndViewsTests(TestCase):
         prof.refresh_from_db()
         self.assertIn("A. JOSEPH REMIGIUS", prof.keywords)
         self.assertIn("Silviya Remigius", prof.keywords)
+
+    def test_snippet_inference_engine_kinship_and_employment(self):
+        from q_scan.backend.inference import SnippetInferenceEngine
+
+        # 1. Kinship: Nominee keyword
+        res1 = SnippetInferenceEngine.extract_inference(
+            "Monisha",
+            "Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha | Policy: POL-9921",
+        )
+        self.assertEqual(res1.category, "KINSHIP")
+        self.assertEqual(res1.inference_text, "Monisha is Spouse / Wife of Raj")
+        self.assertEqual(res1.primary_entity, "Raj")
+        self.assertEqual(res1.secondary_entity, "Monisha")
+
+        # 2. Kinship: Employee keyword
+        res2 = SnippetInferenceEngine.extract_inference(
+            "Raj",
+            "Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha | Policy: POL-9921",
+        )
+        self.assertEqual(res2.category, "KINSHIP")
+        self.assertEqual(res2.inference_text, "Raj has Spouse / Wife: Monisha")
+
+        # 3. Employment: Head Office SCM
+        res3 = SnippetInferenceEngine.extract_inference(
+            "Senthamilkannan",
+            "Employee: Senthamilkannan | Department: Head Office SCM Finance | Policy: POL-8812",
+        )
+        self.assertEqual(res3.category, "EMPLOYMENT")
+        self.assertEqual(
+            res3.inference_text, "Senthamilkannan is an Employee at Head Office SCM Finance"
+        )
+
+        # 4. Vendor / Contact
+        res4 = SnippetInferenceEngine.extract_inference(
+            "Balamurugan",
+            "Point of Contact: Balamurugan, Manager of Hydro Pumps (Director: P. Murugan)",
+        )
+        self.assertEqual(res4.category, "VENDOR")
+        self.assertEqual(res4.inference_text, "Balamurugan is Manager of Hydro Pumps")
+
+    def test_ingest_scan_csv_auto_populates_inferences(self):
+        from q_scan.selectors import get_paginated_evidence_hits
+        from q_scan.services import ingest_scan_csv_file
+
+        csv_content = """Timestamp,Path,Keyword,MatchType,Size,Modified,Snippet
+2026-10-25 10:00:00,C:\\HR\\file.xlsx,Monisha,CONTENT_XLSX,1024,2026-10-25 09:00:00,"Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha"
+2026-10-25 10:00:00,C:\\HR\\scm.xlsx,Senthamilkannan,CONTENT_XLSX,2048,2026-10-25 09:00:00,"Employee: Senthamilkannan | Department: Head Office SCM Finance"
+"""
+
+        device = ingest_scan_csv_file(
+            csv_file_obj_or_path=csv_content,
+            hostname="TEST-ENDPOINT",
+            scan_title="Inference Ingest Test",
+            custodian_name="Raj",
+        )
+
+        hits = list(device.hits.all())
+        self.assertEqual(len(hits), 2)
+
+        monisha_hit = next(h for h in hits if h.matched_keyword == "Monisha")
+        self.assertEqual(monisha_hit.inference_category, "KINSHIP")
+        self.assertEqual(monisha_hit.inference, "Monisha is Spouse / Wife of Raj")
+
+        scm_hit = next(h for h in hits if h.matched_keyword == "Senthamilkannan")
+        self.assertEqual(scm_hit.inference_category, "EMPLOYMENT")
+        self.assertEqual(
+            scm_hit.inference, "Senthamilkannan is an Employee at Head Office SCM Finance"
+        )
+
+        # Verify selector returns inference and supports search on inference text
+        page_res = get_paginated_evidence_hits(device_id=device.id, search="Spouse")
+        self.assertEqual(len(page_res["data"]), 1)
+        self.assertEqual(page_res["data"][0]["inference"], "Monisha is Spouse / Wife of Raj")
+        self.assertEqual(page_res["data"][0]["inference_category"], "KINSHIP")

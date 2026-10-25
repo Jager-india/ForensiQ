@@ -228,7 +228,7 @@
                 paginationSizeSelector: [25, 50, 100, 250],
                 sortMode: "remote",
                 layout: "fitColumns",
-                responsiveLayout: "collapse",
+                responsiveLayout: false,
                 placeholder: "No evidence hits found matching current criteria",
                 initialSort: [{ column: "risk_score", dir: "desc" }],
                 columns: [
@@ -249,11 +249,54 @@
                         title: "Keyword",
                         field: "matched_keyword",
                         width: 130,
+                        responsive: 0,
                         headerSort: true,
                         formatter: function (cell) {
                             const val = cell.getValue() || "";
                             const escaped = val.replace(/'/g, "\\'");
                             return `<button type="button" onclick="setKeywordFilter('${escaped}')" class="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-teal-500/15 text-teal-400 border border-teal-500/30 hover:bg-teal-500/30 hover:border-teal-500/60 transition cursor-pointer" title="Filter hits for '${val}'">${val}</button>`;
+                        }
+                    },
+                    {
+                        title: "Forensic Inference",
+                        field: "inference",
+                        minWidth: 260,
+                        responsive: 0,
+                        headerSort: true,
+                        formatter: function (cell) {
+                            const val = cell.getValue();
+                            if (!val || val === "-" || val === "") {
+                                return `<span class="text-slate-500 font-mono text-[11px]">-</span>`;
+                            }
+                            const data = cell.getRow().getData();
+                            const cat = data.inference_category || "";
+                            
+                            let badgeStyle = "bg-purple-500/10 text-purple-400 border-purple-500/30";
+                            let icon = "fa-solid fa-people-roof";
+                            
+                            if (cat === "EMPLOYMENT") {
+                                badgeStyle = "bg-indigo-500/10 text-indigo-400 border-indigo-500/30";
+                                icon = "fa-solid fa-building-user";
+                            } else if (cat === "VENDOR") {
+                                badgeStyle = "bg-amber-500/10 text-amber-400 border-amber-500/30";
+                                icon = "fa-solid fa-handshake";
+                            } else if (cat === "KINSHIP") {
+                                badgeStyle = "bg-purple-500/10 text-purple-400 border-purple-500/30";
+                                icon = "fa-solid fa-people-roof";
+                            } else {
+                                badgeStyle = "bg-teal-500/10 text-teal-400 border-teal-500/30";
+                                icon = "fa-solid fa-magnifying-glass";
+                            }
+
+                            const safeVal = String(val).replace(/"/g, '&quot;');
+                            return `
+                                <div class="py-1">
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${badgeStyle} shadow-sm max-w-full truncate" title="${safeVal}">
+                                        <i class="${icon} text-[10px] shrink-0"></i>
+                                        <span class="truncate">${val}</span>
+                                    </span>
+                                </div>
+                            `;
                         }
                     },
                     {
@@ -324,6 +367,7 @@
                     {
                         title: "Context Snippet",
                         field: "snippet",
+                        minWidth: 240,
                         headerSort: false,
                         formatter: function (cell) {
                             const snippet = cell.getValue();

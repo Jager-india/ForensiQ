@@ -71,6 +71,12 @@ class FileEvidenceHit(ForensicBaseModel):
         CONTENT_ZIP_ENTRY = "CONTENT_ZIP_ENTRY", "Zip Archive Entry Match"
         CONTENT_ZIP_OFFICE = "CONTENT_ZIP_OFFICE", "Zip Nested Document Match"
 
+    class InferenceCategory(models.TextChoices):
+        KINSHIP = "KINSHIP", "Kinship / Nominee"
+        EMPLOYMENT = "EMPLOYMENT", "Employment / Role"
+        VENDOR = "VENDOR", "Vendor / Affiliate"
+        GENERAL = "GENERAL", "General Finding"
+
     device = models.ForeignKey(
         ScannedDevice,
         on_delete=models.CASCADE,
@@ -89,6 +95,20 @@ class FileEvidenceHit(ForensicBaseModel):
         db_index=True,
     )
     snippet = models.TextField(blank=True, default="", help_text="Surrounding text context snippet")
+    inference = models.TextField(
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Derived forensic kinship or role inference from snippet",
+    )
+    inference_category = models.CharField(
+        max_length=32,
+        choices=InferenceCategory.choices,
+        blank=True,
+        default="",
+        db_index=True,
+        help_text="Categorical classification of the inference (KINSHIP, EMPLOYMENT, etc.)",
+    )
     file_modified_at = models.DateTimeField(null=True, blank=True)
     detection_timestamp = models.DateTimeField(null=True, blank=True)
     risk_score = models.IntegerField(default=50, help_text="Calculated Risk Score (0-100)")

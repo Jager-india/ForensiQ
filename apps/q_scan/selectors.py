@@ -116,6 +116,7 @@ def get_evidence_hits_query(
                         | Q(file_path__icontains=kw)
                         | Q(matched_keyword__icontains=kw)
                         | Q(snippet__icontains=kw)
+                        | Q(inference__icontains=kw)
                         | Q(device__hostname__icontains=kw)
                     )
                 qs = qs.filter(q_kw)
@@ -127,6 +128,7 @@ def get_evidence_hits_query(
                         | Q(file_path__icontains=kw)
                         | Q(matched_keyword__icontains=kw)
                         | Q(snippet__icontains=kw)
+                        | Q(inference__icontains=kw)
                         | Q(device__hostname__icontains=kw)
                     )
                 matched_ids = list(qs.filter(q_exact).values_list("id", flat=True)[:500])
@@ -138,12 +140,11 @@ def get_evidence_hits_query(
                         "file_path",
                         "matched_keyword",
                         "snippet",
+                        "inference",
                         "device__hostname",
                     )[:1000]
-                    for hit_id, fn, fp, kw, snip, host in candidates:
-                        text_to_check = (
-                            f"{fn or ''} {fp or ''} {kw or ''} {snip or ''} {host or ''}"
-                        )
+                    for hit_id, fn, fp, kw, snip, inf, host in candidates:
+                        text_to_check = f"{fn or ''} {fp or ''} {kw or ''} {snip or ''} {inf or ''} {host or ''}"
                         is_matched, _, _ = score_text_against_keywords(
                             text_to_check, keywords, threshold=threshold
                         )
@@ -206,6 +207,7 @@ def get_paginated_evidence_hits(
                         | Q(file_path__icontains=kw)
                         | Q(matched_keyword__icontains=kw)
                         | Q(snippet__icontains=kw)
+                        | Q(inference__icontains=kw)
                         | Q(device__hostname__icontains=kw)
                     )
                 qs = qs.filter(q_kw)
@@ -217,6 +219,7 @@ def get_paginated_evidence_hits(
                         | Q(file_path__icontains=kw)
                         | Q(matched_keyword__icontains=kw)
                         | Q(snippet__icontains=kw)
+                        | Q(inference__icontains=kw)
                         | Q(device__hostname__icontains=kw)
                     )
                 matched_ids = list(qs.filter(q_exact).values_list("id", flat=True)[:500])
@@ -228,12 +231,11 @@ def get_paginated_evidence_hits(
                         "file_path",
                         "matched_keyword",
                         "snippet",
+                        "inference",
                         "device__hostname",
                     )[:1000]
-                    for hit_id, fn, fp, kw, snip, host in candidates:
-                        text_to_check = (
-                            f"{fn or ''} {fp or ''} {kw or ''} {snip or ''} {host or ''}"
-                        )
+                    for hit_id, fn, fp, kw, snip, inf, host in candidates:
+                        text_to_check = f"{fn or ''} {fp or ''} {kw or ''} {snip or ''} {inf or ''} {host or ''}"
                         is_matched, _, _ = score_text_against_keywords(
                             text_to_check, keywords, threshold=threshold
                         )
@@ -257,6 +259,8 @@ def get_paginated_evidence_hits(
         "file_size_display": "file_size_bytes",
         "file_modified_at": "file_modified_at",
         "detection_timestamp": "detection_timestamp",
+        "inference": "inference",
+        "inference_category": "inference_category",
         "created_at": "created_at",
     }
     db_sort_field = allowed_sort_fields.get(sort_field, "risk_score")
@@ -286,6 +290,11 @@ def get_paginated_evidence_hits(
                 "match_type": h.match_type,
                 "match_type_label": h.get_match_type_display(),
                 "snippet": h.snippet or "-",
+                "inference": h.inference or "",
+                "inference_category": h.inference_category or "",
+                "inference_category_label": (
+                    h.get_inference_category_display() if h.inference_category else ""
+                ),
                 "risk_score": h.risk_score,
                 "file_modified_at": (
                     h.file_modified_at.strftime("%Y-%m-%d %H:%M") if h.file_modified_at else "-"
