@@ -18,6 +18,7 @@ class AudioRecording(ForensicBaseModel):
         PENDING = "PENDING", "Pending Ingestion"
         PROCESSING = "PROCESSING", "Diarization In Progress"
         FAILED = "FAILED", "Transcription Failed"
+        STALLED = "STALLED", "Ingestion Stalled"
 
     call_ref = models.CharField(
         max_length=64,

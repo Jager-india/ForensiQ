@@ -1,0 +1,36 @@
+{% if rec.transcription_status == 'PROCESSING' or rec.transcription_status == 'PENDING' %}
+<div id="recording-pill-{{ rec.id }}"
+     hx-get="{% url 'q_voice:recording_status' rec.id %}?mode={{ mode|default:'pill' }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML"
+     class="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl text-[11px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/30 animate-pulse">
+    <i class="fa-solid fa-spinner fa-spin text-amber-400 text-xs"></i>
+    <span class="font-bold truncate max-w-[140px]">{{ rec.call_title|default:rec.call_ref }}</span>
+    <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-500/20 font-bold tracking-wider">Processing</span>
+</div>
+{% elif rec.transcription_status == 'FAILED' or rec.transcription_status == 'STALLED' %}
+<div id="recording-pill-{{ rec.id }}"
+     class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/10 text-rose-400 border border-rose-500/30 truncate max-w-[240px]"
+     title="Failed: {{ rec.error_message }}">
+    <i class="fa-solid fa-triangle-exclamation text-rose-500 text-[10px]"></i>
+    <span class="truncate">{{ rec.call_title|default:rec.call_ref }}</span>
+    <form hx-post="{% url 'q_voice:retry_recording' rec.id %}"
+          hx-target="#recording-pill-{{ rec.id }}"
+          hx-swap="outerHTML"
+          class="inline ml-1">
+        {% csrf_token %}
+        <button type="submit" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 transition cursor-pointer" title="Retry Ingestion">
+            <i class="fa-solid fa-rotate-right mr-0.5"></i>Retry
+        </button>
+    </form>
+</div>
+{% else %}
+<a id="recording-pill-{{ rec.id }}"
+   href="{% url 'q_voice:custodian_detail' rec.custodian_name|default:'General Custodian' %}?recording_id={{ rec.id }}"
+   class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono bg-theme-app text-theme-text border border-theme-border/70 truncate max-w-[190px] hover:border-indigo-500/50 transition-colors"
+   title="{{ rec.call_title }} ({{ rec.call_ref }}) • {{ rec.duration_formatted }} • {{ rec.total_segments }} segments">
+    <i class="fa-solid fa-file-waveform text-indigo-400 text-[10px]"></i>
+    <span class="truncate">{{ rec.call_title|default:rec.call_ref }}</span>
+    <span class="text-[9px] text-theme-muted font-mono">({{ rec.duration_formatted }})</span>
+</a>
+{% endif %}

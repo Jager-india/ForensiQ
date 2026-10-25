@@ -231,6 +231,9 @@
 
                 <!-- Individual Audio Recording Pills -->
                 {% for rec in recordings %}
+                {% if rec.transcription_status == 'PROCESSING' or rec.transcription_status == 'PENDING' or rec.transcription_status == 'FAILED' or rec.transcription_status == 'STALLED' %}
+                    {% include 'q_voice/partials/recording_card.html' with rec=rec mode='pill' %}
+                {% else %}
                 <a href="{% url 'q_voice:custodian_detail' custodian_name %}?recording_id={{ rec.id }}"
                     class="px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex items-center gap-2
                    {% if selected_recording_id == rec.id|stringformat:'s' %}bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20{% else %}bg-theme-app text-theme-muted border-theme-border hover:border-theme-border/80 hover:text-theme-text{% endif %}"
@@ -241,6 +244,7 @@
                         {{ rec.duration_formatted }}
                     </span>
                 </a>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>
@@ -258,6 +262,30 @@
         {% endif %}
 
         <!-- ============================================================ -->
+        {% if selected_recording and selected_recording.transcription_status == 'PROCESSING' or selected_recording and selected_recording.transcription_status == 'PENDING' %}
+        <div hx-get="{% url 'q_voice:custodian_detail' custodian_name %}?recording_id={{ selected_recording.id }}"
+             hx-trigger="every 4s"
+             hx-swap="outerHTML"
+             class="p-6 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center justify-between shadow-lg">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 text-xl animate-pulse">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                </div>
+                <div>
+                    <h4 class="text-sm font-bold text-amber-200 flex items-center gap-2">
+                        <span>Acoustic Diarization & Speech Transcription In Progress</span>
+                    </h4>
+                    <p class="text-xs text-amber-300/80 mt-0.5">
+                        Background worker is actively transcribing audio case <strong class="font-mono text-white">{{ selected_recording.call_ref }}</strong>. This workspace will auto-refresh once completed.
+                    </p>
+                </div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300 animate-pulse">
+                PROCESSING
+            </span>
+        </div>
+        {% endif %}
+
         <!-- 4. INTERACTIVE HORIZONTAL TIMELINE RESOLUTION TRACK -->
         <!-- ============================================================ -->
         <div class="p-5 rounded-2xl bg-theme-surface border border-theme-border shadow-sm space-y-4">
@@ -477,6 +505,28 @@
                         new_role="new_profile_role"
                         required="false" />
 
+                    <!-- Language & Acoustic Task -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-theme-text mb-1">Language Recognition</label>
+                            <select name="language"
+                                class="w-full px-3 py-2 rounded-xl text-xs bg-theme-app border border-theme-border text-theme-text focus:outline-none focus:border-indigo-500 cursor-pointer">
+                                <option value="auto">Auto-detect Language</option>
+                                <option value="en" selected>English (Default / Indian English)</option>
+                                <option value="ta">Tamil (Regional Dialect)</option>
+                                <option value="hi">Hindi</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-theme-text mb-1">Acoustic Task</label>
+                            <select name="task"
+                                class="w-full px-3 py-2 rounded-xl text-xs bg-theme-app border border-theme-border text-theme-text focus:outline-none focus:border-indigo-500 cursor-pointer">
+                                <option value="transcribe" selected>Transcribe Utterances</option>
+                                <option value="translate">Translate to English</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <!-- Audio File Uploader -->
                     <div>
                         <c-file_uploader
@@ -503,8 +553,8 @@
                     </button>
                     <button type="submit" :disabled="isSubmitting"
                         class="px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-zinc-950 transition flex items-center space-x-2 cursor-pointer disabled:opacity-50">
-                        <span x-show="!isSubmitting"><i class="fa-solid fa-cloud-arrow-up mr-1.5"></i>Begin Transcription</span>
-                        <span x-show="isSubmitting" x-cloak><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Dispatching Audio...</span>
+                        <span x-show="!isSubmitting"><i class="fa-solid fa-cloud-arrow-up mr-1.5"></i>Queue Ingestion (Background)</span>
+                        <span x-show="isSubmitting" x-cloak><i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Uploading Audio...</span>
                     </button>
                 </div>
             </form>

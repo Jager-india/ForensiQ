@@ -201,6 +201,7 @@ class QVoiceServicesAndSelectorsTests(TestCase):
             call_ref="CALL-AUTO-001",
             call_title="Audit Wiretap 1",
             custodian_name="VP Sourcing",
+            run_async=False,
         )
 
         self.assertEqual(err, "")
@@ -225,6 +226,7 @@ class QVoiceServicesAndSelectorsTests(TestCase):
             audio_file=fake_audio,
             call_ref="CALL-FAIL-001",
             call_title="Failed Call",
+            run_async=False,
         )
 
         self.assertIn("Connection refused", err)
@@ -292,6 +294,7 @@ class QVoiceServicesAndSelectorsTests(TestCase):
         rec1, err1 = ingest_audio_recording(
             audio_file=fake_audio1,
             call_ref="CALL-SEG-001",
+            run_async=False,
         )
         self.assertEqual(err1, "")
         self.assertEqual(rec1.segments.count(), 2)
@@ -310,6 +313,7 @@ class QVoiceServicesAndSelectorsTests(TestCase):
         rec2, err2 = ingest_audio_recording(
             audio_file=fake_audio2,
             call_ref="CALL-TXT-001",
+            run_async=False,
         )
         self.assertEqual(err2, "")
         self.assertEqual(rec2.segments.count(), 3)
@@ -684,3 +688,73 @@ class QVoiceCustodianProfileTests(TestCase):
         self.profile.refresh_from_db()
         self.assertIn("C. Venkatesan", self.profile.keywords)
         self.assertIn("9840123456", self.profile.keywords)
+
+    def test_recording_status_view_processing_and_completed(self):
+        rec_proc = AudioRecording.objects.create(
+            call_ref="CALL-STAT-PROC",
+            call_title="Processing Call",
+            custodian_name="Rajesh Sharma",
+            call_timestamp=timezone.now(),
+            transcription_status=AudioRecording.TranscriptionStatus.PROCESSING,
+        )
+        url = reverse("q_voice:recording_status", kwargs={"recording_id": rec_proc.id})
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("Processing", res.content.decode())
+        self.assertIn(f"recording-pill-{rec_proc.id}", res.content.decode())
+
+        # Test Completed status
+        rec_comp = AudioRecording.objects.create(
+            call_ref="CALL-STAT-COMP",
+            call_title="Completed Call",
+            custodian_name="Rajesh Sharma",
+            call_timestamp=timezone.now(),
+            transcription_status=AudioRecording.TranscriptionStatus.COMPLETED,
+            duration_seconds=90,
+        )
+        url_comp = reverse("q_voice:recording_status", kwargs={"recording_id": rec_comp.id})
+        res_comp = self.client.get(url_comp)
+        self.assertEqual(res_comp.status_code, 200)
+        self.assertIn("CALL-STAT-COMP", res_comp.content.decode())
+
+    def test_retry_recording_view(self):
+        rec_fail = AudioRecording.objects.create(
+            call_ref="CALL-RETRY-001",
+            call_title="Failed Call for Retry",
+            custodian_name="Rajesh Sharma",
+            call_timestamp=timezone.now(),
+            transcription_status=AudioRecording.TranscriptionStatus.FAILED,
+            error_message="Daemon connection refused",
+        )
+        url = reverse("q_voice:retry_recording", kwargs={"recording_id": rec_fail.id})
+        with patch(
+            "q_voice.views.retry_voice_transcription", return_value=(True, "")
+        ) as mock_retry:
+            res = self.client.post(url, {"language": "en", "task": "transcribe"})
+            mock_retry.assert_called_once_with(rec_fail.id, language="en", task="transcribe")
+            self.assertEqual(res.status_code, 302)
+
+    def test_recover_stalled_recordings(self):
+        from datetime import timedelta
+
+        from q_voice.services import recover_stalled_recordings
+
+        rec_stalled = AudioRecording.objects.create(
+            call_ref="CALL-STALL-001",
+            call_title="Stalled Ingestion",
+            custodian_name="Rajesh Sharma",
+            call_timestamp=timezone.now(),
+            transcription_status=AudioRecording.TranscriptionStatus.PROCESSING,
+        )
+        # Manually backdate updated_at
+        AudioRecording.objects.filter(id=rec_stalled.id).update(
+            updated_at=timezone.now() - timedelta(seconds=7200)
+        )
+
+        recovered = recover_stalled_recordings(stale_seconds=3600)
+        self.assertGreaterEqual(recovered, 1)
+        rec_stalled.refresh_from_db()
+        self.assertEqual(
+            rec_stalled.transcription_status, AudioRecording.TranscriptionStatus.STALLED
+        )
+        self.assertIn("interrupted", rec_stalled.error_message)

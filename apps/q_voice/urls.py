@@ -26,6 +26,16 @@ urlpatterns = [
         name="recording_detail",
     ),
     path(
+        "recording/<uuid:recording_id>/status/",
+        views.recording_status_view,
+        name="recording_status",
+    ),
+    path(
+        "recording/<uuid:recording_id>/retry/",
+        views.retry_recording_view,
+        name="retry_recording",
+    ),
+    path(
         "recording/<uuid:recording_id>/delete/",
         views.delete_recording_view,
         name="delete_recording",

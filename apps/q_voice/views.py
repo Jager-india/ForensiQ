@@ -14,9 +14,9 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from core.audits import get_active_audit
+from core.models import InvestigationProfile
 from core.profiles import resolve_or_create_profile_from_request
 
-from .models import AudioRecording
 from .selectors import (
     get_all_custodian_profiles,
     get_all_recordings,
@@ -31,6 +31,8 @@ from .services import (
     delete_custodian_recordings,
     get_voice_api_endpoint,
     ingest_audio_recording,
+    recover_stalled_recordings,
+    retry_voice_transcription,
 )
 
 
@@ -40,6 +42,7 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     Common Q-Voice Hub & Target Custodians Directory Dashboard.
     Displays global platform metrics and the directory of all target custodian profiles.
     """
+    recover_stalled_recordings()
     active_audit = get_active_audit(request)
     custodians = get_all_custodian_profiles()
     recordings = get_all_recordings()
@@ -48,6 +51,9 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         audit_names = {p.full_name.strip().lower() for p in active_audit.profiles.all()}
         custodians = [c for c in custodians if c["custodian_name"].strip().lower() in audit_names]
         recordings = [r for r in recordings if r.custodian_name.strip().lower() in audit_names]
+        available_profiles = list(active_audit.profiles.filter(status="ACTIVE"))
+    else:
+        available_profiles = list(InvestigationProfile.objects.filter(status="ACTIVE"))
 
     context: dict[str, Any] = {
         "status": "idle",
@@ -56,6 +62,7 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "global_metrics": get_global_voice_metrics(),
         "error_message": "",
         "voice_endpoint": get_voice_api_endpoint(),
+        "available_profiles": available_profiles,
     }
 
     # Handle file upload from modal on common dashboard
@@ -65,34 +72,44 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
             context["error_message"] = "No audio file provided. Please choose a .wav or .mp3 file."
             context["status"] = "error"
         else:
-            call_ref = request.POST.get("call_ref", "")
-            call_title = request.POST.get("call_title", "")
-            _profile, resolved_name = resolve_or_create_profile_from_request(
-                request, default_department="Strategic Sourcing"
-            )
-            custodian_name = (
-                resolved_name or request.POST.get("custodian_name", "").strip() or "Target Auditee"
-            )
+            call_ref = request.POST.get("call_ref", "").strip()
+            call_title = request.POST.get("call_title", "").strip()
+            language = request.POST.get("language", "auto").strip()
+            task = request.POST.get("task", "transcribe").strip()
+
+            profile_id = request.POST.get("profile_id", "").strip()
+            custodian_name = ""
+            if profile_id:
+                prof = InvestigationProfile.objects.filter(id=profile_id).first()
+                if prof:
+                    custodian_name = prof.full_name.strip()
+
+            if not custodian_name:
+                _profile, resolved_name = resolve_or_create_profile_from_request(
+                    request, default_department="Strategic Sourcing"
+                )
+                custodian_name = (
+                    request.POST.get("custodian_name", "").strip()
+                    or resolved_name
+                    or "Target Auditee"
+                )
 
             recording, error_msg = ingest_audio_recording(
                 audio_file=audio_file,
                 call_ref=call_ref,
                 call_title=call_title,
                 custodian_name=custodian_name,
+                language=language,
+                task=task,
             )
 
-            if (
-                error_msg
-                or not recording
-                or recording.transcription_status == AudioRecording.TranscriptionStatus.FAILED
-            ):
-                context["error_message"] = (
-                    error_msg or "Local transcription service failed to process audio."
-                )
+            if error_msg or not recording:
+                context["error_message"] = error_msg or "Failed to initiate audio ingestion."
                 context["status"] = "error"
             else:
-                messages.success(
-                    request, f"Transcription completed successfully: {recording.call_ref}"
+                messages.info(
+                    request,
+                    f"Audio recording '{recording.call_ref}' queued. Background transcription and entity detection in progress.",
                 )
                 target_cust = recording.custodian_name.strip() or "General Custodian"
                 redirect_url = reverse(
@@ -144,9 +161,6 @@ def custodian_detail_view(request: HttpRequest, custodian_name: str) -> HttpResp
     from core.profiles import get_profile_keywords
 
     profile_keywords = get_profile_keywords(custodian_name=custodian_name, request=request)
-
-    from core.audits import get_active_audit
-    from core.models import InvestigationProfile
 
     from .services import extract_suggested_entities_for_voice
 
@@ -209,6 +223,55 @@ def recording_detail_view(request: HttpRequest, recording_id: uuid.UUID) -> Http
     request_params["recording_id"] = str(recording.id)
     request.GET = request_params
     return custodian_detail_view(request, custodian_name=custodian_name)
+
+
+@require_GET
+def recording_status_view(request: HttpRequest, recording_id: uuid.UUID) -> HttpResponse:
+    """
+    Returns live HTMX card / pill status partial for background transcription polling.
+    """
+    recording = get_recording_by_id(recording_id)
+    if not recording:
+        raise Http404(f"Recording {recording_id} not found.")
+
+    mode = request.GET.get("mode", "pill")
+    return render(
+        request,
+        "q_voice/partials/recording_card.html",
+        {"rec": recording, "mode": mode},
+    )
+
+
+@require_POST
+def retry_recording_view(request: HttpRequest, recording_id: uuid.UUID) -> HttpResponse:
+    """
+    Retries background transcription for a failed or stalled recording.
+    """
+    recording = get_recording_by_id(recording_id)
+    if not recording:
+        raise Http404(f"Recording {recording_id} not found.")
+
+    language = request.POST.get("language", "auto").strip()
+    task = request.POST.get("task", "transcribe").strip()
+    success, err = retry_voice_transcription(recording.id, language=language, task=task)
+
+    if request.headers.get("HX-Request"):
+        recording.refresh_from_db()
+        return render(
+            request,
+            "q_voice/partials/recording_card.html",
+            {"rec": recording, "mode": "pill"},
+        )
+
+    if success:
+        messages.success(request, f"Re-queued transcription for {recording.call_ref}.")
+    else:
+        messages.error(request, f"Could not retry recording: {err}")
+
+    referer = request.META.get("HTTP_REFERER")
+    if referer:
+        return redirect(referer)
+    return redirect("q_voice:dashboard")
 
 
 @require_POST

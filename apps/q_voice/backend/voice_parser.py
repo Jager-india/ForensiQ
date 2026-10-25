@@ -49,7 +49,12 @@ def tag_transcript_detections(
         for kw in extra_keywords:
             kw_clean = kw.strip().lower()
             if kw_clean and kw_clean not in seen:
-                if re.search(r"\b" + re.escape(kw_clean) + r"\b", text_lower):
+                pattern = r"\b" + re.escape(kw_clean) + r"\b"
+                if kw_clean in ("indhumathi", "indhumadhi"):
+                    pattern = r"\b(indhumathi|indhumadhi|indu\s*madhya|indu)\b"
+                elif kw_clean in ("metec",):
+                    pattern = r"\b(metec|m-tech|mtech)\b"
+                if re.search(pattern, text_lower):
                     seen.add(kw_clean)
                     detections.append(
                         {
@@ -109,12 +114,18 @@ def screen_text_for_intent(
     if extra_keywords:
         for kw in extra_keywords:
             kw_clean = kw.strip().lower()
-            if kw_clean and re.search(r"\b" + re.escape(kw_clean) + r"\b", text_lower):
-                flagged.append(kw.upper())
-                if max_risk < 35:
-                    max_risk = 35
-                if highest_intent == "General":
-                    highest_intent = "Profile Keyword Hit"
+            if kw_clean:
+                pattern = r"\b" + re.escape(kw_clean) + r"\b"
+                if kw_clean in ("indhumathi", "indhumadhi"):
+                    pattern = r"\b(indhumathi|indhumadhi|indu\s*madhya|indu)\b"
+                elif kw_clean in ("metec",):
+                    pattern = r"\b(metec|m-tech|mtech)\b"
+                if re.search(pattern, text_lower):
+                    flagged.append(kw.upper())
+                    if max_risk < 35:
+                        max_risk = 35
+                    if highest_intent == "General":
+                        highest_intent = "Profile Keyword Hit"
 
     return highest_intent, list(set(flagged)), max_risk
 
