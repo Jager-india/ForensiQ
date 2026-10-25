@@ -5,6 +5,7 @@ Handles evidence CSV ingestion, atomic batch database writes, and scoring classi
 
 import csv
 import io
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -224,10 +225,19 @@ def ingest_scan_csv_file(
         all_hits = list(FileEvidenceHit.objects.filter(device=device))
         for hit in all_hits:
             inf = SnippetInferenceEngine.extract_inference(hit.matched_keyword, hit.snippet)
+            inf_text = hit.inference or inf.inference_text
+
             if inf.category == "KINSHIP" and inf.primary_entity and inf.secondary_entity:
                 emp_name = inf.primary_entity
                 nom_name = inf.secondary_entity
-                rel_type = inf.relation_type or "NOMINEE_RELATION"
+                rel_raw = inf.relation_type or "NOMINEE_RELATION"
+                is_spouse = (
+                    "spouse" in rel_raw.lower()
+                    or "wife" in rel_raw.lower()
+                    or "husband" in rel_raw.lower()
+                )
+                rel_type = "SPOUSE" if is_spouse else "KINSHIP"
+                formatted_lbl = "Spouse / Wife" if is_spouse else "Kinship / Relative"
                 emit_forensic_finding(
                     source_module="q_scan",
                     event_type="NOMINEE_RELATION_IDENTIFIED",
@@ -235,15 +245,28 @@ def ingest_scan_csv_file(
                         "name": emp_name,
                         "type": ForensicEntity.EntityType.EMPLOYEE,
                         "raw_id": hit.filename,
-                        "metadata": {"relationship": hit.inference},
+                        "metadata": {
+                            "relationship": inf_text,
+                            "inference": inf_text,
+                            "kinship": inf_text,
+                            "nominee": nom_name,
+                        },
                     },
                     secondary_entities_data=[
                         {
                             "name": nom_name,
-                            "type": ForensicEntity.EntityType.UNKNOWN,
+                            "type": ForensicEntity.EntityType.EMPLOYEE,
                             "relation_type": rel_type,
                             "direction": "out",
-                            "metadata": {"nominee_of": emp_name, "relationship": hit.inference},
+                            "metadata": {
+                                "nominee_of": emp_name,
+                                "relationship": inf_text,
+                                "inference": inf_text,
+                                "formatted_label": formatted_lbl,
+                                "tags": ["Nominee", "Spouse / Wife"]
+                                if is_spouse
+                                else ["Nominee", "Kinship"],
+                            },
                         }
                     ],
                     evidence_data={
@@ -252,9 +275,15 @@ def ingest_scan_csv_file(
                         "source_record_id": str(hit.id),
                         "evidence_url": f"/scan/devices/{device.id}/",
                         "summary_snippet": hit.snippet[:300],
+                        "metadata": {
+                            "file_name": hit.filename,
+                            "page_number": 1,
+                            "snippet": hit.snippet[:300],
+                            "inference": inf_text,
+                        },
                     },
                     timeline_title=f"Kinship Identified: {emp_name} -> {nom_name}",
-                    timeline_description=hit.inference
+                    timeline_description=inf_text
                     or f"{nom_name} identified as relative of {emp_name} in file '{hit.filename}'",
                     severity="WARNING",
                 )
@@ -280,9 +309,120 @@ def ingest_scan_csv_file(
                             }
                         ],
                         timeline_title=f"Target Nexus: {custodian_name} -> {target_other}",
-                        timeline_description=hit.inference,
+                        timeline_description=inf_text,
                         severity="WARNING",
                     )
+            elif inf.category == "VENDOR" and inf.primary_entity and inf.secondary_entity:
+                person = inf.primary_entity
+                comp = inf.secondary_entity
+                clean_comp = re.sub(
+                    r"^(?:manager|director|proprietor|partner|officer)\s+of\s+",
+                    "",
+                    comp,
+                    flags=re.IGNORECASE,
+                ).strip()
+                role_name = (
+                    "Manager"
+                    if "manager" in inf_text.lower()
+                    else ("Director" if "director" in inf_text.lower() else "Contact")
+                )
+                formatted_lbl = f"{role_name} of {clean_comp}"
+                emit_forensic_finding(
+                    source_module="q_scan",
+                    event_type="VENDOR_ROLE_IDENTIFIED",
+                    primary_entity_data={
+                        "name": person,
+                        "type": ForensicEntity.EntityType.EMPLOYEE,
+                        "metadata": {
+                            "role": formatted_lbl,
+                            "inference": inf_text,
+                            "tags": [role_name, clean_comp],
+                        },
+                    },
+                    secondary_entities_data=[
+                        {
+                            "name": clean_comp,
+                            "type": ForensicEntity.EntityType.VENDOR,
+                            "relation_type": "ROLE_IN",
+                            "direction": "out",
+                            "metadata": {
+                                "role": formatted_lbl,
+                                "formatted_label": formatted_lbl,
+                                "relationship": inf_text,
+                                "inference": inf_text,
+                                "tags": [role_name, "Vendor"],
+                            },
+                        }
+                    ],
+                    evidence_data={
+                        "source_module": "q_scan",
+                        "source_model": "FileEvidenceHit",
+                        "source_record_id": str(hit.id),
+                        "evidence_url": f"/scan/devices/{device.id}/",
+                        "summary_snippet": hit.snippet[:300],
+                        "metadata": {
+                            "file_name": hit.filename,
+                            "page_number": 1,
+                            "snippet": hit.snippet[:300],
+                            "inference": inf_text,
+                        },
+                    },
+                    timeline_title=f"Role Identified: {person} ({comp})",
+                    timeline_description=inf_text,
+                    severity="WARNING",
+                )
+            elif inf.category == "EMPLOYMENT" and inf.primary_entity:
+                emp_name = inf.primary_entity
+                dept_name = inf.secondary_entity or "Head Office"
+                formatted_lbl = f"Employee ({dept_name})"
+                emit_forensic_finding(
+                    source_module="q_scan",
+                    event_type="EMPLOYEE_ROLE_IDENTIFIED",
+                    primary_entity_data={
+                        "name": emp_name,
+                        "type": ForensicEntity.EntityType.EMPLOYEE,
+                        "metadata": {
+                            "role": inf_text,
+                            "department": dept_name,
+                            "inference": inf_text,
+                            "tags": ["Employee", dept_name],
+                        },
+                    },
+                    secondary_entities_data=[
+                        {
+                            "name": dept_name,
+                            "type": ForensicEntity.EntityType.COMPANY,
+                            "relation_type": "EMPLOYEE_OF",
+                            "direction": "out",
+                            "metadata": {
+                                "role": inf_text,
+                                "department": dept_name,
+                                "formatted_label": formatted_lbl,
+                                "relationship": inf_text,
+                                "inference": inf_text,
+                                "tags": ["Department", dept_name],
+                            },
+                        }
+                    ]
+                    if dept_name
+                    else None,
+                    evidence_data={
+                        "source_module": "q_scan",
+                        "source_model": "FileEvidenceHit",
+                        "source_record_id": str(hit.id),
+                        "evidence_url": f"/scan/devices/{device.id}/",
+                        "summary_snippet": hit.snippet[:300],
+                        "metadata": {
+                            "file_name": hit.filename,
+                            "page_number": 1,
+                            "snippet": hit.snippet[:300],
+                            "inference": inf_text,
+                        },
+                    },
+                    timeline_title=f"Employment Identified: {emp_name} ({dept_name})",
+                    timeline_description=inf_text,
+                    severity="INFO",
+                )
     except Exception as err:
         logger.warning(f"Error emitting findings from Q-Scan CSV to Q-Link: {err}")
 

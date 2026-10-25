@@ -443,6 +443,49 @@ def _format_node(
     elif entity.metadata and entity.metadata.get("timestamp"):
         formatted_date = str(entity.metadata.get("timestamp"))
 
+    # Enrich kinship / role tags
+    meta = entity.metadata or {}
+    kinship_text = meta.get("kinship") or ""
+    if not kinship_text and meta.get("relationship"):
+        rel_str = str(meta["relationship"]).lower()
+        if any(
+            k in rel_str
+            for k in (
+                "spouse",
+                "wife",
+                "husband",
+                "nominee",
+                "son",
+                "daughter",
+                "child",
+                "father",
+                "mother",
+                "brother",
+                "sister",
+                "relative",
+                "kinship",
+            )
+        ):
+            kinship_text = meta["relationship"]
+
+    role_text = meta.get("role") or ""
+    dept_text = meta.get("department") or ""
+
+    if (
+        "spouse" in kinship_text.lower()
+        or "wife" in kinship_text.lower()
+        or "husband" in kinship_text.lower()
+    ):
+        if "Spouse / Wife" not in raw_tags:
+            raw_tags.append("Spouse / Wife")
+    elif kinship_text and "Kinship" not in raw_tags:
+        raw_tags.append("Kinship")
+
+    if role_text and role_text not in raw_tags:
+        raw_tags.append(role_text)
+    if dept_text and dept_text not in raw_tags:
+        raw_tags.append(dept_text)
+
     data: dict[str, Any] = {
         "id": str(entity.id),
         "label": entity.display_name,
@@ -453,7 +496,10 @@ def _format_node(
         "is_target": bool(entity.is_target or prof is not None),
         "category": entity.category,
         "timestamp": formatted_date,
-        "metadata": entity.metadata or {},
+        "kinship": kinship_text,
+        "role": role_text,
+        "department": dept_text,
+        "metadata": meta,
     }
     if is_root is not None:
         data["is_root"] = is_root
@@ -507,11 +553,41 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
     is_ext = is_external or bool(rel.metadata.get("is_external"))
 
     modules = resolve_edge_modules(rel, ev_pointers)
-    label = (
-        rel.metadata.get("formatted_label")
-        if (rel.metadata and rel.metadata.get("formatted_label"))
-        else rel.get_relation_type_display()
+
+    rel_type_str = str(rel.relation_type or "").upper()
+    rel_meta = rel.metadata or {}
+    rel_infer = rel_meta.get("relationship") or rel_meta.get("inference") or ""
+    is_kinship = (
+        rel_type_str in ("SPOUSE", "KINSHIP", "NOMINEE")
+        or "spouse" in rel_infer.lower()
+        or "wife" in rel_infer.lower()
+        or "husband" in rel_infer.lower()
+        or any(
+            "spouse" in str(t).lower() or "nominee" in str(t).lower()
+            for t in rel_meta.get("tags", [])
+        )
     )
+    is_role = rel_type_str in ("EMPLOYEE_OF", "ROLE_IN") or bool(
+        rel_meta.get("role") or rel_meta.get("department")
+    )
+
+    label = rel_meta.get("formatted_label")
+    if not label:
+        if is_kinship:
+            label = (
+                "Spouse / Wife"
+                if (
+                    rel_type_str == "SPOUSE"
+                    or "spouse" in rel_infer.lower()
+                    or "wife" in rel_infer.lower()
+                )
+                else "Kinship / Relative"
+            )
+        elif is_role:
+            label = rel_meta.get("role") or rel.get_relation_type_display()
+        else:
+            label = rel.get_relation_type_display()
+
     return {
         "id": str(rel.id),
         "source": str(rel.source_entity_id),
@@ -529,12 +605,15 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
         "is_direct": rel.is_direct,
         "is_rapid_layering": is_rl,
         "is_external": is_ext,
+        "is_kinship": is_kinship,
+        "is_role": is_role,
+        "inference": rel_infer,
         "evidence": evidence_dict,
         "evidence_count": evidence_count,
         "is_bidirectional": False,
         "is_merged": False,
         "sub_link_ids": [str(rel.id)],
-        "metadata": rel.metadata or {},
+        "metadata": rel_meta,
     }
 
 
@@ -609,9 +688,15 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
             is_vendor_flow = (
                 1 if rel in ("VENDOR_KICKBACK_RECEIVED", "VENDOR_PAYOUT_DETECTED") else 0
             )
+            is_kinship = (
+                1 if (e.get("is_kinship") or rel in ("SPOUSE", "KINSHIP", "NOMINEE")) else 0
+            )
+            is_role = 1 if (e.get("is_role") or rel in ("EMPLOYEE_OF", "ROLE_IN")) else 0
             is_rl = 1 if e.get("is_rapid_layering") else 0
             return (
                 is_vendor_flow,
+                is_kinship,
+                is_role,
                 is_rl,
                 float(e.get("weight") or 0.0),
                 float(e.get("confidence") or 0.0),
@@ -620,6 +705,8 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         sorted_group = sorted(group, key=_edge_sort_key, reverse=True)
         dominant = dict(sorted_group[0])
+        dominant["is_kinship"] = any(bool(e.get("is_kinship")) for e in group)
+        dominant["is_role"] = any(bool(e.get("is_role")) for e in group)
 
         # Avoid double-counting when Q_BANK (TRANSFERRED_FUNDS) and Q_TRAIL (RAPID_LAYERING / CONDUIT_TO)
         # represent the same underlying fund movement between u and v.
@@ -992,6 +1079,11 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                     "file_name": meta.get("file_name", "") if is_doc_ptr else "",
                     "page_number": meta.get("page_number", 1) if is_doc_ptr else None,
                     "snippet": meta.get("snippet") or ptr.summary_snippet,
+                    "inference": meta.get("inference")
+                    or meta.get("relationship")
+                    or r.metadata.get("inference")
+                    or r.metadata.get("relationship")
+                    or "",
                     # Voice payload (populated only for actual voice/audio pointers)
                     "audio_file": meta.get("file_name", "") if is_voice_ptr else "",
                     "audio_timestamp": meta.get("audio_timestamp", "00:00") if is_voice_ptr else "",
@@ -1028,6 +1120,12 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
         )
         has_ext = any(bool(r.metadata.get("is_external")) for r in (rels or [rel]))
         rel_display = rel.get_relation_type_display()
+        is_kin = rel.relation_type in ("SPOUSE", "KINSHIP", "NOMINEE") or bool(
+            rel.metadata.get("kinship")
+        )
+        is_ro = rel.relation_type in ("EMPLOYEE_OF", "ROLE_IN") or bool(
+            rel.metadata.get("role") or rel.metadata.get("department")
+        )
         return {
             "status": "success",
             "edge": {
@@ -1047,6 +1145,11 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "confidence": max_conf,
                 "is_rapid_layering": has_rl,
                 "is_external": has_ext,
+                "is_kinship": is_kin,
+                "is_role": is_ro,
+                "inference": rel.metadata.get("inference")
+                or rel.metadata.get("relationship")
+                or "",
                 "metadata": rel.metadata or {},
             },
             "evidence_items": evidence_items,
@@ -1798,9 +1901,9 @@ def get_mode2_audit_graph(
         clean_names = [n.strip() for n in target_names if n.strip()]
         target_q = Q()
         for name in clean_names:
-            target_q |= Q(display_name__iexact=name)
+            target_q |= Q(display_name__iexact=name) | Q(aliases__alias_name__iexact=name)
 
-        core_targets = list(ForensicEntity.objects.filter(target_q))
+        core_targets = list(ForensicEntity.objects.filter(target_q).distinct())
         target_ids = {e.id for e in core_targets}
 
         if target_ids:
@@ -1829,6 +1932,17 @@ def get_mode2_audit_graph(
                 for r in doc_relations:
                     connected_ids.add(r.source_entity_id)
                     connected_ids.add(r.target_entity_id)
+
+            # Kinship & Role Traversal: Include counterparties connected via Kinship / Nominee / Role relations
+            kinship_relations = list(
+                EntityRelationship.objects.filter(
+                    Q(source_entity_id__in=connected_ids) | Q(target_entity_id__in=connected_ids),
+                    relation_type__in=["SPOUSE", "KINSHIP", "NOMINEE", "ROLE_IN", "EMPLOYEE_OF"],
+                )
+            )
+            for r in kinship_relations:
+                connected_ids.add(r.source_entity_id)
+                connected_ids.add(r.target_entity_id)
 
             entities = list(
                 ForensicEntity.objects.filter(id__in=connected_ids).order_by(

@@ -1409,6 +1409,8 @@ def sync_all_modules() -> dict[str, int]:
     # 7. Ingest Q-Scan Hits
     if apps.is_installed("q_scan"):
         try:
+            from q_scan.backend.inference import SnippetInferenceEngine
+
             FileEvidenceHit = apps.get_model("q_scan", "FileEvidenceHit")
             for hit in FileEvidenceHit.objects.select_related("device")[:200]:
                 hit_file = getattr(hit, "filename", "") or "Endpoint_Evidence_File"
@@ -1418,35 +1420,32 @@ def sync_all_modules() -> dict[str, int]:
                     else ""
                 )
                 ev_url = f"/scan/devices/{hit.device.id}/" if hit.device else "/scan/"
+                inf = SnippetInferenceEngine.extract_inference(hit.matched_keyword, hit.snippet)
+                inf_text = hit.inference or inf.inference_text
 
-                # Pattern A: Structured HR / Insurance Nominee Table ("Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha")
-                hr_nom_match = re.search(
-                    r"Employee:\s*([A-Za-z\.\s]+?)\s*\|\s*Relationship:\s*([A-Za-z\s/]+?)\s*\|\s*Nominee:\s*([A-Za-z\.\s]+?)(?:\s*\||$)",
-                    hit.snippet,
-                    re.IGNORECASE,
-                )
-                # Pattern B: Legacy Schedule ("Mr. Name ID-101 ... Nominee Spouse")
-                emp_match = re.search(
-                    r"(?:Mr\.|Mrs\.|Ms\.)?\s*([A-Za-z\.\s]+?)\s+(ID-\d+)\s+.*?([A-Za-z\.\s]+?)\s+(Spouse|Husband|Wife|Son|Daughter|Father|Mother|Brother|Sister|Nominee)",
-                    hit.snippet,
-                    re.IGNORECASE,
-                )
-
-                if hr_nom_match:
-                    emp_name = hr_nom_match.group(1).strip()
-                    rel_raw = hr_nom_match.group(2).strip()
-                    nom_name = hr_nom_match.group(3).strip()
-                    rel_type = (
-                        "SPOUSE"
-                        if "spouse" in rel_raw.lower() or "wife" in rel_raw.lower()
-                        else "NOMINEE"
+                if inf.category == "KINSHIP" and inf.primary_entity and inf.secondary_entity:
+                    emp_name = inf.primary_entity
+                    nom_name = inf.secondary_entity
+                    rel_raw = inf.relation_type or "NOMINEE_RELATION"
+                    is_spouse = (
+                        "spouse" in rel_raw.lower()
+                        or "wife" in rel_raw.lower()
+                        or "husband" in rel_raw.lower()
                     )
+                    rel_type = "SPOUSE" if is_spouse else "KINSHIP"
+                    formatted_lbl = "Spouse / Wife" if is_spouse else "Kinship / Relative"
                     emit_forensic_finding(
                         source_module="q_scan",
                         event_type="NOMINEE_RELATION_IDENTIFIED",
                         primary_entity_data={
                             "name": emp_name,
                             "type": ForensicEntity.EntityType.EMPLOYEE,
+                            "metadata": {
+                                "relationship": inf_text,
+                                "inference": inf_text,
+                                "kinship": inf_text,
+                                "nominee": nom_name,
+                            },
                         },
                         secondary_entities_data=[
                             {
@@ -1458,7 +1457,15 @@ def sync_all_modules() -> dict[str, int]:
                                 "type": ForensicEntity.EntityType.EMPLOYEE,
                                 "relation_type": rel_type,
                                 "direction": "out",
-                                "metadata": {"tags": ["Nominee", rel_raw]},
+                                "metadata": {
+                                    "nominee_of": emp_name,
+                                    "relationship": inf_text,
+                                    "inference": inf_text,
+                                    "formatted_label": formatted_lbl,
+                                    "tags": ["Nominee", "Spouse / Wife"]
+                                    if is_spouse
+                                    else ["Nominee", "Kinship"],
+                                },
                             }
                         ],
                         evidence_data={
@@ -1471,34 +1478,56 @@ def sync_all_modules() -> dict[str, int]:
                                 "file_name": hit_file,
                                 "page_number": 1,
                                 "snippet": hit.snippet[:300],
+                                "inference": inf_text,
                             },
                         },
                         occurred_at=hit.file_modified_at or hit.detection_timestamp,
-                        timeline_title=f"HR / Insurance Nominee Nexus: {emp_name} <-> {nom_name}",
-                        timeline_description=f"{nom_name} identified as {rel_raw} of {emp_name} in {hit_file}",
-                        severity="CRITICAL",
+                        timeline_title=f"Kinship Identified: {emp_name} -> {nom_name}",
+                        timeline_description=inf_text,
+                        severity="WARNING",
                     )
                     stats["q_scan"] = stats.get("q_scan", 0) + 1
-                elif emp_match:
-                    emp_name = emp_match.group(1).strip()
-                    emp_id = emp_match.group(2).strip()
-                    nom_name = emp_match.group(3).strip()
-                    rel_type = emp_match.group(4).strip()
+
+                elif inf.category == "VENDOR" and inf.primary_entity and inf.secondary_entity:
+                    person = inf.primary_entity
+                    comp = inf.secondary_entity
+                    clean_comp = re.sub(
+                        r"^(?:manager|director|proprietor|partner|officer)\s+of\s+",
+                        "",
+                        comp,
+                        flags=re.IGNORECASE,
+                    ).strip()
+                    role_name = (
+                        "Manager"
+                        if "manager" in inf_text.lower()
+                        else ("Director" if "director" in inf_text.lower() else "Contact")
+                    )
+                    formatted_lbl = f"{role_name} of {clean_comp}"
                     emit_forensic_finding(
                         source_module="q_scan",
-                        event_type="NOMINEE_RELATION_IDENTIFIED",
+                        event_type="VENDOR_ROLE_IDENTIFIED",
                         primary_entity_data={
-                            "name": emp_name,
+                            "name": person,
                             "type": ForensicEntity.EntityType.EMPLOYEE,
-                            "raw_id": emp_id,
-                            "metadata": {"employee_id": emp_id},
+                            "metadata": {
+                                "role": formatted_lbl,
+                                "inference": inf_text,
+                                "tags": [role_name, clean_comp],
+                            },
                         },
                         secondary_entities_data=[
                             {
-                                "name": nom_name,
-                                "type": ForensicEntity.EntityType.UNKNOWN,
-                                "relation_type": rel_type.upper(),
+                                "name": clean_comp,
+                                "type": ForensicEntity.EntityType.VENDOR,
+                                "relation_type": "ROLE_IN",
                                 "direction": "out",
+                                "metadata": {
+                                    "role": formatted_lbl,
+                                    "formatted_label": formatted_lbl,
+                                    "relationship": inf_text,
+                                    "inference": inf_text,
+                                    "tags": [role_name, "Vendor"],
+                                },
                             }
                         ],
                         evidence_data={
@@ -1508,17 +1537,74 @@ def sync_all_modules() -> dict[str, int]:
                             "evidence_url": ev_url,
                             "summary_snippet": hit.snippet[:300],
                             "metadata": {
-                                "file_name": hit_file
-                                or "Sanitized_Employee_and_Nominee_Schedule.pdf",
+                                "file_name": hit_file,
                                 "page_number": 1,
                                 "snippet": hit.snippet[:300],
+                                "inference": inf_text,
                             },
                         },
-                        timeline_title=f"Nominee Link: {emp_name} - {nom_name}",
-                        timeline_description=f"{nom_name} identified as {rel_type} of {emp_name} ({emp_id})",
+                        occurred_at=hit.file_modified_at or hit.detection_timestamp,
+                        timeline_title=f"Role Identified: {person} ({comp})",
+                        timeline_description=inf_text,
                         severity="WARNING",
                     )
                     stats["q_scan"] = stats.get("q_scan", 0) + 1
+
+                elif inf.category == "EMPLOYMENT" and inf.primary_entity:
+                    emp_name = inf.primary_entity
+                    dept_name = inf.secondary_entity or "Head Office"
+                    formatted_lbl = f"Employee ({dept_name})"
+                    emit_forensic_finding(
+                        source_module="q_scan",
+                        event_type="EMPLOYEE_ROLE_IDENTIFIED",
+                        primary_entity_data={
+                            "name": emp_name,
+                            "type": ForensicEntity.EntityType.EMPLOYEE,
+                            "metadata": {
+                                "role": inf_text,
+                                "department": dept_name,
+                                "inference": inf_text,
+                                "tags": ["Employee", dept_name],
+                            },
+                        },
+                        secondary_entities_data=[
+                            {
+                                "name": dept_name,
+                                "type": ForensicEntity.EntityType.COMPANY,
+                                "relation_type": "EMPLOYEE_OF",
+                                "direction": "out",
+                                "metadata": {
+                                    "role": inf_text,
+                                    "department": dept_name,
+                                    "formatted_label": formatted_lbl,
+                                    "relationship": inf_text,
+                                    "inference": inf_text,
+                                    "tags": ["Department", dept_name],
+                                },
+                            }
+                        ]
+                        if dept_name
+                        else None,
+                        evidence_data={
+                            "source_module": "q_scan",
+                            "source_model": "FileEvidenceHit",
+                            "source_record_id": str(hit.id),
+                            "evidence_url": ev_url,
+                            "summary_snippet": hit.snippet[:300],
+                            "metadata": {
+                                "file_name": hit_file,
+                                "page_number": 1,
+                                "snippet": hit.snippet[:300],
+                                "inference": inf_text,
+                            },
+                        },
+                        occurred_at=hit.file_modified_at or hit.detection_timestamp,
+                        timeline_title=f"Employment Identified: {emp_name} ({dept_name})",
+                        timeline_description=inf_text,
+                        severity="INFO",
+                    )
+                    stats["q_scan"] = stats.get("q_scan", 0) + 1
+
                 elif custodian and hit.matched_keyword:
                     kw_target = hit.matched_keyword.strip()
                     matched_ent = ForensicEntity.objects.filter(

@@ -621,6 +621,13 @@
                             <span class="text-theme-muted font-semibold block mb-1">Forensic Flags & Tags:</span>
                             <div id="inspect-tags-list" class="flex flex-wrap gap-1 mt-1"></div>
                         </div>
+
+                        <div id="inspect-inference-box" class="mt-2 pt-2 border-t border-theme-border text-[11px] hidden">
+                            <span class="text-purple-400 font-semibold flex items-center gap-1 mb-1">
+                                <i class="fa-solid fa-wand-magic-sparkles text-[10px]"></i> Forensic Inference Dossier:
+                            </span>
+                            <div id="inspect-inference-content" class="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-200 text-xs font-medium leading-relaxed"></div>
+                        </div>
                     </div>
 
                     <!-- Direct Connections -->
@@ -1022,6 +1029,16 @@
                 .replace(/'/g, '&apos;');
         }
 
+        function escapeHtml(unsafe) {
+            if (unsafe === null || unsafe === undefined) return "";
+            return String(unsafe)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
         // Generate Circular Glowing Node SVG (Centered at cx=120, cy=105 so edges & arrows align with the circle)
         function generateNodeSvg(n, state = "normal") {
             // Entity classification
@@ -1055,6 +1072,16 @@
             const riskRating = Number(n.risk || 0);
             const isRapidLayering = Boolean(n.metadata && n.metadata.is_rapid_layering) || riskRating >= 80;
 
+            const isKinshipNode = tags.some(t => {
+                const s = String(t).toLowerCase();
+                return s.includes("spouse") || s.includes("wife") || s.includes("husband") || s.includes("nominee") || s.includes("kinship");
+            }) || Boolean(n.kinship || (n.metadata && (n.metadata.kinship || n.metadata.relationship || n.metadata.nominee_of)));
+
+            const isRoleEntity = Boolean(n.role || (n.metadata && (n.metadata.role || n.metadata.department))) || tags.some(t => {
+                const s = String(t).toLowerCase();
+                return s.includes("manager") || s.includes("director") || s.includes("employee") || s.includes("head office");
+            });
+
             // Accent color and icon determination matching the reference design
             let accentColor = "#10b981"; // emerald default
             let iconKind = "user";
@@ -1087,6 +1114,12 @@
             } else if (isTarget) {
                 iconKind = "user";
                 accentColor = "#f59e0b"; // Prominent Gold/Amber-Orange for Primary Audit Profiles
+            } else if (isKinshipNode) {
+                iconKind = "user";
+                accentColor = "#c084fc"; // Royal Purple for Kinship / Spouse / Nominee
+            } else if (isRoleEntity && !isRapidLayering) {
+                iconKind = "user";
+                accentColor = "#06b6d4"; // Vibrant Cyan for Role / Department
             } else if (isRapidLayering || riskRating >= 70 || labelLower.includes("suspect") || labelLower.includes("target")) {
                 iconKind = "user";
                 accentColor = (riskRating >= 80 || isRapidLayering) ? "#ef4444" : "#f97316"; // Coral / Red-Orange
@@ -1191,7 +1224,18 @@
             // Sub-label pill string (only uses real node timestamp / risk rating, no synthetic fallback)
             let rawTime = n.timestamp || "";
             let pillText = rawTime;
-            if ((isHighRiskVendor || riskRating >= 85) && riskRating > 0) {
+            if (isKinshipNode) {
+                const spTag = tags.find(t => {
+                    const s = String(t).toLowerCase();
+                    return s.includes("spouse") || s.includes("wife") || s.includes("nominee");
+                });
+                pillText = spTag || "Spouse / Relative";
+            } else if (isRoleEntity) {
+                pillText = n.role || tags.find(t => {
+                    const s = String(t).toLowerCase();
+                    return s.includes("manager") || s.includes("director") || s.includes("scm") || s.includes("employee");
+                }) || "Role Inferred";
+            } else if ((isHighRiskVendor || riskRating >= 85) && riskRating > 0) {
                 pillText = rawTime ? `${rawTime}  ${riskRating}% conf.` : `${riskRating}% conf.`;
             }
 
@@ -1251,6 +1295,14 @@
                     <!-- External Vault Top Badge -->
                     <rect x="${cx - 28}" y="${cy - 48}" width="56" height="15" rx="7.5" fill="#8b5cf6" stroke="${badgeBorderStroke}" stroke-width="1.1" />
                     <text x="${cx}" y="${cy - 38}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8" font-weight="800" letter-spacing="0.5" fill="#ffffff">VAULT</text>
+                ` : isKinshipNode ? `
+                    <!-- Kinship Top Badge -->
+                    <rect x="${cx - 30}" y="${cy - 48}" width="60" height="15" rx="7.5" fill="#a855f7" stroke="${badgeBorderStroke}" stroke-width="1.1" />
+                    <text x="${cx}" y="${cy - 38}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8" font-weight="800" letter-spacing="0.5" fill="#ffffff">KINSHIP</text>
+                ` : isRoleEntity ? `
+                    <!-- Role Top Badge -->
+                    <rect x="${cx - 26}" y="${cy - 48}" width="52" height="15" rx="7.5" fill="#06b6d4" stroke="${badgeBorderStroke}" stroke-width="1.1" />
+                    <text x="${cx}" y="${cy - 38}" text-anchor="middle" font-family="'JetBrains Mono', monospace, sans-serif" font-size="8" font-weight="800" letter-spacing="0.5" fill="#ffffff">ROLE</text>
                 ` : ''}
 
                 <!-- Opaque Name Backdrop Pill (Prevents edges from cutting through entity text) -->
@@ -1297,6 +1349,9 @@
                     circleBorderRadius: circleBorderRadius,
                     title: `${n.label || 'Entity'}\nType: ${n.type || 'Entity'}\nRisk: ${n.risk || 0}/100`,
                     raw: n,
+                    kinship: n.kinship || (n.metadata && n.metadata.kinship) || null,
+                    role: n.role || (n.metadata && n.metadata.role) || null,
+                    department: n.department || (n.metadata && n.metadata.department) || null,
                     defaultImage: defaultImage,
                     selectedImage: selectedImage,
                     dimmedImage: dimmedImage
@@ -1328,6 +1383,22 @@
                 const relType = String(e.relation_type || "").toUpperCase();
                 const isKickback = relType.includes("KICKBACK") || (e.metadata && e.metadata.financial_flow === "Kickback");
                 const isPayout = relType.includes("PAYOUT") || (e.metadata && e.metadata.financial_flow === "Payout");
+                const isKinshipEdge = Boolean(
+                    e.is_kinship
+                    || relType.includes("SPOUSE")
+                    || relType.includes("KINSHIP")
+                    || relType.includes("NOMINEE")
+                    || (e.metadata && (
+                        e.metadata.relationship
+                        || (e.metadata.tags && (e.metadata.tags.includes("Spouse / Wife") || e.metadata.tags.includes("Kinship")))
+                    ))
+                );
+                const isRoleEdge = Boolean(
+                    e.is_role
+                    || relType.includes("EMPLOYEE_OF")
+                    || relType.includes("ROLE_IN")
+                    || (e.metadata && (e.metadata.role || e.metadata.department))
+                );
 
                 let edgeColor = "#10b981"; // emerald green default
                 let highlightColor = "#34d399";
@@ -1353,6 +1424,22 @@
                     fontColor = dark ? "#fda4af" : "#be123c";
                     fontBg = dark ? "rgba(244, 63, 94, 0.22)" : "rgba(255, 241, 242, 0.96)";
                     fontStroke = "#f43f5e";
+                } else if (isKinshipEdge) {
+                    edgeColor = "#a855f7"; // Vibrant Purple for Kinship / Spouse / Nominee
+                    highlightColor = "#c084fc";
+                    edgeDashes = [6, 4];
+                    edgeWidth = 2.4;
+                    fontColor = dark ? "#e9d5ff" : "#6b21a8";
+                    fontBg = dark ? "rgba(168, 85, 247, 0.24)" : "rgba(250, 245, 255, 0.96)";
+                    fontStroke = "#a855f7";
+                } else if (isRoleEdge) {
+                    edgeColor = "#06b6d4"; // Cyan for Role / Department / Affiliation
+                    highlightColor = "#22d3ee";
+                    edgeDashes = [5, 3];
+                    edgeWidth = 2.2;
+                    fontColor = dark ? "#a5f3fc" : "#0e7490";
+                    fontBg = dark ? "rgba(6, 182, 212, 0.22)" : "rgba(236, 254, 255, 0.96)";
+                    fontStroke = "#06b6d4";
                 } else if (isExternal) {
                     edgeColor = "#8b5cf6"; // Violet for cross-audit Global Vault matches
                     highlightColor = "#a78bfa";
@@ -1384,7 +1471,9 @@
                 // Clean label formatting: convert SCREAMING_SNAKE_CASE to Title Case
                 let rawLabel = (e.metadata && e.metadata.formatted_label) || e.label || e.relation_type || "";
                 let edgeLabel = rawLabel;
-                if (/^[A-Z0-9_]+$/.test(rawLabel)) {
+                if (isKinshipEdge && (rawLabel === "SPOUSE" || rawLabel === "Spouse" || rawLabel === "KINSHIP" || rawLabel === "Kinship")) {
+                    edgeLabel = "Spouse / Wife";
+                } else if (/^[A-Z0-9_]+$/.test(rawLabel)) {
                     edgeLabel = rawLabel.split('_')
                         .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
                         .join(' ');
@@ -1414,7 +1503,7 @@
 
                 // Labels hidden by default; shown when showAllEdgeLabels = true or on node click, or for high-risk vendor flows (unless muted)
                 const muted = isEdgeMuted(e.id);
-                const labelVisible = (showAllEdgeLabels || isKickback || isPayout) && !muted;
+                const labelVisible = (showAllEdgeLabels || isKickback || isPayout || isKinshipEdge || isRoleEdge) && !muted;
                 const labelFontSize = labelVisible ? 9.5 : 0;
                 const labelFontColor = labelVisible ? fontColor : "rgba(0,0,0,0)";
 
@@ -1437,6 +1526,9 @@
                     },
                     width: edgeWidth,
                     dashes: edgeDashes,
+                    is_kinship: isKinshipEdge,
+                    is_role: isRoleEdge,
+                    relation_type: e.relation_type || (isKinshipEdge ? "KINSHIP" : (isRoleEdge ? "ROLE_IN" : "")),
                     originalColor: { color: edgeColor, highlight: highlightColor },
                     originalFont: {
                         color: fontColor,
@@ -2168,6 +2260,63 @@
                     `;
                 }
 
+                let kinshipBanner = "";
+                const isKinshipEdge = Boolean(
+                    edge.is_kinship
+                    || edge.relation_type === "SPOUSE"
+                    || edge.relation_type === "KINSHIP"
+                    || edge.relation_type === "NOMINEE"
+                    || (edge.metadata && (edge.metadata.kinship || (edge.metadata.tags && (edge.metadata.tags.includes("Spouse / Wife") || edge.metadata.tags.includes("Kinship")))))
+                );
+                if (isKinshipEdge) {
+                    const meta = edge.metadata || {};
+                    const relText = meta.kinship || meta.relationship || meta.inference || edge.inference || `${edge.source_name} ↔ ${edge.target_name} (${meta.formatted_label || 'Kinship Nexus'})`;
+                    kinshipBanner = `
+                        <div class="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold font-mono border bg-purple-500/15 border-purple-500/30 text-purple-600 dark:text-purple-400">
+                                    <i class="fa-solid fa-heart"></i>
+                                    CONFIRMED KINSHIP / NOMINEE NEXUS
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-theme-surface border border-theme-border text-purple-400">
+                                    ${escapeHtml(meta.formatted_label || 'Spouse / Relative')}
+                                </span>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-theme-surface border border-purple-500/20 text-xs text-theme-text font-medium leading-relaxed">
+                                <i class="fa-solid fa-wand-magic-sparkles text-purple-400 mr-1.5"></i>
+                                <span>${escapeHtml(relText)}</span>
+                            </div>
+                            <p class="text-[11px] text-theme-muted leading-relaxed">
+                                Familial relationship corroborated across endpoint schedule records and beneficiary nominations.
+                            </p>
+                        </div>
+                    `;
+                }
+
+                let roleBanner = "";
+                const isRoleEdge = Boolean(edge.is_role || edge.relation_type === "EMPLOYEE_OF" || edge.relation_type === "ROLE_IN" || (edge.metadata && (edge.metadata.role || edge.metadata.department)));
+                if (isRoleEdge) {
+                    const meta = edge.metadata || {};
+                    const roleText = meta.relationship || meta.inference || edge.inference || `${edge.source_name} (${meta.role || meta.formatted_label || 'Role / Position'})`;
+                    roleBanner = `
+                        <div class="p-3.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold font-mono border bg-cyan-500/15 border-cyan-500/30 text-cyan-600 dark:text-cyan-400">
+                                    <i class="fa-solid fa-briefcase"></i>
+                                    ORGANIZATIONAL ROLE & AFFILIATION
+                                </span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-theme-surface border border-theme-border text-cyan-400">
+                                    ${escapeHtml(meta.formatted_label || meta.role || 'Designation')}
+                                </span>
+                            </div>
+                            <div class="p-2.5 rounded-lg bg-theme-surface border border-cyan-500/20 text-xs text-theme-text font-medium leading-relaxed">
+                                <i class="fa-solid fa-id-badge text-cyan-400 mr-1.5"></i>
+                                <span>${escapeHtml(roleText)}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 const edgeWeightVal = Number(edge.weight || 0);
                 const formattedEdgeWeight = edgeWeightVal >= 100
                     ? `₹${edgeWeightVal.toLocaleString('en-IN')}`
@@ -2176,6 +2325,8 @@
                 let html = `
                     ${rlBanner}
                     ${vendorBanner}
+                    ${kinshipBanner}
+                    ${roleBanner}
 
                     <!-- Edge Summary Card -->
                     <div class="p-3.5 rounded-xl bg-theme-subtle border border-theme-border space-y-2">
@@ -2251,6 +2402,12 @@
                                     ${ev.snippet ? `
                                         <div class="p-2 rounded bg-theme-surface border-l-2 border-amber-500 text-theme-text text-[11px] leading-relaxed">
                                             "${ev.snippet}"
+                                        </div>
+                                    ` : ''}
+                                    ${ev.inference ? `
+                                        <div class="p-2 rounded bg-purple-500/10 border border-purple-500/30 text-purple-300 text-[11px] font-medium leading-relaxed">
+                                            <i class="fa-solid fa-wand-magic-sparkles text-purple-400 mr-1.5"></i>
+                                            <span>${escapeHtml(ev.inference)}</span>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -2809,6 +2966,12 @@
                             } else if (t.toLowerCase().includes("rapid layering")) {
                                 badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30";
                                 badge.innerText = t;
+                            } else if (t.toLowerCase().includes("spouse") || t.toLowerCase().includes("wife") || t.toLowerCase().includes("nominee") || t.toLowerCase().includes("kinship")) {
+                                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center gap-1";
+                                badge.innerHTML = `<i class="fa-solid fa-heart text-[9px]"></i> ${escapeHtml(t)}`;
+                            } else if (t.toLowerCase().includes("manager") || t.toLowerCase().includes("director") || t.toLowerCase().includes("scm") || t.toLowerCase().includes("employee")) {
+                                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center gap-1";
+                                badge.innerHTML = `<i class="fa-solid fa-briefcase text-[9px]"></i> ${escapeHtml(t)}`;
                             } else {
                                 badge.className = "px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20";
                                 badge.innerText = t;
@@ -2817,6 +2980,19 @@
                         });
                     } else {
                         tagsContainer.innerHTML = "<span class='text-theme-muted text-[10px]'>None</span>";
+                    }
+                }
+
+                // Render Forensic Inference Box
+                const infBox = document.getElementById("inspect-inference-box");
+                const infContent = document.getElementById("inspect-inference-content");
+                const inferText = e.kinship || e.role || (e.metadata && (e.metadata.relationship || e.metadata.inference || e.metadata.role_inference));
+                if (infBox && infContent) {
+                    if (inferText) {
+                        infBox.classList.remove("hidden");
+                        infContent.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-purple-400 mr-1.5"></i> ${escapeHtml(inferText)}`;
+                    } else {
+                        infBox.classList.add("hidden");
                     }
                 }
 
@@ -2831,10 +3007,21 @@
                         item.onclick = () => inspectEdge(r.id);
                         const wtVal = Number(r.weight || 0);
                         const wtText = wtVal >= 100 ? `₹${wtVal.toLocaleString('en-IN')}` : `${wtVal || 1}x Nexus`;
+                        const isKinRel = r.is_kinship || r.type === "SPOUSE" || r.type === "KINSHIP" || (r.label && r.label.toLowerCase().includes("spouse"));
+                        const isRoRel = r.is_role || r.type === "ROLE_IN" || r.type === "EMPLOYEE_OF" || (r.label && r.label.toLowerCase().includes("manager"));
+                        const relBadgeClass = isKinRel
+                            ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                            : (isRoRel
+                                ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
+                                : "bg-theme-surface text-theme-muted border-theme-border");
+                        const displayLbl = r.label || r.relationship || r.type;
                         item.innerHTML = `
                             <div>
-                                <span class="font-bold text-theme-text">${r.target_name || r.source_name}</span>
-                                <span class="text-theme-muted block text-[10px]">${r.type} (${r.module})</span>
+                                <span class="font-bold text-theme-text">${escapeHtml(r.target_name || r.source_name)}</span>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="px-1.5 py-0.2 rounded text-[9.5px] font-mono border ${relBadgeClass}">${escapeHtml(displayLbl)}</span>
+                                    <span class="text-theme-muted text-[10px]">(${escapeHtml(r.module)})</span>
+                                </div>
                             </div>
                             <span class="text-amber-600 dark:text-amber-400 font-mono text-[10px]">${wtText}</span>
                         `;

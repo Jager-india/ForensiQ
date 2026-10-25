@@ -205,6 +205,21 @@ class SnippetInferenceEngine:
         if poc_match:
             person = poc_match.group(1).strip()
             role_and_co = poc_match.group(2).strip()
+            sub_m = re.search(
+                r"^(Manager|Director|Proprietor|Partner|Authorized Signatory|Lead|Officer|Executive)\s+of\s+(.+)$",
+                role_and_co,
+                re.IGNORECASE,
+            )
+            if sub_m:
+                role = sub_m.group(1).strip()
+                comp = sub_m.group(2).strip()
+                return InferenceResult(
+                    inference_text=f"{person} is {role} of {comp}",
+                    category="VENDOR",
+                    primary_entity=person,
+                    secondary_entity=comp,
+                    relation_type=f"VENDOR_{role.upper()}",
+                )
             return InferenceResult(
                 inference_text=f"{person} is {role_and_co}",
                 category="VENDOR",

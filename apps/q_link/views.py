@@ -216,12 +216,25 @@ def api_entity_detail(request: HttpRequest, entity_id: str) -> JsonResponse:
                 if is_outgoing
                 else primary.source_entity.display_name
             )
+            rel_meta = primary.metadata or {}
+            rel_infer = rel_meta.get("relationship") or rel_meta.get("inference") or ""
+            rel_lbl = rel_meta.get("formatted_label") or primary.get_relation_type_display()
+            is_kin = primary.relation_type in ("SPOUSE", "KINSHIP", "NOMINEE") or bool(rel_infer)
+            is_ro = primary.relation_type in ("EMPLOYEE_OF", "ROLE_IN") or bool(
+                rel_meta.get("role")
+            )
+
             item = {
                 "id": ",".join(str(x.id) for x in rels),
                 "type": primary.relation_type,
+                "label": rel_lbl,
+                "relationship": rel_infer,
+                "is_kinship": is_kin,
+                "is_role": is_ro,
                 "weight": round(total_wt, 2),
                 "module": ", ".join(modules),
                 "confidence": max(float(x.confidence_score or 0) for x in rels),
+                "metadata": rel_meta,
             }
             if is_outgoing:
                 item["target_id"] = cp_id
@@ -252,6 +265,12 @@ def api_entity_detail(request: HttpRequest, entity_id: str) -> JsonResponse:
                 "category": entity.category,
                 "risk_rating": entity.risk_rating,
                 "is_target": entity.is_target,
+                "tags": entity.tags,
+                "kinship": entity.metadata.get("kinship")
+                or entity.metadata.get("relationship")
+                or "",
+                "role": entity.metadata.get("role") or "",
+                "department": entity.metadata.get("department") or "",
                 "metadata": entity.metadata,
                 "aliases": [a.alias_name for a in entity.aliases.all()],
             },

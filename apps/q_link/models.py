@@ -150,6 +150,11 @@ class EntityRelationship(ForensicBaseModel):
         ASSOCIATE = "ASSOCIATE", "Known Associate / Co-Auditee"
         VENDOR_KICKBACK_RECEIVED = "VENDOR_KICKBACK_RECEIVED", "Suspected Vendor Kickback"
         VENDOR_PAYOUT_DETECTED = "VENDOR_PAYOUT_DETECTED", "Undisclosed Vendor Payment"
+        KINSHIP = "KINSHIP", "Kinship / Family Member"
+        SPOUSE = "SPOUSE", "Spouse / Wife / Husband"
+        NOMINEE = "NOMINEE", "Nominee / Beneficiary"
+        EMPLOYEE_OF = "EMPLOYEE_OF", "Employed At / Staff"
+        ROLE_IN = "ROLE_IN", "Role / Designation In"
 
     source_entity = models.ForeignKey(
         ForensicEntity,

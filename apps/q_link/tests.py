@@ -1101,3 +1101,139 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
         self.assertEqual(ev_data["status"], "success")
         self.assertEqual(ev_data["edge"]["relation_type"], "VENDOR_KICKBACK_RECEIVED")
         self.assertEqual(ev_data["edge"]["metadata"]["vendor_code"], "VM-8800")
+
+
+class QLinkKinshipAndRoleTests(TestCase):
+    """
+    Tests forensic Kinship relationships (Spouse, Nominee) and Organizational Roles
+    in Q-Link graph serialization, APIs, and drawer dossiers.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        self.user = User.objects.create_user(username="kinship_analyst", password="password123")
+        self.client = Client()
+        self.client.force_login(self.user)
+        session = self.client.session
+        session["portal_authenticated"] = True
+        session.save()
+
+        self.emp, _ = resolve_or_create_entity(
+            "Raj Target",
+            ForensicEntity.EntityType.EMPLOYEE,
+            is_target=True,
+        )
+        self.nominee, _ = resolve_or_create_entity(
+            "Monisha Spouse",
+            ForensicEntity.EntityType.EMPLOYEE,
+            metadata={
+                "tags": ["Nominee", "Spouse / Wife"],
+                "kinship": "Monisha is Spouse / Wife of Raj",
+            },
+        )
+        self.vendor, _ = resolve_or_create_entity(
+            "Hydro Pumps Ltd",
+            ForensicEntity.EntityType.VENDOR,
+        )
+        self.contact, _ = resolve_or_create_entity(
+            "Balamurugan Contact",
+            ForensicEntity.EntityType.EMPLOYEE,
+            metadata={
+                "role": "Manager of Hydro Pumps Ltd",
+                "tags": ["Manager", "Hydro Pumps Ltd"],
+            },
+        )
+
+    def test_kinship_edge_and_node_formatting(self):
+        from .selectors import _format_edge, _format_node, get_edge_evidence
+
+        # Create Kinship relationship
+        rel, ev_ptr = create_or_update_relationship(
+            source_entity=self.emp,
+            target_entity=self.nominee,
+            relation_type="SPOUSE",
+            metadata={
+                "formatted_label": "Spouse / Wife",
+                "relationship": "Monisha is Spouse / Wife of Raj",
+                "inference": "Monisha is Spouse / Wife of Raj",
+                "tags": ["Nominee", "Spouse / Wife"],
+            },
+            evidence_data={
+                "source_module": "q_scan",
+                "source_model": "FileEvidenceHit",
+                "source_record_id": str(uuid.uuid4()),
+                "summary_snippet": "Employee: Raj | Relationship: Spouse / Wife | Nominee: Monisha",
+                "metadata": {
+                    "file_name": "Insurance_Schedule.xlsx",
+                    "inference": "Monisha is Spouse / Wife of Raj",
+                },
+            },
+        )
+
+        edge_data = _format_edge(rel)
+        self.assertTrue(edge_data["is_kinship"])
+        self.assertEqual(edge_data["label"], "Spouse / Wife")
+        self.assertEqual(edge_data["inference"], "Monisha is Spouse / Wife of Raj")
+
+        node_data = _format_node(self.nominee)
+        self.assertIn("Spouse / Wife", node_data["tags"])
+        self.assertEqual(node_data["kinship"], "Monisha is Spouse / Wife of Raj")
+
+        ev_data = get_edge_evidence(str(rel.id))
+        self.assertEqual(ev_data["status"], "success")
+        self.assertTrue(ev_data["edge"]["is_kinship"])
+        self.assertEqual(ev_data["evidence_items"][0]["file_name"], "Insurance_Schedule.xlsx")
+        self.assertEqual(
+            ev_data["evidence_items"][0]["inference"], "Monisha is Spouse / Wife of Raj"
+        )
+
+    def test_role_edge_and_node_formatting(self):
+        from .selectors import _format_edge, _format_node
+
+        rel, _ = create_or_update_relationship(
+            source_entity=self.contact,
+            target_entity=self.vendor,
+            relation_type="ROLE_IN",
+            metadata={
+                "role": "Manager of Hydro Pumps Ltd",
+                "formatted_label": "Manager of Hydro Pumps Ltd",
+                "relationship": "Balamurugan is Manager of Hydro Pumps Ltd",
+            },
+        )
+
+        edge_data = _format_edge(rel)
+        self.assertTrue(edge_data["is_role"])
+        self.assertEqual(edge_data["label"], "Manager of Hydro Pumps Ltd")
+
+        node_data = _format_node(self.contact)
+        self.assertIn("Manager of Hydro Pumps Ltd", node_data["tags"])
+        self.assertEqual(node_data["role"], "Manager of Hydro Pumps Ltd")
+
+    def test_api_entity_and_edge_detail(self):
+        rel, _ = create_or_update_relationship(
+            source_entity=self.emp,
+            target_entity=self.nominee,
+            relation_type="SPOUSE",
+            metadata={
+                "formatted_label": "Spouse / Wife",
+                "relationship": "Monisha is Spouse / Wife of Raj",
+            },
+        )
+
+        resp = self.client.get(f"/link/api/entity/{self.nominee.id}/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["entity"]["kinship"], "Monisha is Spouse / Wife of Raj")
+        self.assertIn("Spouse / Wife", data["entity"]["tags"])
+        self.assertTrue(len(data["incoming_relationships"]) > 0)
+        self.assertEqual(data["incoming_relationships"][0]["type"], "SPOUSE")
+        self.assertEqual(data["incoming_relationships"][0]["label"], "Spouse / Wife")
+
+        resp_edge = self.client.get(f"/link/api/edge/{rel.id}/")
+        self.assertEqual(resp_edge.status_code, 200)
+        edge_data = resp_edge.json()
+        self.assertTrue(edge_data["edge"]["is_kinship"])
+        self.assertIn("Spouse / Wife", edge_data["edge"]["label"])
