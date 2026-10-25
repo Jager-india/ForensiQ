@@ -551,6 +551,264 @@ def sync_all_modules() -> dict[str, int]:
         except Exception as err:
             logger.warning(f"Error syncing Q-Ledger: {err}")
 
+    # 2.c Cross-Reference Vendor Master Against Bank Transactions (Dual Financial Flow)
+    if apps.is_installed("q_bank") and apps.is_installed("q_ledger"):
+        try:
+            from collections import defaultdict
+
+            BankTransaction = apps.get_model("q_bank", "BankTransaction")
+            VendorMaster = apps.get_model("q_ledger", "VendorMaster")
+
+            all_vendors = list(VendorMaster.objects.all())
+            if all_vendors:
+                vendor_lookups = []
+                for v in all_vendors:
+                    v_code = (v.vendor_code or "").strip().lower()
+                    v_name = (v.vendor_name or "").strip().lower()
+                    v_owner = (v.owner_name or "").strip().lower()
+                    v_email = (v.email or "").strip().lower()
+                    v_phone_digits = "".join(filter(str.isdigit, v.phone or ""))
+                    v_bank_digits = "".join(filter(str.isdigit, v.bank_account_no or ""))
+
+                    vendor_lookups.append(
+                        {
+                            "vendor": v,
+                            "code": v_code,
+                            "name": v_name,
+                            "owner": v_owner,
+                            "email": v_email,
+                            "phone_digits": v_phone_digits if len(v_phone_digits) >= 5 else "",
+                            "bank_digits": v_bank_digits if len(v_bank_digits) >= 5 else "",
+                        }
+                    )
+
+                matched_groups = defaultdict(
+                    lambda: {
+                        "transactions": [],
+                        "total_amount": Decimal("0.00"),
+                        "matched_attributes": set(),
+                    }
+                )
+
+                txns_to_update = []
+
+                for txn in BankTransaction.objects.select_related(
+                    "account", "account__person"
+                ).all():
+                    if _is_accounting_balance_marker(txn.party_name, txn.narration):
+                        continue
+
+                    person_name = (
+                        txn.account.person.full_name
+                        if (txn.account and txn.account.person)
+                        else (txn.account.account_holder if txn.account else "Unknown Person")
+                    )
+
+                    p_name_clean = _normalize_counterparty_name(
+                        txn.party_name, txn.narration
+                    ).lower()
+                    narr_clean = (txn.narration or "").lower()
+                    narr_digits = "".join(filter(str.isdigit, txn.narration or ""))
+                    party_digits = "".join(filter(str.isdigit, txn.party_name or ""))
+
+                    for vl in vendor_lookups:
+                        v = vl["vendor"]
+                        matched_attrs = []
+
+                        # 1. Bank Account match
+                        if vl["bank_digits"] and (
+                            vl["bank_digits"] in narr_digits or vl["bank_digits"] in party_digits
+                        ):
+                            matched_attrs.append(f"Bank A/C: {v.bank_account_no}")
+
+                        # 2. Exact Vendor Code match
+                        if vl["code"] and (
+                            vl["code"] in p_name_clean.split()
+                            or vl["code"] in narr_clean.split()
+                            or f"/{vl['code']}/" in f"/{narr_clean}/"
+                        ):
+                            matched_attrs.append(f"Code: {v.vendor_code}")
+
+                        # 3. Vendor Name match (len >= 3)
+                        if (
+                            vl["name"]
+                            and len(vl["name"]) >= 3
+                            and (vl["name"] in p_name_clean or vl["name"] in narr_clean)
+                        ):
+                            matched_attrs.append(f"Name: {v.vendor_name}")
+
+                        # 4. Owner Name match (len >= 3)
+                        if (
+                            vl["owner"]
+                            and len(vl["owner"]) >= 3
+                            and (vl["owner"] in p_name_clean or vl["owner"] in narr_clean)
+                        ):
+                            matched_attrs.append(f"Owner: {v.owner_name}")
+
+                        # 5. Phone match (len >= 5)
+                        if vl["phone_digits"] and (
+                            vl["phone_digits"] in narr_digits or vl["phone_digits"] in party_digits
+                        ):
+                            matched_attrs.append(f"Phone: {v.phone}")
+
+                        if matched_attrs:
+                            amt = txn.credit_amount if txn.direction == "IN" else txn.debit_amount
+                            if not amt or amt == Decimal("0.00"):
+                                amt = txn.credit_amount or txn.debit_amount or Decimal("0.00")
+
+                            key = (person_name, v.id, txn.direction)
+                            matched_groups[key]["transactions"].append(txn)
+                            matched_groups[key]["total_amount"] += amt
+                            matched_groups[key]["matched_attributes"].update(matched_attrs)
+
+                            # Retrospectively elevate risk on the transaction
+                            is_credit = txn.direction == "IN"
+                            flag_desc = (
+                                f"Suspected Vendor Kickback from '{v.vendor_name}' ({', '.join(matched_attrs)})"
+                                if is_credit
+                                else f"Undisclosed Vendor Payment to '{v.vendor_name}' ({', '.join(matched_attrs)})"
+                            )
+                            new_score = 95 if is_credit else 90
+                            if txn.risk_score < new_score or txn.risk_level != "High":
+                                txn.risk_score = max(txn.risk_score, new_score)
+                                txn.risk_level = "High"
+                                txn.flag_reason = (
+                                    f"{txn.flag_reason} | {flag_desc}".strip(" |")
+                                    if txn.flag_reason
+                                    else flag_desc
+                                )
+                                txns_to_update.append(txn)
+
+                if txns_to_update:
+                    BankTransaction.objects.bulk_update(
+                        txns_to_update,
+                        ["risk_score", "risk_level", "flag_reason"],
+                        batch_size=200,
+                    )
+
+                # Emit dual directional financial findings and graph edges
+                for (person_name, vendor_id, direction), data in matched_groups.items():
+                    vendor = VendorMaster.objects.get(id=vendor_id)
+                    is_credit = direction == "IN"
+                    txn_count = len(data["transactions"])
+                    total_amt = data["total_amount"]
+                    attr_summary = ", ".join(sorted(data["matched_attributes"]))
+
+                    if not vendor.is_flagged:
+                        vendor.is_flagged = True
+                        vendor.save(update_fields=["is_flagged"])
+
+                    rel_type = "VENDOR_KICKBACK_RECEIVED" if is_credit else "VENDOR_PAYOUT_DETECTED"
+                    flow_type_label = "Kickback" if is_credit else "Payout"
+                    prefix = "+" if is_credit else "-"
+                    formatted_label = (
+                        f"{prefix} ₹{total_amt:,.2f} ({txn_count} txns) [{flow_type_label}]"
+                    )
+
+                    sample_txns = data["transactions"][:10]
+                    sample_records = [
+                        {
+                            "id": str(t.id),
+                            "date": (t.txn_date.strftime("%Y-%m-%d") if t.txn_date else "N/A"),
+                            "narration": t.narration,
+                            "amount": float(t.credit_amount if is_credit else t.debit_amount),
+                            "direction": t.direction,
+                            "ref": t.txn_ref,
+                            "account": t.account.account_number if t.account else "",
+                        }
+                        for t in sample_txns
+                    ]
+
+                    # For Credit/Kickback: Primary is Vendor, Secondary is Auditee
+                    # For Debit/Payout: Primary is Auditee, Secondary is Vendor
+                    if is_credit:
+                        source_entity = {
+                            "name": vendor.vendor_name,
+                            "type": ForensicEntity.EntityType.VENDOR,
+                        }
+                        target_entity = {
+                            "name": person_name,
+                            "type": ForensicEntity.EntityType.EMPLOYEE,
+                            "relation_type": rel_type,
+                            "weight": float(total_amt),
+                            "direction": "out",
+                            "metadata": {
+                                "financial_flow": flow_type_label,
+                                "total_amount": float(total_amt),
+                                "transaction_count": txn_count,
+                                "formatted_label": formatted_label,
+                                "vendor_code": vendor.vendor_code,
+                                "owner_name": vendor.owner_name,
+                                "bank_account_no": vendor.bank_account_no,
+                                "matched_attributes": list(data["matched_attributes"]),
+                                "sample_transactions": sample_records,
+                            },
+                        }
+                    else:
+                        source_entity = {
+                            "name": person_name,
+                            "type": ForensicEntity.EntityType.EMPLOYEE,
+                            "is_target": True,
+                        }
+                        target_entity = {
+                            "name": vendor.vendor_name,
+                            "type": ForensicEntity.EntityType.VENDOR,
+                            "relation_type": rel_type,
+                            "weight": float(total_amt),
+                            "direction": "out",
+                            "metadata": {
+                                "financial_flow": flow_type_label,
+                                "total_amount": float(total_amt),
+                                "transaction_count": txn_count,
+                                "formatted_label": formatted_label,
+                                "vendor_code": vendor.vendor_code,
+                                "owner_name": vendor.owner_name,
+                                "bank_account_no": vendor.bank_account_no,
+                                "matched_attributes": list(data["matched_attributes"]),
+                                "sample_transactions": sample_records,
+                            },
+                        }
+
+                    emit_forensic_finding(
+                        source_module="q_bank",
+                        event_type=rel_type,
+                        primary_entity_data=source_entity,
+                        secondary_entities_data=[target_entity],
+                        evidence_data={
+                            "source_module": "q_bank",
+                            "source_model": "BankTransaction",
+                            "source_record_id": (
+                                str(sample_txns[0].id) if sample_txns else str(vendor.id)
+                            ),
+                            "evidence_url": (
+                                f"/bank/account/{sample_txns[0].account.id}/"
+                                if (sample_txns and sample_txns[0].account)
+                                else "/bank/"
+                            ),
+                            "summary_snippet": (
+                                f"Financial Nexus: Auditee '{person_name}' "
+                                f"{'received' if is_credit else 'sent'} ₹{total_amt:,.2f} "
+                                f"across {txn_count} transaction(s) with Vendor '{vendor.vendor_name}' ({vendor.vendor_code}). "
+                                f"Matched on: {attr_summary}"
+                            ),
+                        },
+                        timeline_title=(
+                            f"Suspected Vendor Kickback: {vendor.vendor_name} -> {person_name}"
+                            if is_credit
+                            else f"Undisclosed Vendor Payment: {person_name} -> {vendor.vendor_name}"
+                        ),
+                        timeline_description=(
+                            f"{txn_count} transaction(s) totaling ₹{total_amt:,.2f} detected between auditee '{person_name}' "
+                            f"and vendor '{vendor.vendor_name}' ({vendor.vendor_code}). Matched attributes: {attr_summary}"
+                        ),
+                        severity="CRITICAL" if is_credit else "HIGH",
+                    )
+                    stats["q_bank"] += 1
+        except Exception as err:
+            logger.warning(
+                f"Error cross-referencing Vendor Master against Bank Transactions: {err}"
+            )
+
     # 3. Ingest Q-Mail (Emails, Senders, Recipients)
     if apps.is_installed("q_mail"):
         try:

@@ -345,6 +345,14 @@ def ingest_bank_statement_file(
         account.total_debit,
         account.total_credit,
     )
+
+    try:
+        from q_link.backend.sync_all import sync_all_modules
+
+        sync_all_modules()
+    except Exception as exc:
+        logger.warning(f"Automated post-statement-ingestion sync_all_modules failed: {exc}")
+
     return account
 
 

@@ -507,6 +507,11 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
     is_ext = is_external or bool(rel.metadata.get("is_external"))
 
     modules = resolve_edge_modules(rel, ev_pointers)
+    label = (
+        rel.metadata.get("formatted_label")
+        if (rel.metadata and rel.metadata.get("formatted_label"))
+        else rel.get_relation_type_display()
+    )
     return {
         "id": str(rel.id),
         "source": str(rel.source_entity_id),
@@ -516,7 +521,7 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
         "source_name": rel.source_entity.display_name,
         "target_name": rel.target_entity.display_name,
         "relation_type": rel.relation_type,
-        "label": rel.get_relation_type_display(),
+        "label": label,
         "weight": rel.weight,
         "confidence": rel.confidence_score,
         "module": rel.source_module,
@@ -529,6 +534,7 @@ def _format_edge(rel: EntityRelationship, *, is_external: bool = False) -> dict[
         "is_bidirectional": False,
         "is_merged": False,
         "sub_link_ids": [str(rel.id)],
+        "metadata": rel.metadata or {},
     }
 
 
@@ -593,20 +599,26 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
         is_bidirectional = has_forward and has_backward
 
         # Determine dominant primary edge:
-        # 1. Rapid layering flag
-        # 2. Monetary weight
-        # 3. Confidence score
-        # 4. Evidence count
-        sorted_group = sorted(
-            group,
-            key=lambda e: (
-                1 if e.get("is_rapid_layering") else 0,
+        # 1. Vendor Kickback / Payout directional priority
+        # 2. Rapid layering flag
+        # 3. Monetary weight
+        # 4. Confidence score
+        # 5. Evidence count
+        def _edge_sort_key(e: dict[str, Any]) -> tuple:
+            rel = str(e.get("relation_type") or "")
+            is_vendor_flow = (
+                1 if rel in ("VENDOR_KICKBACK_RECEIVED", "VENDOR_PAYOUT_DETECTED") else 0
+            )
+            is_rl = 1 if e.get("is_rapid_layering") else 0
+            return (
+                is_vendor_flow,
+                is_rl,
                 float(e.get("weight") or 0.0),
                 float(e.get("confidence") or 0.0),
                 int(e.get("evidence_count") or 0),
-            ),
-            reverse=True,
-        )
+            )
+
+        sorted_group = sorted(group, key=_edge_sort_key, reverse=True)
         dominant = dict(sorted_group[0])
 
         # Avoid double-counting when Q_BANK (TRANSFERRED_FUNDS) and Q_TRAIL (RAPID_LAYERING / CONDUIT_TO)
@@ -675,7 +687,9 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
         sub_link_ids = [str(e.get("id")) for e in group if e.get("id")]
         primary_label = dominant.get("label") or dominant.get("relation_type") or "Connected"
 
-        if is_bidirectional:
+        if dominant.get("relation_type") in ("VENDOR_KICKBACK_RECEIVED", "VENDOR_PAYOUT_DETECTED"):
+            merged_label = primary_label
+        elif is_bidirectional:
             merged_label = f"{primary_label} ⇄ ({len(group)} Links)"
         else:
             merged_label = f"{primary_label} + {len(group) - 1} Links"
@@ -694,6 +708,7 @@ def merge_graph_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "is_merged": True,
                 "merged_count": len(group),
                 "label": merged_label,
+                "metadata": dominant.get("metadata") or {},
             }
         )
         merged_edges.append(dominant)
@@ -1032,6 +1047,7 @@ def get_edge_evidence(edge_id: str) -> dict[str, Any]:
                 "confidence": max_conf,
                 "is_rapid_layering": has_rl,
                 "is_external": has_ext,
+                "metadata": rel.metadata or {},
             },
             "evidence_items": evidence_items,
             "evidence_list": evidence_items,

@@ -1920,3 +1920,47 @@ class QTrailSuggestedCounterpartiesTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(bad_res.status_code, 400)
+
+    def test_vendor_master_corroboration_in_qtrail(self):
+        """
+        Verifies that Q-Trail corroboration engine and extract_suggested_counterparties
+        cross-reference against VendorMaster records and tag vendor status and codes.
+        """
+        import pandas as pd
+        from q_ledger.models import VendorMaster
+        from q_trail.services import extract_suggested_counterparties
+
+        # 1. Create a VendorMaster
+        VendorMaster.objects.create(
+            vendor_code="VM-CORROB-01",
+            vendor_name="Dynamic Hydro Systems",
+            owner_name="Krishnan",
+            bank_account_no="98711223344",
+        )
+
+        grouped = {
+            "Dynamic Hydro Systems": [
+                {
+                    "Outflow_Amount": 750000.0,
+                    "Retention_Amount": 50000.0,
+                    "Sender_Person": "Target Officer",
+                    "Recipient_Person": "Dynamic Hydro Systems",
+                }
+            ]
+        }
+
+        suggestions = extract_suggested_counterparties(
+            grouped_intermediaries=grouped,
+            intermediate_df=pd.DataFrame(),
+            direct_df=pd.DataFrame(),
+            analyzed_profiles=[{"id": str(self.profile.id), "name": self.profile.full_name}],
+            trail_keywords_set=set(),
+        )
+
+        self.assertTrue(len(suggestions) > 0)
+        vendor_s = next((s for s in suggestions if s["name"] == "Dynamic Hydro Systems"), None)
+        self.assertIsNotNone(vendor_s)
+        self.assertTrue(vendor_s.get("is_vendor"))
+        self.assertEqual(vendor_s.get("vendor_code"), "VM-CORROB-01")
+        self.assertEqual(vendor_s.get("risk_level"), "CRITICAL")
+        self.assertIn("Matched Vendor Master", vendor_s.get("reason", ""))

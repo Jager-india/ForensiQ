@@ -148,6 +148,8 @@ class EntityRelationship(ForensicBaseModel):
         DIRECTOR_OF = "DIRECTOR_OF", "Director / Beneficial Owner"
         MENTIONED_IN = "MENTIONED_IN", "Mentioned in Evidence / Call"
         ASSOCIATE = "ASSOCIATE", "Known Associate / Co-Auditee"
+        VENDOR_KICKBACK_RECEIVED = "VENDOR_KICKBACK_RECEIVED", "Suspected Vendor Kickback"
+        VENDOR_PAYOUT_DETECTED = "VENDOR_PAYOUT_DETECTED", "Undisclosed Vendor Payment"
 
     source_entity = models.ForeignKey(
         ForensicEntity,

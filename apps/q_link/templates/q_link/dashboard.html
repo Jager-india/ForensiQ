@@ -1326,6 +1326,8 @@
                 const isRapidLayering = Boolean(e.is_rapid_layering || (e.relation_type === "RAPID_LAYERING") || (e.weight && Number(e.weight) >= 10000000));
                 const isExternal = Boolean(e.is_external);
                 const relType = String(e.relation_type || "").toUpperCase();
+                const isKickback = relType.includes("KICKBACK") || (e.metadata && e.metadata.financial_flow === "Kickback");
+                const isPayout = relType.includes("PAYOUT") || (e.metadata && e.metadata.financial_flow === "Payout");
 
                 let edgeColor = "#10b981"; // emerald green default
                 let highlightColor = "#34d399";
@@ -1335,7 +1337,23 @@
                 let fontBg = dark ? "rgba(12, 9, 21, 0.9)" : "rgba(255, 255, 255, 0.94)";
                 let fontStroke = dark ? "rgba(255, 255, 255, 0.12)" : "#D8CBE0";
 
-                if (isExternal) {
+                if (isKickback) {
+                    edgeColor = "#10b981"; // Emerald green for Vendor Kickback Received (Vendor -> Auditee)
+                    highlightColor = "#34d399";
+                    edgeDashes = [6, 4];
+                    edgeWidth = 2.6;
+                    fontColor = dark ? "#6ee7b7" : "#047857";
+                    fontBg = dark ? "rgba(16, 185, 129, 0.22)" : "rgba(236, 253, 245, 0.96)";
+                    fontStroke = "#10b981";
+                } else if (isPayout) {
+                    edgeColor = "#f43f5e"; // Crimson / Rose red for Undisclosed Vendor Payment (Auditee -> Vendor)
+                    highlightColor = "#fb7185";
+                    edgeDashes = [6, 4];
+                    edgeWidth = 2.6;
+                    fontColor = dark ? "#fda4af" : "#be123c";
+                    fontBg = dark ? "rgba(244, 63, 94, 0.22)" : "rgba(255, 241, 242, 0.96)";
+                    fontStroke = "#f43f5e";
+                } else if (isExternal) {
                     edgeColor = "#8b5cf6"; // Violet for cross-audit Global Vault matches
                     highlightColor = "#a78bfa";
                     edgeDashes = [5, 4];
@@ -1364,7 +1382,7 @@
                 }
 
                 // Clean label formatting: convert SCREAMING_SNAKE_CASE to Title Case
-                let rawLabel = e.label || e.relation_type || "";
+                let rawLabel = (e.metadata && e.metadata.formatted_label) || e.label || e.relation_type || "";
                 let edgeLabel = rawLabel;
                 if (/^[A-Z0-9_]+$/.test(rawLabel)) {
                     edgeLabel = rawLabel.split('_')
@@ -1373,7 +1391,7 @@
                 }
 
                 const isExplicitContextualLabel = /^(Bank|Doc|Profile|Voice|Chat|Verify|Vault Match|Trail):/i.test(rawLabel);
-                if (isRapidLayering && currentOperationalMode !== 'keyword' && !isExplicitContextualLabel) {
+                if (isRapidLayering && currentOperationalMode !== 'keyword' && !isExplicitContextualLabel && !isKickback && !isPayout) {
                     let amtStr = "";
                     if (e.weight && Number(e.weight) >= 100) {
                         const wt = Number(e.weight);
@@ -1382,17 +1400,21 @@
                     edgeLabel = "Rapid Layering" + amtStr;
                 }
 
-                // Straight arrows: smooth is disabled now that server merges parallel edges
-                const straightConfig = { enabled: false };
+                // Straight arrows by default; curvedCW when Kickback or Payout to preserve distinct directional arrows
+                const straightConfig = (isKickback || isPayout)
+                    ? { enabled: true, type: 'curvedCW', roundness: 0.15 }
+                    : { enabled: false };
 
-                // Bidirectional: use both arrows when is_bidirectional is set
-                const arrowConfig = e.is_bidirectional
-                    ? { to: { enabled: true, scaleFactor: 0.7 }, from: { enabled: true, scaleFactor: 0.7 } }
-                    : { to: { enabled: true, scaleFactor: 0.7 } };
+                // Bidirectional: use both arrows when is_bidirectional is set; directional for vendor flows
+                const arrowConfig = (isKickback || isPayout)
+                    ? { to: { enabled: true, scaleFactor: 0.85 } }
+                    : (e.is_bidirectional
+                        ? { to: { enabled: true, scaleFactor: 0.7 }, from: { enabled: true, scaleFactor: 0.7 } }
+                        : { to: { enabled: true, scaleFactor: 0.7 } });
 
-                // Labels hidden by default; shown when showAllEdgeLabels = true or on node click (unless muted)
+                // Labels hidden by default; shown when showAllEdgeLabels = true or on node click, or for high-risk vendor flows (unless muted)
                 const muted = isEdgeMuted(e.id);
-                const labelVisible = showAllEdgeLabels && !muted;
+                const labelVisible = (showAllEdgeLabels || isKickback || isPayout) && !muted;
                 const labelFontSize = labelVisible ? 9.5 : 0;
                 const labelFontColor = labelVisible ? fontColor : "rgba(0,0,0,0)";
 
@@ -2093,6 +2115,59 @@
                     `;
                 }
 
+                let vendorBanner = "";
+                const isKickbackRel = edge.relation_type === "VENDOR_KICKBACK_RECEIVED" || (edge.metadata && edge.metadata.financial_flow === "Kickback");
+                const isPayoutRel = edge.relation_type === "VENDOR_PAYOUT_DETECTED" || (edge.metadata && edge.metadata.financial_flow === "Payout");
+                if (isKickbackRel || isPayoutRel) {
+                    const meta = edge.metadata || {};
+                    const isKb = isKickbackRel;
+                    const badgeBg = isKb ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400";
+                    const badgeIcon = isKb ? "fa-arrow-down-left" : "fa-arrow-up-right";
+                    const badgeText = isKb ? "SUSPECTED VENDOR KICKBACK (INFLOW)" : "UNDISCLOSED VENDOR PAYOUT (OUTFLOW)";
+                    const flowDesc = isKb
+                        ? `Auditee received illicit funds/kickbacks directly from vendor counterparty '${meta.vendor_code ? edge.source_name + ' (' + meta.vendor_code + ')' : edge.source_name}'.`
+                        : `Auditee routed personal conduits/undisclosed payments to vendor counterparty '${meta.vendor_code ? edge.target_name + ' (' + meta.vendor_code + ')' : edge.target_name}'.`;
+
+                    let attrChips = "";
+                    if (meta.matched_attributes && Array.isArray(meta.matched_attributes)) {
+                        attrChips = meta.matched_attributes.map(a => `<span class="px-2 py-0.5 rounded-full text-[10px] font-mono bg-theme-surface border border-theme-border text-theme-text font-medium"><i class="fa-solid fa-link text-amber-500 mr-1 text-[9px]"></i>${a}</span>`).join(" ");
+                    }
+
+                    const searchTarget = meta.vendor_code || (isKb ? edge.source_name : edge.target_name);
+
+                    vendorBanner = `
+                        <div class="p-3.5 rounded-xl ${isKb ? 'bg-emerald-500/10 border-emerald-500/25' : 'bg-rose-500/10 border-rose-500/25'} border space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold font-mono border ${badgeBg}">
+                                    <i class="fa-solid ${badgeIcon}"></i>
+                                    ${badgeText}
+                                </span>
+                                ${meta.vendor_code ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-theme-surface border border-theme-border text-theme-muted">Vendor: ${meta.vendor_code}</span>` : ''}
+                            </div>
+                            <p class="text-[11px] text-theme-muted leading-relaxed">
+                                ${flowDesc}
+                            </p>
+                            ${attrChips ? `
+                                <div class="pt-1.5 border-t border-theme-border/50">
+                                    <span class="text-[10px] font-semibold text-theme-muted uppercase tracking-wider block mb-1">Matched Corroboration Nexus</span>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        ${attrChips}
+                                    </div>
+                                </div>
+                            ` : ''}
+                            <div class="pt-2 flex items-center justify-between text-xs border-t border-theme-border/50">
+                                <a href="/bank/?search=${encodeURIComponent(searchTarget)}" target="_blank" class="inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 hover:underline font-semibold cursor-pointer">
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[11px]"></i>
+                                    Cross-Examine in Q-Bank Statement
+                                </a>
+                                <span class="font-mono font-bold text-xs ${isKb ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
+                                    ${meta.formatted_label || formattedEdgeWeight}
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 const edgeWeightVal = Number(edge.weight || 0);
                 const formattedEdgeWeight = edgeWeightVal >= 100
                     ? `₹${edgeWeightVal.toLocaleString('en-IN')}`
@@ -2100,6 +2175,7 @@
 
                 let html = `
                     ${rlBanner}
+                    ${vendorBanner}
 
                     <!-- Edge Summary Card -->
                     <div class="p-3.5 rounded-xl bg-theme-subtle border border-theme-border space-y-2">

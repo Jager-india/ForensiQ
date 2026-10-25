@@ -303,6 +303,14 @@ def ingest_vendor_master_file(vendor_file: Any) -> tuple[int, int]:
         processed_count,
         config.vendor_count,
     )
+
+    try:
+        from q_link.backend.sync_all import sync_all_modules
+
+        sync_all_modules()
+    except Exception as exc:
+        logger.warning(f"Automated post-vendor-ingestion sync_all_modules failed: {exc}")
+
     return processed_count, config.vendor_count
 
 

@@ -493,6 +493,31 @@ def analyze_profiles_money_trail(
         except Exception as exc:
             logger.debug(f"Profile corroboration lookup bypassed: {exc}")
 
+        # 5. Q-Ledger Vendor Master Check
+        try:
+            from q_ledger.models import VendorMaster
+
+            v_matches = VendorMaster.objects.filter(
+                Q(vendor_name__icontains=party_clean)
+                | Q(owner_name__icontains=party_clean)
+                | Q(vendor_code__iexact=party_clean)
+            )
+            clean_digits = "".join(ch for ch in party_clean if ch.isdigit())
+            if len(clean_digits) >= 5:
+                v_matches = v_matches | VendorMaster.objects.filter(
+                    Q(bank_account_no__icontains=clean_digits) | Q(phone__icontains=clean_digits)
+                )
+
+            vm = v_matches.first()
+            if vm:
+                modules.append("Q-Ledger")
+                owner_info = f", Owner: {vm.owner_name}" if vm.owner_name else ""
+                snippets.append(
+                    f"[Q-Ledger: Vendor {vm.vendor_name} ({vm.vendor_code}){owner_info}]"
+                )
+        except Exception as exc:
+            logger.debug(f"VendorMaster corroboration lookup bypassed: {exc}")
+
         return {"modules": modules, "snippets": snippets}
 
     def _corroborate_dataframe_rows(df: pd.DataFrame) -> pd.DataFrame:
@@ -1282,6 +1307,37 @@ def extract_suggested_counterparties(
                 }
 
     suggestions = list(suggestions_by_key.values())
+
+    try:
+        from q_ledger.models import VendorMaster
+
+        vendors = list(VendorMaster.objects.all())
+        for s in suggestions:
+            name_lower = str(s.get("name") or "").strip().lower()
+            if not name_lower:
+                continue
+            for v in vendors:
+                v_name = v.vendor_name.strip().lower()
+                v_owner = (v.owner_name or "").strip().lower()
+                v_code = v.vendor_code.strip().lower()
+                if (
+                    (v_name and (v_name in name_lower or name_lower in v_name))
+                    or (v_owner and (v_owner in name_lower or name_lower in v_owner))
+                    or (v_code and v_code in name_lower)
+                ):
+                    s["is_vendor"] = True
+                    s["vendor_code"] = v.vendor_code
+                    s["vendor_name"] = v.vendor_name
+                    s["role"] = f"Vendor ({v.vendor_code}) - {s['role']}"
+                    s["reason"] = (
+                        f"{s['reason']} | Matched Vendor Master: {v.vendor_name} ({v.vendor_code})"
+                    )
+                    s["risk_level"] = "CRITICAL"
+                    s["risk_score"] = max(s.get("risk_score", 0), 95)
+                    break
+    except Exception as exc:
+        logger.debug(f"Suggested counterparties vendor enrichment bypassed: {exc}")
+
     suggestions.sort(
         key=lambda x: (
             1 if x["is_already_keyword"] else 0,

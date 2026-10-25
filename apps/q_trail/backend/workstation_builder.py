@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 import pandas as pd
+from loguru import logger
 
 from .reconciliation import BANKING_NOISE_TOKENS
 
@@ -366,6 +367,37 @@ def build_conduit_deck(
             flags.append("Rapid pass-through: funds moved within 24 hours")
         flags.append("Unlinked entity: No verified account record attached")
 
+        # Check Vendor Master corroboration
+        is_vendor = False
+        vendor_code = ""
+        try:
+            from django.db.models import Q
+            from q_ledger.models import VendorMaster
+
+            v_matches = VendorMaster.objects.filter(
+                Q(vendor_name__icontains=name)
+                | Q(owner_name__icontains=name)
+                | Q(vendor_code__iexact=name)
+            )
+            clean_digits = "".join(ch for ch in name if ch.isdigit())
+            if len(clean_digits) >= 5:
+                v_matches = v_matches | VendorMaster.objects.filter(
+                    Q(bank_account_no__icontains=clean_digits) | Q(phone__icontains=clean_digits)
+                )
+
+            vm = v_matches.first()
+            if vm:
+                is_vendor = True
+                vendor_code = vm.vendor_code
+                owner_info = f" [Owner: {vm.owner_name}]" if vm.owner_name else ""
+                flags.insert(
+                    0,
+                    f"Q-Ledger Vendor Master: {vm.vendor_name} ({vm.vendor_code}){owner_info}",
+                )
+                comp_score = max(comp_score, 95)
+        except Exception as exc:
+            logger.debug("Vendor Master corroboration for conduit failed: %s", exc)
+
         deck.append(
             {
                 "id": slug_id,
@@ -386,6 +418,8 @@ def build_conduit_deck(
                 "delta_days": round(delta_days, 1),
                 "hops_count": hops_count,
                 "is_loop": is_loop,
+                "is_vendor": is_vendor,
+                "vendor_code": vendor_code,
                 "is_keyword_added": name.lower() in trail_kws_lower,
                 "flags": flags,
                 "scores": {

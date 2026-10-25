@@ -997,3 +997,107 @@ class QLinkEdgeEvidenceAndDrawerTests(TestCase):
             relation_type="EMPLOYEE_VENDOR_NEXUS",
         ).first()
         self.assertIsNotNone(rel)
+
+    def test_vendor_bank_cross_reference_dual_financial_flows(self):
+        """
+        Verifies Vendor Master cross-referencing against BankTransaction records:
+        1. Inflow credit creates VENDOR_KICKBACK_RECEIVED (Vendor -> Auditee).
+        2. Outflow debit creates VENDOR_PAYOUT_DETECTED (Auditee -> Vendor).
+        3. BankTransaction risk_level is elevated to High with risk_score >= 90.
+        4. Graph edge formatting and get_edge_evidence return vendor metadata.
+        """
+        from django.apps import apps
+
+        from .backend.sync_all import sync_all_modules
+        from .models import EntityRelationship, ForensicEntity
+        from .selectors import get_edge_evidence
+
+        VendorMaster = apps.get_model("q_ledger", "VendorMaster")
+        BankAccount = apps.get_model("q_bank", "BankAccount")
+        BankTransaction = apps.get_model("q_bank", "BankTransaction")
+        InvestigationProfile = apps.get_model("core", "InvestigationProfile")
+
+        # Create Profile
+        InvestigationProfile.objects.create(full_name="Pasupathy Target")
+
+        # Create Vendor Master
+        VendorMaster.objects.create(
+            vendor_code="VM-8800",
+            vendor_name="Apex Power Turbines",
+            owner_name="Pasupathy",
+            bank_account_no="1234567890",
+            phone="9876543210",
+        )
+
+        # Create Bank Account and Transactions
+        acc = BankAccount.objects.create(
+            account_holder="Pasupathy Target",
+            account_number="ACC-1111",
+            bank_name="HDFC Bank",
+        )
+
+        # Credit: Vendor -> Auditee
+        t_credit = BankTransaction.objects.create(
+            account=acc,
+            direction="IN",
+            credit_amount=500000.0,
+            debit_amount=0.0,
+            narration="RTGS FROM APEX POWER TURBINES KICKBACK",
+            party_name="Apex Power Turbines",
+            risk_level="Low",
+            risk_score=10,
+        )
+
+        # Debit: Auditee -> Vendor
+        t_debit = BankTransaction.objects.create(
+            account=acc,
+            direction="OUT",
+            debit_amount=200000.0,
+            credit_amount=0.0,
+            narration="NEFT TO PASUPATHY CONSULTING EXPENSES",
+            party_name="Pasupathy",
+            risk_level="Low",
+            risk_score=10,
+        )
+
+        # Run sync
+        sync_all_modules()
+
+        # Verify transaction risk elevated
+        t_credit.refresh_from_db()
+        self.assertEqual(t_credit.risk_level, "High")
+        self.assertEqual(t_credit.risk_score, 95)
+        self.assertIn("Suspected Vendor Kickback", t_credit.flag_reason)
+
+        t_debit.refresh_from_db()
+        self.assertEqual(t_debit.risk_level, "High")
+        self.assertEqual(t_debit.risk_score, 90)
+        self.assertIn("Undisclosed Vendor Payment", t_debit.flag_reason)
+
+        # Verify Q-Link relationships
+        v_entity = ForensicEntity.objects.get(display_name="Apex Power Turbines")
+        a_entity = ForensicEntity.objects.get(display_name="Pasupathy Target")
+
+        kb_rel = EntityRelationship.objects.filter(
+            source_entity=v_entity,
+            target_entity=a_entity,
+            relation_type="VENDOR_KICKBACK_RECEIVED",
+        ).first()
+        self.assertIsNotNone(kb_rel)
+        self.assertEqual(kb_rel.weight, 500000.0)
+        self.assertIn("[Kickback]", kb_rel.metadata.get("formatted_label", ""))
+
+        po_rel = EntityRelationship.objects.filter(
+            source_entity=a_entity,
+            target_entity=v_entity,
+            relation_type="VENDOR_PAYOUT_DETECTED",
+        ).first()
+        self.assertIsNotNone(po_rel)
+        self.assertEqual(po_rel.weight, 200000.0)
+        self.assertIn("[Payout]", po_rel.metadata.get("formatted_label", ""))
+
+        # Verify get_edge_evidence
+        ev_data = get_edge_evidence(str(kb_rel.id))
+        self.assertEqual(ev_data["status"], "success")
+        self.assertEqual(ev_data["edge"]["relation_type"], "VENDOR_KICKBACK_RECEIVED")
+        self.assertEqual(ev_data["edge"]["metadata"]["vendor_code"], "VM-8800")
